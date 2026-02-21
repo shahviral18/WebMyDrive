@@ -1,0 +1,29 @@
+﻿
+Running 1 test using 1 worker
+
+[1A[2K[1/1] [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl
+[1A[2K  1) [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: page.click: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('button:has-text("Logout")')[22m
+
+
+      73 |
+      74 |         // Now let's try to logout
+    > 75 |         await page.click('button:has-text("Logout")');
+         |                    ^
+      76 |         await page.waitForURL('**/');
+      77 |
+      78 |         console.log("Console Errors found:", errors);
+        at C:\Users\admin\Desktop\webmydrive-admin-console-main\webmydrive-admin-console-main\e2e\e2e-quality.spec.ts:75:20
+
+    Error Context: test-results\e2e-quality-App-E2E-Flow-SuperAdmin-Login-and-Crawl-chromium\error-context.md
+
+
+[1A[2K  1 failed
+    [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+[36m  Serving HTML report at http://localhost:62602. Press Ctrl+C to quit.[39m

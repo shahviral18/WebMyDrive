@@ -1,0 +1,28 @@
+﻿
+Running 1 test using 1 worker
+
+  Γ£ÿ  1 [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl (2.0m)
+
+
+  1) [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: page.waitForURL: Test timeout of 120000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "**/" until "load"
+    ============================================================
+
+      82 |
+      83 |         // 3. Wait for redirect back to login
+    > 84 |         await page.waitForURL('**/');
+         |                    ^
+      85 |
+      86 |         console.log("Console Errors found:", errors);
+      87 |         console.log("Network Errors found:", networkErrors);
+        at C:\Users\admin\Desktop\webmydrive-admin-console-main\webmydrive-admin-console-main\e2e\e2e-quality.spec.ts:84:20
+
+    Error Context: test-results\e2e-quality-App-E2E-Flow-SuperAdmin-Login-and-Crawl-chromium\error-context.md
+
+  1 failed
+    [chromium] ΓÇ║ e2e\e2e-quality.spec.ts:35:5 ΓÇ║ App E2E Flow ΓÇ║ SuperAdmin Login and Crawl ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
