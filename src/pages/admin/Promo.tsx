@@ -78,11 +78,11 @@ export default function Promo() {
                     className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 self-start"
                 >
                     {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    {saving ? "Saving…" : "Save Changes"}
+                    {saving ? "Savingâ€¦" : "Save Changes"}
                 </Button>
             </div>
 
-            {/* ── Enable / Disable ── */}
+            {/* â”€â”€ Enable / Disable â”€â”€ */}
             <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
                 <div className="rounded-xl bg-surface-1 border border-border p-5 shadow-card">
                     <div className="flex items-center justify-between">
@@ -112,7 +112,7 @@ export default function Promo() {
             </motion.section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* ── Rates Configuration ── */}
+                {/* â”€â”€ Rates Configuration â”€â”€ */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                     <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                         <Percent className="w-4 h-4 text-primary" /> Program Rates
@@ -168,7 +168,7 @@ export default function Promo() {
                     </div>
                 </motion.section>
 
-                {/* ── Multi-Year Decay & Upsell ── */}
+                {/* â”€â”€ Multi-Year Decay & Upsell â”€â”€ */}
                 <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
                     <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                         <CalendarClock className="w-4 h-4 text-amber-500" /> Decay & Upgrades
@@ -191,7 +191,9 @@ export default function Promo() {
                                     try {
                                         const vals = e.target.value.split(",").map(v => Number(v.trim()) / 100);
                                         if (vals.every(v => !isNaN(v))) update({ decaySchedule: vals });
-                                    } catch { }
+                                    } catch {
+                                        // Ignore partially typed CSV until it becomes valid numbers.
+                                    }
                                 }}
                                 placeholder="5, 4, 3, 2, 1, 0"
                                 className="font-mono text-sm"
@@ -221,7 +223,7 @@ export default function Promo() {
                 </motion.section>
             </div>
 
-            {/* ── Sunset Controls ── */}
+            {/* â”€â”€ Sunset Controls â”€â”€ */}
             <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                 <h2 className="text-sm font-semibold text-danger uppercase tracking-wider mb-3 flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-danger" /> Program Sunsetting

@@ -26,7 +26,7 @@ const navGroups = [
     label: "CORE",
     items: [
       { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-      { label: "Users", href: "/admin/users", icon: Users },
+      { label: "Accounts", href: "/admin/users", icon: Users },
     ],
   },
   {
@@ -41,7 +41,6 @@ const navGroups = [
     label: "OPERATIONS",
     items: [
       { label: "Distributors", href: "/admin/distributors", icon: Handshake },
-      { label: "Alerts", href: "/admin/alerts", icon: Bell, badge: "3" },
       { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
     ],
   },
@@ -104,15 +103,6 @@ function NavItem({
         <span className="flex-1 truncate leading-none">{item.label}</span>
       )}
 
-      {/* badge */}
-      {item.badge && !collapsed && (
-        <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-          {item.badge}
-        </span>
-      )}
-      {item.badge && collapsed && (
-        <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
-      )}
     </button>
   );
 
@@ -122,11 +112,6 @@ function NavItem({
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="right" className="text-xs font-medium">
           {item.label}
-          {item.badge && (
-            <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-              {item.badge}
-            </span>
-          )}
         </TooltipContent>
       </Tooltip>
     );
@@ -416,16 +401,6 @@ export default function AdminLayout() {
 
           {/* RIGHT: Time Range & Notifications only */}
           <div className="flex items-center gap-2 shrink-0">
-
-            {/* bell */}
-            <button
-              onClick={() => navigate("/admin/alerts")}
-              className="relative p-2 rounded-lg text-muted-foreground hover:bg-surface-3 transition-colors"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-            </button>
-
           </div>
         </header>
 

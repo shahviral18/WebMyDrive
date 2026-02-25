@@ -2,10 +2,19 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+export const DEFAULT_GLOBAL_PLAN_CONFIG = {
+    priceINR: 499,
+    storageGB: 500,
+    validityMonths: 1,
+    referralCreditRate: 0.05,    // 5% wallet credit to referrer (User A)
+    distributorCreditRate: 0.10, // 10% Starter tier commission
+    customerDiscountRate: 0.025  // 2.5% first-purchase discount for referred buyer (User B)
+};
+
 export const DEFAULT_USER_REFERRAL_CONFIG = {
-    referrerCreditRate: 0.05,
-    referredDiscountRate: 0.025,
-    decaySchedule: [0.05, 0.04, 0.03, 0.02, 0.01, 0],
+    referrerCreditRate: 0.05,          // 5%  — User A wallet credit on User B purchase
+    referredDiscountRate: 0.025,       // 2.5% — User B first-purchase discount (per design doc)
+    decaySchedule: [0.05, 0.04, 0.03, 0.02, 0.01, 0], // Year 1→6
     nudgeThreshold: 5,
     upgradeFeeDiscount: 0,
     allowNewReferrals: true,
@@ -51,6 +60,10 @@ export class ConfigService {
             update: { value: JSON.stringify(value) },
             create: { key, value: JSON.stringify(value) }
         });
+    }
+
+    static async getGlobalPlanConfig() {
+        return this.getConfig('GLOBAL_PLAN_SETTINGS', DEFAULT_GLOBAL_PLAN_CONFIG);
     }
 
     static async getUserReferralConfig() {

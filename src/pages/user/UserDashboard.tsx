@@ -117,10 +117,10 @@ export default function UserDashboard() {
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={mockUsage}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} stroke="#94a3b8" />
-                                        <YAxis fontSize={12} tickLine={false} axisLine={false} stroke="#94a3b8" />
-                                        <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                        <YAxis fontSize={12} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                        <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.5)' }} contentStyle={{ backgroundColor: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: 'var(--shadow-card)' }} />
                                         <Bar dataKey="usage" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -157,27 +157,27 @@ export default function UserDashboard() {
                 </div>
 
                 {/* Referral Section */}
-                <Card className="border-border shadow-sm mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100">
+                <Card className="border-border shadow-sm mt-6">
                     <CardHeader>
-                        <CardTitle className="text-xl text-blue-900 flex items-center gap-2">
+                        <CardTitle className="text-xl text-foreground flex items-center gap-2">
                             <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                             My Referrals
                         </CardTitle>
-                        <CardDescription className="text-blue-700">Earn credits towards your renewal for every friend you refer</CardDescription>
+                        <CardDescription className="text-muted-foreground">Earn credits towards your renewal for every friend you refer</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="mb-4">
-                            <p className="text-sm font-medium text-blue-900 mb-2">Your Referral Link:</p>
-                            <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-md py-2 px-3">
-                                <span className="text-sm font-mono text-blue-800 flex-1 truncate">
-                                    {window.location.origin}/register?ref={user?.referralCode}
+                            <p className="text-sm font-medium text-foreground mb-2">Your Referral Link:</p>
+                            <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-md py-2 px-3">
+                                <span className="text-sm font-mono text-muted-foreground flex-1 truncate">
+                                    {window.location.origin}/ref/{user?.referralCode}
                                 </span>
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 py-0 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                                    className="h-8 py-0 px-2 text-muted-foreground hover:text-foreground hover:bg-surface-3"
                                     onClick={() => {
-                                        navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.referralCode}`)
+                                        navigator.clipboard.writeText(`${window.location.origin}/ref/${user?.referralCode}`)
                                         toast.success("Referral link copied to clipboard!");
                                     }}
                                 >
@@ -187,29 +187,29 @@ export default function UserDashboard() {
                         </div>
 
                         {referralData && referralData.totalReferrals > 0 ? (
-                            <div className="py-4 flex gap-6 text-blue-900 border-t border-blue-100">
+                            <div className="py-4 flex gap-6 text-foreground border-t border-border">
                                 <div>
                                     <div className="text-xl font-bold">{referralData.totalReferrals}</div>
-                                    <div className="text-xs text-blue-700">Total Referrals</div>
+                                    <div className="text-xs text-muted-foreground">Total Referrals</div>
                                 </div>
                                 <div>
                                     <div className="text-xl font-bold text-green-600">Rs {referralData.creditBalance?.toLocaleString() || 0}</div>
-                                    <div className="text-xs text-blue-700">Wallet Balance</div>
+                                    <div className="text-xs text-muted-foreground">Wallet Balance</div>
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-sm text-blue-700/70 py-4 border-t border-blue-100">
+                            <div className="text-sm text-muted-foreground py-4 border-t border-border">
                                 No referrals yet. Share your code with friends to start earning!
                             </div>
                         )}
-                        <div className="flex justify-end gap-3 mt-2 border-t border-blue-100 pt-4">
+                        <div className="flex justify-end gap-3 mt-2 border-t border-border pt-4">
                             <Link to="/user/referrals">
-                                <Button variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">View Referral History</Button>
+                                <Button variant="outline" className="border-border text-foreground hover:bg-surface-2">View Referral History</Button>
                             </Link>
                             <Button
                                 className="bg-primary hover:bg-blue-700 gap-2"
                                 onClick={() => {
-                                    navigator.clipboard.writeText(`${window.location.origin}/register?ref=${user?.referralCode}`)
+                                    navigator.clipboard.writeText(`${window.location.origin}/ref/${user?.referralCode}`)
                                     toast.success("Referral link copied! Share it with a friend.");
                                 }}
                             >

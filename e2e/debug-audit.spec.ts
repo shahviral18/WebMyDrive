@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('Check Audit Logs Page', async ({ page }) => {
-    let errors = [];
+    const errors: string[] = [];
     page.on('pageerror', exception => {
         errors.push(`Page Error: ${exception.message}`);
     });

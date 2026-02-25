@@ -51,7 +51,10 @@ export default function Billing() {
 
     useEffect(() => {
         api.get("/admin/orders?limit=100")
-            .then(data => setOrders(data.orders || []))
+            .then(data => {
+                const nonPending = (data.orders || []).filter((o: Order) => o.status.toUpperCase() !== "PENDING");
+                setOrders(nonPending);
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
@@ -89,14 +92,12 @@ export default function Billing() {
 
     const kpis = [
         { label: "Total Revenue", value: `₹${totalRevenue.toLocaleString("en-IN")}`, Icon: IndianRupee },
-        { label: "Pending Collection", value: `₹${totalPending.toLocaleString("en-IN")}`, Icon: Clock },
         { label: "Total Refunded", value: `₹${totalRefunded.toLocaleString("en-IN")}`, Icon: RotateCcw },
         { label: "Total Orders", value: String(orders.length), Icon: Pencil },
     ];
 
     const kpiCls = [
         { bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-400" },
-        { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-400" },
         { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-400" },
         { bg: "bg-primary/10", border: "border-primary/20", text: "text-primary" },
     ];
@@ -114,47 +115,8 @@ export default function Billing() {
                 <p className="text-muted-foreground text-sm mt-0.5">Order history · provisioning · refunds · manual overrides</p>
             </div>
 
-            {/* Pending queue — plan management */}
-            {pendingOrders.length > 0 && (
-                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                    className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-5 space-y-3">
-                    <div className="flex items-center gap-3 mb-1">
-                        <div className="w-9 h-9 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
-                            <Package className="w-4 h-4 text-yellow-400" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-semibold text-yellow-400">{pendingOrders.length} Order{pendingOrders.length > 1 ? "s" : ""} Awaiting Provisioning</p>
-                            <p className="text-xs text-muted-foreground">These workspaces are paid but not yet activated in Google Directory</p>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        {pendingOrders.map(o => (
-                            <div key={o.id} className="flex items-center justify-between p-3 rounded-lg bg-surface-2/60 border border-yellow-500/15">
-                                <div>
-                                    <p className="text-sm font-semibold text-foreground">{o.user?.email || `User #${o.userId}`}</p>
-                                    <p className="text-xs text-muted-foreground font-mono">#{o.id} · ₹{o.amount.toLocaleString("en-IN")}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button size="sm" variant="outline"
-                                        className="h-8 text-xs border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 gap-1"
-                                        onClick={() => setActionDialog({ order: o, type: "manual-override" })}>
-                                        <Pencil className="w-3 h-3" /> NEFT Override
-                                    </Button>
-                                    <Button size="sm"
-                                        className="h-8 text-xs bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30 gap-1"
-                                        variant="outline"
-                                        onClick={() => setActionDialog({ order: o, type: "provision" })}>
-                                        <CheckCircle2 className="w-3 h-3" /> Provision Now
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </motion.div>
-            )}
-
             {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                 {kpis.map((k, i) => (
                     <motion.div key={k.label}
                         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
@@ -191,7 +153,6 @@ export default function Billing() {
                         className="px-3 h-9 rounded-md bg-surface-1 border border-border/50 text-sm text-foreground appearance-none min-w-[130px] focus:outline-none">
                         <option value="">All Statuses</option>
                         <option value="paid">Paid</option>
-                        <option value="pending">Pending</option>
                         <option value="failed">Failed</option>
                         <option value="refunded">Refunded</option>
                     </select>

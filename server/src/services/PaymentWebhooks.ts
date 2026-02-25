@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '../models';
 import { logAudit } from './AuditService';
 import { CreateUserQueue } from './QueueService';
+import { ReferralController } from '../controllers/ReferralController';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2025-01-27.acacia' as any });
 
@@ -14,24 +15,39 @@ export const handleStripeWebhook = async (req: any, res: any) => {
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET as string);
     } catch (err: any) {
-        console.error('[Stripe Webhook] Signature verification failed:', err.message);
+        console.error('[Stripe Webhook] ❌ Signature verification failed:', err.message);
+        await logAudit('STRIPE_WEBHOOK_SIG_FAILED', 'PaymentWebhook', undefined, undefined, req.ip,
+            { error: err.message, sig: sig?.substring(0, 10) });
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object as any;
         const orderId = Number(session.client_reference_id);
+
         if (!orderId) {
-            console.error('[Stripe Webhook] Missing client_reference_id in session');
-            return res.status(200).json({ received: true });
+            console.error('[Stripe Webhook] ❌ Missing client_reference_id in session');
+            await logAudit('STRIPE_WEBHOOK_INVALID', 'PaymentWebhook', undefined, undefined, req.ip,
+                { error: 'Missing client_reference_id', sessionId: session.id });
+            return res.status(200).json({ received: true, error: 'Missing client_reference_id' });
         }
 
         try {
+            // CRITICAL: Verify order exists BEFORE processing
             const order = await prisma.order.findUnique({ where: { id: orderId } });
             if (!order) {
-                console.error(`[Stripe Webhook] Order ${orderId} not found`);
-                return res.status(200).json({ received: true });
+                console.error(`[Stripe Webhook] ❌ Order ${orderId} not found in database`);
+                await logAudit('STRIPE_WEBHOOK_ORDER_NOT_FOUND', 'Order', String(orderId), undefined, req.ip,
+                    { sessionId: session.id, clientRefId: session.client_reference_id });
+
+                // Return 500 to signal to Stripe to retry later (order might be created soon)
+                return res.status(500).json({
+                    received: false,
+                    error: `Order ${orderId} not found. Stripe will retry.`
+                });
             }
+
+            console.log(`[Stripe Webhook] Processing payment for order ${orderId}, user ${order.userId}`);
 
             // Atomic update / idempotency lock
             const updated = await prisma.order.updateMany({
@@ -40,18 +56,73 @@ export const handleStripeWebhook = async (req: any, res: any) => {
             });
 
             if (updated.count === 0) {
-                console.warn(`[Stripe Webhook] Order ${orderId} already PAID or modified concurrently — skipping`);
-                return res.status(200).json({ received: true });
+                // Order was already processed or is in different state
+                const currentOrder = await prisma.order.findUnique({ where: { id: orderId } });
+                if (currentOrder?.status === 'PAID') {
+                    console.warn(`[Stripe Webhook] ℹ️  Order ${orderId} already marked as PAID - idempotent`);
+                    await logAudit('STRIPE_WEBHOOK_IDEMPOTENT', 'Order', String(orderId), order.userId, req.ip,
+                        { sessionId: session.id, currentStatus: currentOrder.status });
+                    return res.status(200).json({ received: true, idempotent: true });
+                } else {
+                    console.error(`[Stripe Webhook] ❌ Order ${orderId} is in unexpected state: ${currentOrder?.status}`);
+                    await logAudit('STRIPE_WEBHOOK_UNEXPECTED_STATE', 'Order', String(orderId), order.userId, req.ip,
+                        { sessionId: session.id, currentStatus: currentOrder?.status });
+                    return res.status(500).json({
+                        received: false,
+                        error: `Order in unexpected state: ${currentOrder?.status}. Stripe will retry.`
+                    });
+                }
             }
 
-            await logAudit("PAYMENT_SUCCESS", "Order", String(orderId), order.userId, undefined, { gateway: 'Stripe', sessionId: session.id });
+            // Payment marked as PAID ✅
+            await logAudit("STRIPE_PAYMENT_MARKED_PAID", "Order", String(orderId), order.userId, req.ip,
+                { gateway: 'Stripe', sessionId: session.id, amount: order.amount });
 
-            // Push onto Queue to execute async workspace creation
-            await CreateUserQueue.add('ProvisionGoogleUser', { userId: order.userId, orderId: order.id });
+            // Call the commission processor
+            try {
+                await ReferralController.processOrderCommission(order.id, order.userId, order.amount);
+            } catch (commErr: any) {
+                console.error('[Stripe Webhook] Error processing commission:', commErr.message);
+            }
+
+            // Queue async job to provision email and storage
+            try {
+                await CreateUserQueue.add('ProvisionGoogleUser', {
+                    userId: order.userId,
+                    orderId: order.id,
+                    timestamp: new Date().toISOString()
+                });
+                console.log(`[Stripe Webhook] ✅ Queued ProvisionGoogleUser job for user ${order.userId}`);
+                await logAudit("STRIPE_PROVISION_JOB_QUEUED", "Order", String(orderId), order.userId, req.ip,
+                    { sessionId: session.id });
+            } catch (queueError: any) {
+                console.error('[Stripe Webhook] ❌ Failed to queue provisioning job:', queueError.message);
+                await logAudit("STRIPE_QUEUE_FAILED", "Order", String(orderId), order.userId, req.ip,
+                    { error: queueError.message, sessionId: session.id });
+
+                return res.status(500).json({
+                    received: false,
+                    error: `Failed to queue provisioning job. Stripe will retry.`,
+                    details: queueError.message
+                });
+            }
+
+            return res.status(200).json({
+                received: true,
+                orderId,
+                status: 'payment_processed_and_queued'
+            });
+
         } catch (err: any) {
-            console.error('[Stripe Webhook] Processing error:', err.message);
-            // Return 200 to Stripe to prevent retries for non-retryable errors
-            return res.status(200).json({ received: true, warning: 'Internal processing error' });
+            console.error('[Stripe Webhook] ❌ Processing error:', err.message, err.stack);
+            await logAudit("STRIPE_WEBHOOK_PROCESSING_ERROR", "Order", String(orderId), undefined, req.ip,
+                { error: err.message, stack: err.stack?.substring(0, 200) });
+
+            return res.status(500).json({
+                received: false,
+                error: 'Internal processing error. Stripe will retry.',
+                details: err.message
+            });
         }
     }
 
@@ -64,16 +135,18 @@ export const handleRazorpayWebhook = async (req: any, res: any) => {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (webhookSecret) {
         const shasum = crypto.createHmac('sha256', webhookSecret);
-        shasum.update(JSON.stringify(req.body)); // req.body is raw buffer at this point
+        shasum.update(JSON.stringify(req.body));
         const digest = shasum.digest('hex');
         const receivedSignature = req.headers['x-razorpay-signature'];
 
         if (digest !== receivedSignature) {
-            console.error('[Razorpay Webhook] Signature mismatch — rejected');
+            console.error('[Razorpay Webhook] ❌ Signature mismatch — rejected');
+            await logAudit('RAZORPAY_WEBHOOK_SIG_FAILED', 'PaymentWebhook', undefined, undefined, req.ip,
+                { error: 'Signature mismatch' });
             return res.status(400).json({ error: 'Invalid webhook signature' });
         }
     } else {
-        console.warn('[Razorpay Webhook] RAZORPAY_WEBHOOK_SECRET not set — signature verification skipped');
+        console.warn('[Razorpay Webhook] ⚠️  RAZORPAY_WEBHOOK_SECRET not set — signature verification skipped');
     }
 
     let body: any;
@@ -82,6 +155,9 @@ export const handleRazorpayWebhook = async (req: any, res: any) => {
             ? JSON.parse(req.body.toString())
             : req.body;
     } catch {
+        console.error('[Razorpay Webhook] ❌ Invalid JSON body');
+        await logAudit('RAZORPAY_WEBHOOK_INVALID_JSON', 'PaymentWebhook', undefined, undefined, req.ip,
+            { error: 'Could not parse JSON body' });
         return res.status(400).json({ error: 'Invalid JSON body' });
     }
 
@@ -90,32 +166,52 @@ export const handleRazorpayWebhook = async (req: any, res: any) => {
     if (event === 'payment.captured') {
         const payment = payload?.payment?.entity;
         if (!payment) {
-            console.error('[Razorpay Webhook] Missing payment entity');
+            console.error('[Razorpay Webhook] ❌ Missing payment entity');
+            await logAudit('RAZORPAY_WEBHOOK_NO_ENTITY', 'PaymentWebhook', undefined, undefined, req.ip,
+                { error: 'Missing payment entity', event });
             return res.status(200).json({ status: 'ok' });
         }
 
         const orderId = Number(payment.notes?.internal_order_id);
         if (!orderId) {
-            console.error('[Razorpay Webhook] Missing internal_order_id in payment notes');
+            console.error('[Razorpay Webhook] ❌ Missing internal_order_id in payment notes');
+            await logAudit('RAZORPAY_WEBHOOK_NO_ORDER_ID', 'PaymentWebhook', undefined, undefined, req.ip,
+                { error: 'Missing internal_order_id', paymentId: payment.id });
             return res.status(200).json({ status: 'ok' });
         }
 
         try {
+            // Verify order exists
             const order = await prisma.order.findUnique({ where: { id: orderId } });
             if (!order) {
-                console.error(`[Razorpay Webhook] Order ${orderId} not found`);
-                return res.status(200).json({ status: 'ok' });
+                console.error(`[Razorpay Webhook] ❌ Order ${orderId} not found`);
+                await logAudit('RAZORPAY_WEBHOOK_ORDER_NOT_FOUND', 'Order', String(orderId), undefined, req.ip,
+                    { paymentId: payment.id });
+                return res.status(500).json({
+                    status: 'retry',
+                    error: `Order ${orderId} not found. Will retry.`
+                });
             }
 
             // Validate amount matches (paise conversion)
             const expectedPaise = Math.round(order.amount * 100);
             if (payment.amount !== expectedPaise) {
-                console.error(`[Razorpay Webhook] Amount mismatch for order ${orderId}: expected ${expectedPaise}, got ${payment.amount}`);
-                await logAudit("PAYMENT_AMOUNT_MISMATCH", "Order", String(orderId), order.userId, undefined, {
-                    expected: expectedPaise, received: payment.amount, paymentId: payment.id
+                console.error(`[Razorpay Webhook] ❌ Amount mismatch for order ${orderId}: expected ${expectedPaise}, got ${payment.amount}`);
+                await logAudit("RAZORPAY_AMOUNT_MISMATCH", "Order", String(orderId), order.userId, req.ip, {
+                    expected: expectedPaise,
+                    received: payment.amount,
+                    paymentId: payment.id,
+                    severity: 'HIGH'
                 });
-                return res.status(200).json({ status: 'ok', warning: 'Amount mismatch logged' });
+                return res.status(200).json({
+                    status: 'ok',
+                    warning: 'Amount mismatch logged for review',
+                    orderId,
+                    paymentId: payment.id
+                });
             }
+
+            console.log(`[Razorpay Webhook] Processing payment for order ${orderId}, user ${order.userId}`);
 
             // Atomic update / idempotency lock
             const updated = await prisma.order.updateMany({
@@ -124,14 +220,71 @@ export const handleRazorpayWebhook = async (req: any, res: any) => {
             });
 
             if (updated.count === 0) {
-                console.warn(`[Razorpay Webhook] Order ${orderId} already PAID or modified concurrently — skipping`);
-                return res.status(200).json({ status: 'ok' });
+                // Order already processed or in different state
+                const currentOrder = await prisma.order.findUnique({ where: { id: orderId } });
+                if (currentOrder?.status === 'PAID') {
+                    console.warn(`[Razorpay Webhook] ℹ️  Order ${orderId} already marked as PAID - idempotent`);
+                    await logAudit('RAZORPAY_WEBHOOK_IDEMPOTENT', 'Order', String(orderId), order.userId, req.ip,
+                        { paymentId: payment.id, currentStatus: currentOrder.status });
+                    return res.status(200).json({ status: 'ok', idempotent: true });
+                } else {
+                    console.error(`[Razorpay Webhook] ❌ Order ${orderId} in unexpected state: ${currentOrder?.status}`);
+                    return res.status(500).json({
+                        status: 'retry',
+                        error: `Order in unexpected state: ${currentOrder?.status}. Will retry.`
+                    });
+                }
             }
 
-            await logAudit("PAYMENT_SUCCESS", "Order", String(orderId), order.userId, undefined, { gateway: 'Razorpay', paymentId: payment.id });
-            await CreateUserQueue.add('ProvisionGoogleUser', { userId: order.userId, orderId: order.id });
+            // Payment marked as PAID ✅
+            await logAudit("RAZORPAY_PAYMENT_MARKED_PAID", "Order", String(orderId), order.userId, req.ip,
+                { gateway: 'Razorpay', paymentId: payment.id, amount: order.amount });
+
+            // Call the commission processor
+            try {
+                await ReferralController.processOrderCommission(order.id, order.userId, order.amount);
+            } catch (commErr: any) {
+                console.error('[Razorpay Webhook] Error processing commission:', commErr.message);
+            }
+
+            // Queue async job to provision email and storage
+            try {
+                await CreateUserQueue.add('ProvisionGoogleUser', {
+                    userId: order.userId,
+                    orderId: order.id,
+                    timestamp: new Date().toISOString()
+                });
+                console.log(`[Razorpay Webhook] ✅ Queued ProvisionGoogleUser job for user ${order.userId}`);
+                await logAudit("RAZORPAY_PROVISION_JOB_QUEUED", "Order", String(orderId), order.userId, req.ip,
+                    { paymentId: payment.id });
+            } catch (queueError: any) {
+                console.error('[Razorpay Webhook] ❌ Failed to queue provisioning job:', queueError.message);
+                await logAudit("RAZORPAY_QUEUE_FAILED", "Order", String(orderId), order.userId, req.ip,
+                    { error: queueError.message, paymentId: payment.id });
+
+                return res.status(500).json({
+                    status: 'retry',
+                    error: 'Failed to queue provisioning job. Will retry.',
+                    details: queueError.message
+                });
+            }
+
+            return res.status(200).json({
+                status: 'ok',
+                orderId,
+                message: 'Payment processed and provisioning queued'
+            });
+
         } catch (err: any) {
-            console.error('[Razorpay Webhook] Processing error:', err.message);
+            console.error('[Razorpay Webhook] ❌ Processing error:', err.message);
+            await logAudit("RAZORPAY_WEBHOOK_PROCESSING_ERROR", "Order", String(orderId), undefined, req.ip,
+                { error: err.message, stack: err.stack?.substring(0, 200) });
+
+            return res.status(500).json({
+                status: 'retry',
+                error: 'Internal processing error. Will retry.',
+                details: err.message
+            });
         }
     }
 

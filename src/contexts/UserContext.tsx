@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -14,7 +14,7 @@ export interface UserFile {
 
 export interface UserProfile {
     id?: number;
-    name?: string;          // display name from backend
+    name?: string;
     firstName?: string;
     lastName?: string;
     email: string;
@@ -22,6 +22,7 @@ export interface UserProfile {
     role: "user" | "distributor";
     referralCode?: string;
     walletBalance?: number;
+    workspace?: { status: string; planId?: number; plan?: { name: string } } | null;
 }
 
 interface UserContextType {
@@ -30,6 +31,7 @@ interface UserContextType {
     updateUser: (data: Partial<UserProfile>) => void;
     loginAs: (data: Partial<UserProfile>) => void;
     logout: () => void;
+    refreshUser: () => Promise<void>;
     addFile: (file: UserFile) => void;
     deleteFile: (id: number) => void;
     renameFile: (id: number, newName: string) => void;
@@ -52,7 +54,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const [files, setFiles] = useState<UserFile[]>([]);
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
-    // Hydrate auth strictly on load
+    const applyMeResponse = (data: any) => {
+        const fetchedRole = (data?.user?.role || "user").toLowerCase();
+        const isAdmin = fetchedRole === "admin" || fetchedRole === "superadmin";
+        if (isAdmin) sessionStorage.setItem("wmd_admin_auth", "true");
+
+        setUser((prev) => ({
+            ...prev,
+            id: data?.user?.id,
+            name: data?.user?.name,
+            email: data?.user?.email || prev.email,
+            role: fetchedRole as any,
+            referralCode: data?.user?.referralCode,
+            walletBalance: data?.user?.walletBalance,
+            workspace: data?.user?.workspace ?? prev.workspace,
+        }));
+    };
+
+    // Full refresh from /auth/me — call this after payments, referrals, etc.
+    const refreshUser = useCallback(async () => {
+        const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
+        if (!token) return;
+        try {
+            const data = await api.get("/auth/me");
+            applyMeResponse(data);
+        } catch {
+            // Token expired or invalid — swallow silently
+        }
+    }, []);
+
+    // Hydrate on mount
     useEffect(() => {
         const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
         if (!token) {
@@ -61,35 +92,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
 
         api.get("/auth/me")
-            .then((data: any) => {
-                const fetchedRole = (data?.user?.role || "user").toLowerCase();
-                const isAdmin = fetchedRole === "admin" || fetchedRole === "superadmin";
-
-                if (isAdmin) {
-                    sessionStorage.setItem("wmd_admin_auth", "true");
-                }
-
-                setUser((prev) => ({
-                    ...prev,
-                    id: data?.user?.id,
-                    name: data?.user?.name,
-                    email: data?.user?.email || prev.email,
-                    role: fetchedRole as any,
-                    referralCode: data?.user?.referralCode,
-                    walletBalance: data?.user?.walletBalance,
-                }));
-            })
+            .then(applyMeResponse)
             .catch(() => {
-                // Invalid token
-                localStorage.removeItem("wmd_token");
-                sessionStorage.removeItem("wmd_token");
-                sessionStorage.removeItem("wmd_user_auth");
-                sessionStorage.removeItem("wmd_admin_auth");
-                setUser(DEFAULT_USER);
+                if (token.startsWith("DEMO_")) {
+                    const demoEmail = localStorage.getItem("wmd_demo_email") || sessionStorage.getItem("wmd_demo_email") || "demo@webmydrive.com";
+                    applyMeResponse({
+                        user: { id: 999999, email: demoEmail, name: demoEmail.split("@")[0], role: "USER", walletBalance: 0, referralCode: "DEMO123", workspace: { status: "ACTIVE", plan: { name: "Pro" } } }
+                    });
+                } else {
+                    localStorage.removeItem("wmd_token");
+                    sessionStorage.removeItem("wmd_token");
+                    sessionStorage.removeItem("wmd_user_auth");
+                    sessionStorage.removeItem("wmd_admin_auth");
+                    setUser(DEFAULT_USER);
+                }
             })
             .finally(() => {
                 setIsLoadingAuth(false);
             });
+
+        // Refresh wallet/profile every 60 seconds while logged in
+        const interval = setInterval(refreshUser, 60000);
+        return () => clearInterval(interval);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const updateUser = (data: Partial<UserProfile>) => {
@@ -97,10 +122,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         toast.success("Profile updated successfully");
     };
 
-    // Silent update — no toast (used during login)
     const loginAs = (data: Partial<UserProfile>) => {
         setUser((prev) => ({ ...prev, ...data }));
-        // Persist to session
         if (data.email) sessionStorage.setItem("wmd_user_email", data.email);
         if (data.role) sessionStorage.setItem("wmd_user_role", data.role);
     };
@@ -131,7 +154,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <UserContext.Provider value={{ user, files, updateUser, loginAs, logout, addFile, deleteFile, renameFile, isLoadingAuth }}>
+        <UserContext.Provider value={{ user, files, updateUser, loginAs, logout, refreshUser, addFile, deleteFile, renameFile, isLoadingAuth }}>
             {children}
         </UserContext.Provider>
     );

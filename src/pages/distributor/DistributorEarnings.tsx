@@ -101,10 +101,10 @@ export default function DistributorEarnings() {
                                         <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} stroke="#6b7280" />
-                                <YAxis fontSize={11} tickLine={false} axisLine={false} stroke="#6b7280" tickFormatter={v => `₹${(v / 1000).toFixed(1)}k`} />
-                                <Tooltip contentStyle={{ background: "#111827", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", color: "#e5e7eb" }} formatter={(v: number) => [`₹${v.toLocaleString()}`, ""]} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                                <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                <YAxis fontSize={11} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `₹${(v / 1000).toFixed(1)}k`} />
+                                <Tooltip cursor={{ fill: 'hsl(var(--muted)/0.5)' }} contentStyle={{ backgroundColor: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))', borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: 'var(--shadow-card)' }} formatter={(v: number) => [`₹${v.toLocaleString()}`, ""]} />
                                 <Area type="monotone" dataKey="commission" stroke="#22c55e" strokeWidth={2} fill="url(#gComm)" name="Commission" />
                                 <Area type="monotone" dataKey="bonus" stroke="#f59e0b" strokeWidth={2} fill="url(#gBonus)" name="Bonus" />
                             </AreaChart>

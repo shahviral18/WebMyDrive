@@ -13,6 +13,43 @@ const severityConfig: Record<string, string> = {
   info: "bg-primary/10 text-primary border-primary/20",
 };
 
+const EVENT_MAP: Record<string, string> = {
+  "PAYMENT_VERIFIED": "Payment successful",
+  "CHECKOUT_PROMO_CODE": "Promo code applied at checkout",
+  "REFERRAL_COMMISSION_CREDITED": "Referral commission credited",
+  "REFERRAL_RENEWAL_COMMISSION_CREDITED": "Renewal referral commission credited",
+  "DISTRIBUTOR_COMMISSION_CREDITED": "Distributor commission credited",
+  "WEBMYDRIVE_ACCOUNT_CREATED": "WebMyDrive account created",
+};
+
+const formatEventName = (name: string) => EVENT_MAP[name] || name;
+
+const formatPayload = (log: any) => {
+  if (!log.payloadJson) return "(no payload)";
+  try {
+    const payload = JSON.parse(log.payloadJson);
+    if (typeof payload !== "object" || payload === null) return String(payload);
+
+    const email = payload.userEmail || payload.email || payload.buyerEmail;
+    const plan = payload.planName || payload.plan;
+    const amount = payload.amount ?? payload.amountPaid ?? payload.total;
+    const commission = payload.commission ?? payload.amountCredited ?? payload.commissionEarned ?? payload.creditAmount;
+
+    const details = [];
+    if (email) details.push(`User email: ${email}`);
+    if (plan) details.push(`Plan name: ${plan}`);
+    if (amount !== undefined) details.push(`Amount paid: ${amount}`);
+    if (commission !== undefined) details.push(`Commission credited: ${commission}`);
+
+    if (details.length > 0) {
+      return details.join("\n");
+    }
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return "(invalid payload)";
+  }
+};
+
 const PAGE_SIZE = 15;
 
 export default function AuditLogs() {
@@ -92,7 +129,7 @@ export default function AuditLogs() {
             className="pl-9 pr-4 h-9 rounded-md bg-surface-1 border border-border/50 text-sm text-foreground appearance-none min-w-[200px] focus:outline-none focus:border-primary/50"
           >
             <option value="">All Actions</option>
-            {actionTypes.map(a => <option key={a} value={a}>{a}</option>)}
+            {actionTypes.map(a => <option key={a} value={a}>{formatEventName(a)}</option>)}
           </select>
         </div>
       </div>
@@ -138,7 +175,7 @@ export default function AuditLogs() {
                       >
                         <td className="px-4 py-3 text-sm text-foreground font-mono text-xs">{log.actorId ?? "system"}</td>
                         <td className="px-4 py-3">
-                          <span className="font-mono text-xs text-foreground">{log.actionName}</span>
+                          <span className="font-mono text-xs text-foreground">{formatEventName(log.actionName)}</span>
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{log.ipAddress || "—"}</td>
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
@@ -157,8 +194,8 @@ export default function AuditLogs() {
                       {expandedId === String(log.id) && (
                         <motion.tr key={`${log.id}-payload`} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                           <td colSpan={5} className="px-4 py-3 bg-surface-2/30 border-b border-border/30">
-                            <pre className="font-mono-data text-xs text-muted-foreground p-3 rounded-lg bg-surface-2 border border-border overflow-x-auto">
-                              {log.payloadJson ? JSON.stringify(JSON.parse(log.payloadJson), null, 2) : "(no payload)"}
+                            <pre className="font-mono-data text-xs text-muted-foreground p-3 rounded-lg bg-surface-2 border border-border overflow-x-auto whitespace-pre-wrap">
+                              {formatPayload(log)}
                             </pre>
                           </td>
                         </motion.tr>

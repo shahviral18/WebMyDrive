@@ -12,14 +12,35 @@ const getHeaders = () => {
     };
 };
 
+const handleResponse = async (res: Response) => {
+    if (res.status === 204) return null;
+
+    let data;
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+    } else {
+        const text = await res.text();
+        if (!res.ok) {
+            throw new Error(`Server returned ${res.status} ${res.statusText} (Non-JSON). Is the backend running?`);
+        }
+        return text;
+    }
+
+    if (!res.ok) {
+        throw new Error(data?.error || `Request failed with status ${res.status}`);
+    }
+
+    return data;
+};
+
 export const api = {
     async get(endpoint: string) {
         const res = await fetch(`/api${endpoint}`, {
             method: "GET",
             headers: getHeaders(),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
-        return res.json();
+        return handleResponse(res);
     },
 
     async post(endpoint: string, data: any) {
@@ -28,8 +49,7 @@ export const api = {
             headers: getHeaders(),
             body: JSON.stringify(data),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
-        return res.json();
+        return handleResponse(res);
     },
 
     async put(endpoint: string, data: any) {
@@ -38,8 +58,7 @@ export const api = {
             headers: getHeaders(),
             body: JSON.stringify(data),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
-        return res.json();
+        return handleResponse(res);
     },
 
     async delete(endpoint: string) {
@@ -47,8 +66,7 @@ export const api = {
             method: "DELETE",
             headers: getHeaders(),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
-        return res.json();
+        return handleResponse(res);
     },
 
     async patch(endpoint: string, data: any) {
@@ -57,7 +75,6 @@ export const api = {
             headers: getHeaders(),
             body: JSON.stringify(data),
         });
-        if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
-        return res.json();
+        return handleResponse(res);
     }
 };

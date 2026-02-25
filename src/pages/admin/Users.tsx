@@ -29,6 +29,7 @@ interface User {
   walletBalance: number;
   referralCode: string | null;
   createdAt: string;
+  source?: string;
 }
 
 type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete";
@@ -36,18 +37,17 @@ interface Confirm { user: User; action: Action }
 type PlatformUserRole = "distributor" | "customer";
 
 // ── Static maps ──────────────────────────────────────────────────────────────
-const roleBadge: Record<string, string> = {
-  USER: "bg-surface-3 border-border text-muted-foreground",
-  ADMIN: "bg-primary/20 text-primary border-blue-200",
-  SUPERADMIN: "bg-violet-500/20 text-violet-400 border-violet-500/30",
-  DISTRIBUTOR: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+const sourceBadge: Record<string, string> = {
+  "Direct": "bg-surface-3 border-border text-muted-foreground",
+  "User Referral": "bg-primary/20 text-primary border-blue-200",
+  "Distributor": "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
 };
 
 const statChips: { label: string; filter: string; cls: string }[] = [
-  { label: "All", filter: "", cls: "border-border text-muted-foreground hover:border-blue-300" },
-  { label: "Users", filter: "USER", cls: "border-success/30 text-green-700 bg-success/10" },
-  { label: "Admin", filter: "ADMIN", cls: "border-blue-200 text-primary bg-primary/10" },
-  { label: "Distributor", filter: "DISTRIBUTOR", cls: "border-yellow-500/30 text-yellow-600 bg-yellow-500/10" },
+  { label: "All Accounts", filter: "", cls: "border-border text-muted-foreground hover:border-blue-300" },
+  { label: "Distributor", filter: "Distributor", cls: "border-yellow-500/30 text-yellow-600 bg-yellow-500/10" },
+  { label: "Direct", filter: "Direct", cls: "border-surface-3 text-muted-foreground bg-surface-2" },
+  { label: "User Referral", filter: "User Referral", cls: "border-blue-200 text-primary bg-primary/10" },
 ];
 
 const PAGE = 20;
@@ -181,14 +181,14 @@ function EmptyState({ filtered }: { filtered: boolean }) {
     <tr>
       <td colSpan={6} className="py-20">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-blue-100 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
             <UserCircle2 className="w-7 h-7 text-muted-foreground" />
           </div>
           <p className="text-sm font-medium text-muted-foreground">
-            {filtered ? "No users match your filters" : "No users yet"}
+            {filtered ? "No accounts match your filters" : "No accounts yet"}
           </p>
           <p className="text-xs text-muted-foreground max-w-xs">
-            {filtered ? "Try adjusting your search or filter criteria." : "Users appear here once they sign up."}
+            {filtered ? "Try adjusting your search or filter criteria." : "Accounts appear here once they sign up."}
           </p>
         </div>
       </td>
@@ -210,7 +210,10 @@ export default function UsersPage() {
 
   useEffect(() => {
     api.get("/admin/users?limit=200")
-      .then(data => setUsers(data.users || []))
+      .then(data => {
+        console.log("Fetched users:", data.users);
+        setUsers(data.users || []);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -219,7 +222,7 @@ export default function UsersPage() {
     const q = search.toLowerCase();
     return users.filter(u =>
       (!q || u.email.includes(q) || (u.name ?? "").toLowerCase().includes(q)) &&
-      (!roleFilter || u.role === roleFilter)
+      (!roleFilter || u.source === roleFilter)
     );
   }, [users, search, roleFilter]);
 
@@ -237,10 +240,22 @@ export default function UsersPage() {
     setConfirm(null);
     try {
       if (action === "reset-password") {
-        const res = await api.post(`/admin/users/${user.id}/reset-password`, {});
+        let actualId = user.id;
+        let endpoint = `/admin/users/${actualId}/reset-password`;
+        if (user.role === "DISTRIBUTOR") {
+          actualId -= 1000000;
+          endpoint = `/admin/distributors/${actualId}/reset-password`;
+        }
+        const res = await api.post(endpoint, {});
         setPasswordReveal({ email: user.email, password: res.plainPassword, label: "Password Reset" });
       } else if (action === "delete") {
-        await api.delete(`/admin/users/${user.id}`);
+        let actualId = user.id;
+        let endpoint = `/admin/users/${actualId}`;
+        if (user.role === "DISTRIBUTOR") {
+          actualId -= 1000000;
+          endpoint = `/admin/distributors/${actualId}`;
+        }
+        await api.delete(endpoint);
         setUsers(prev => prev.filter(u => u.id !== user.id));
         toast.success(`${user.email} deleted`);
       } else {
@@ -260,7 +275,7 @@ export default function UsersPage() {
   };
 
   const counts = statChips.reduce<Record<string, number>>((acc, chip) => {
-    acc[chip.filter] = chip.filter === "" ? users.length : users.filter(u => u.role === chip.filter).length;
+    acc[chip.filter] = chip.filter === "" ? users.length : users.filter(u => u.source === chip.filter).length;
     return acc;
   }, {});
 
@@ -284,8 +299,8 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Users</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{users.length} total users</p>
+          <h1 className="text-2xl font-bold text-foreground">Accounts</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{users.length} total accounts</p>
         </div>
         <Button onClick={() => setShowAddUser(true)} className="bg-primary hover:bg-primary/90 text-white gap-2 self-start">
           <UserPlus className="w-4 h-4" /> Add User
@@ -315,11 +330,10 @@ export default function UsersPage() {
           <Filter className="w-4 h-4 text-muted-foreground" />
           <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
             className="px-3 h-9 rounded-md bg-card border border-border text-sm text-foreground appearance-none min-w-[120px] focus:outline-none">
-            <option value="">All Roles</option>
-            <option value="USER">User</option>
-            <option value="ADMIN">Admin</option>
-            <option value="SUPERADMIN">Super Admin</option>
-            <option value="DISTRIBUTOR">Distributor</option>
+            <option value="">All Sources</option>
+            <option value="Distributor">Distributor</option>
+            <option value="Direct">Direct</option>
+            <option value="User Referral">User Referral</option>
           </select>
         </div>
       </div>
@@ -331,7 +345,7 @@ export default function UsersPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-2">
-                {["User", "Role", "Wallet", "Referral Code", "Joined", "Actions"].map(h => (
+                {["Account", "Source", "Wallet", "Referral Code", "Joined", "Actions"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -358,8 +372,8 @@ export default function UsersPage() {
                     </td>
 
                     <td className="px-4 py-3.5">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${roleBadge[user.role] ?? roleBadge["USER"]}`}>
-                        {user.role}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${sourceBadge[user.source ?? ""] ?? sourceBadge["Direct"]}`}>
+                        {user.source ?? "—"}
                       </span>
                     </td>
 

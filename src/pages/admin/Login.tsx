@@ -5,6 +5,7 @@ import { Shield, Eye, EyeOff, Lock, Mail, Loader2, Sun, Moon } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -50,7 +51,7 @@ export default function AdminLogin() {
 
       sessionStorage.setItem("wmd_token", data.token);
       sessionStorage.setItem("wmd_admin_auth", "true");
-      navigate("/admin/dashboard");
+      window.location.href = "/admin/dashboard";
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
@@ -123,7 +124,31 @@ export default function AdminLogin() {
           </AnimatePresence>
 
           {/* Login form */}
-          <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-4">
+            {/* Google Sign In */}
+            <GoogleSignInButton
+              label="Continue with Google"
+              onSuccess={({ token, user }) => {
+                const role = user?.role;
+                if (role !== "ADMIN" && role !== "SUPERADMIN") {
+                  setError("Access denied. Admin role required.");
+                  return;
+                }
+                sessionStorage.setItem("wmd_token", token);
+                sessionStorage.setItem("wmd_admin_auth", "true");
+                window.location.href = "/admin/dashboard";
+              }}
+              onError={(msg) => setError(msg)}
+            />
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-border/50" />
+              <span className="text-xs text-muted-foreground font-medium">or sign in with email</span>
+              <div className="flex-1 h-px bg-border/50" />
+            </div>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4 mt-4">
             <div className="space-y-1.5">
               <Label htmlFor="admin-email" className="text-muted-foreground text-xs uppercase tracking-wider">Email</Label>
               <div className="relative">
@@ -172,7 +197,26 @@ export default function AdminLogin() {
             </Button>
           </form>
 
-          <div className="text-center mt-6 pt-4 border-t border-border/50">
+          {/* Demo credentials */}
+          <div className="mt-6 pt-4 border-t border-border/50">
+            <p className="text-xs text-muted-foreground text-center mb-3 uppercase tracking-wider font-semibold">Demo Credentials</p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => { setEmail("admin@webmydrive.com"); setPassword("Admin@123"); }}
+                className="flex items-center gap-3 w-full px-3 py-2 rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/40 text-left transition-all group"
+              >
+                <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">SA</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">Super Admin</p>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate">admin@webmydrive.com · Admin@123</p>
+                </div>
+                <span className="ml-auto text-[10px] text-muted-foreground group-hover:text-primary transition-colors shrink-0">Click to fill</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-center mt-4">
             <a href="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               Switch to Customer Portal

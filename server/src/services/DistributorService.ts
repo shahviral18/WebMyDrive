@@ -131,9 +131,18 @@ export class DistributorService {
         const currentTierConfig = config.tiers.find((t: any) => t.name === dist.tier);
         if (!currentTierConfig) return;
 
-        const baseRate = currentTierConfig.rate;
+        const globalConfig = await ConfigService.getGlobalPlanConfig();
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        const plan = order?.planId ? await prisma.plan.findUnique({ where: { id: order.planId } }) : null;
+
+        let baseAmount = amount;
+        if (plan) {
+            baseAmount = plan.hasOverride ? plan.price : globalConfig.priceINR;
+        }
+
+        const baseRate = globalConfig.distributorCreditRate;
         const finalRate = parseFloat((baseRate * multiplier).toFixed(6));
-        const commission = parseFloat((amount * finalRate).toFixed(2));
+        const commission = parseFloat((baseAmount * finalRate).toFixed(2));
 
         // Calculate new revenue and tier prospectively
         const newRevenue = dist.revenueThisYear + amount;

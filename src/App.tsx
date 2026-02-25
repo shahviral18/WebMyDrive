@@ -32,6 +32,8 @@ import DistributorMarketing from "./pages/distributor/DistributorMarketing";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGuard } from "@/components/AuthGuard";
+import ReferralRedirect from "./pages/ref/ReferralRedirect";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,124 +59,133 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner richColors position="top-right" />
-      <BrowserRouter>
-        <ThemeProvider>
-          <UserProvider>
-            <Routes>
-              <Route path="/" element={<Index />} />
+      <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "337424619711-d1c8p7gkvn2d61h72o91l24t12j6v2n7.apps.googleusercontent.com"}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <UserProvider>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/plans" element={<UserPlans />} />
+                <Route path="/ref/:code" element={<ReferralRedirect />} />
 
-              {/* ── Legacy / shorthand redirects ─────────────────────────────── */}
-              <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
-              <Route path="/referrals" element={<Navigate to="/user/referrals" replace />} />
-              <Route path="/billing" element={<Navigate to="/user/billing" replace />} />
-              <Route path="/settings" element={<Navigate to="/user/settings" replace />} />
-              <Route path="/files" element={<Navigate to="/user/files" replace />} />
+                {/* ── Legacy / shorthand redirects ─────────────────────────────── */}
+                <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
+                <Route path="/referrals" element={<Navigate to="/user/referrals" replace />} />
+                <Route path="/billing" element={<Navigate to="/user/billing" replace />} />
+                <Route path="/settings" element={<Navigate to="/user/settings" replace />} />
+                <Route path="/files" element={<Navigate to="/user/files" replace />} />
 
-              {/* ── Shared Login ─────────────────────────────────────────────── */}
-              <Route path="/login" element={<UserLogin />} />
-              <Route path="/user/login" element={<UserLogin />} />
+                {/* ── Shared Login ─────────────────────────────────────────────── */}
+                <Route path="/login" element={<UserLogin />} />
+                <Route path="/user/login" element={<UserLogin />} />
 
-              {/* ── USER Portal — auth-guarded ────────────────────────────────── */}
-              <Route path="/user" element={<Navigate to="/user/dashboard" replace />} />
-              <Route path="/user/dashboard" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserDashboard />
-                </AuthGuard>
-              } />
-              <Route path="/user/files" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserFiles />
-                </AuthGuard>
-              } />
-              <Route path="/user/plans" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserPlans />
-                </AuthGuard>
-              } />
-              <Route path="/user/referrals" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserReferrals />
-                </AuthGuard>
-              } />
-              <Route path="/user/billing" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserBilling />
-                </AuthGuard>
-              } />
-              <Route path="/user/settings" element={
-                <AuthGuard requiredRole="user" redirectTo="/login">
-                  <UserSettings />
-                </AuthGuard>
-              } />
-              {/* Catch-all for unknown /user/* paths */}
-              <Route path="/user/*" element={<Navigate to="/login" replace />} />
+                {/* ── USER Portal — auth-guarded ────────────────────────────────── */}
+                <Route path="/user" element={<Navigate to="/user/dashboard" replace />} />
+                <Route path="/user/dashboard" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserDashboard />
+                  </AuthGuard>
+                } />
+                <Route path="/user/files" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserFiles />
+                  </AuthGuard>
+                } />
+                <Route path="/user/plans" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserPlans />
+                  </AuthGuard>
+                } />
+                <Route path="/user/referrals" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserReferrals />
+                  </AuthGuard>
+                } />
+                <Route path="/user/billing" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserBilling />
+                  </AuthGuard>
+                } />
+                <Route path="/user/settings" element={
+                  <AuthGuard requiredRole="user" redirectTo="/login">
+                    <UserSettings />
+                  </AuthGuard>
+                } />
+                {/* Catch-all for unknown /user/* paths */}
+                <Route path="/user/*" element={<Navigate to="/login" replace />} />
 
-              {/* ── DISTRIBUTOR Portal — auth-guarded ────────────────────────── */}
-              <Route path="/distributor" element={<Navigate to="/distributor/dashboard" replace />} />
-              <Route path="/distributor/dashboard" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorDashboard />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/referrals" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorReferrals />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/earnings" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorEarnings />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/wallet" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorWallet />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/customers" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorCustomers />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/payouts" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorPayouts />
-                </AuthGuard>
-              } />
-              <Route path="/distributor/marketing" element={
-                <AuthGuard requiredRole="distributor" redirectTo="/login">
-                  <DistributorMarketing />
-                </AuthGuard>
-              } />
-              {/* Catch-all for unknown /distributor/* paths */}
-              <Route path="/distributor/*" element={<Navigate to="/login" replace />} />
+                {/* ── DISTRIBUTOR Portal — auth-guarded ────────────────────────── */}
+                <Route path="/distributor" element={<Navigate to="/distributor/dashboard" replace />} />
+                <Route path="/distributor/dashboard" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorDashboard />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/referrals" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorReferrals />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/earnings" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorEarnings />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/wallet" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorWallet />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/customers" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorCustomers />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/plans" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <UserPlans />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/payouts" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorPayouts />
+                  </AuthGuard>
+                } />
+                <Route path="/distributor/marketing" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorMarketing />
+                  </AuthGuard>
+                } />
+                {/* Catch-all for unknown /distributor/* paths */}
+                <Route path="/distributor/*" element={<Navigate to="/login" replace />} />
 
-              {/* ── ADMIN Console — JWT-guarded via ProtectedLayout ───────────── */}
-              <Route path="/admin/login" element={<Navigate to="/login" replace />} />
-              <Route path="/admin" element={<ProtectedLayout />}>
-                <Route index element={<Navigate to="/admin/dashboard" replace />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="users" element={<Users />} />
-                <Route path="plans" element={<Plans />} />
-                <Route path="orders" element={<Billing />} />
-                <Route path="referral-engine" element={<ReferralEngine />} />
-                <Route path="distributors" element={<Distributors />} />
-                <Route path="audit-logs" element={<AuditLogs />} />
-                <Route path="alerts" element={<Alerts />} />
-                <Route path="settings" element={<Settings />} />
-                {/* Legacy redirects */}
-                <Route path="promo" element={<Navigate to="/admin/referral-engine" replace />} />
-                <Route path="referrals-engine" element={<Navigate to="/admin/referral-engine" replace />} />
-                <Route path="queues" element={<ComingSoon label="Queues & Jobs" />} />
-                <Route path="controls" element={<ComingSoon label="Feature Controls" />} />
-              </Route>
+                {/* ── ADMIN Console — JWT-guarded via ProtectedLayout ───────────── */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin" element={<ProtectedLayout />}>
+                  <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="users" element={<Users />} />
+                  <Route path="plans" element={<Plans />} />
+                  <Route path="orders" element={<Billing />} />
+                  <Route path="referral-engine" element={<ReferralEngine />} />
+                  <Route path="distributors" element={<Distributors />} />
+                  <Route path="audit-logs" element={<AuditLogs />} />
+                  <Route path="alerts" element={<Alerts />} />
+                  <Route path="settings" element={<Settings />} />
+                  {/* Legacy redirects */}
+                  <Route path="promo" element={<Navigate to="/admin/referral-engine" replace />} />
+                  <Route path="referrals-engine" element={<Navigate to="/admin/referral-engine" replace />} />
+                  <Route path="queues" element={<ComingSoon label="Queues & Jobs" />} />
+                  <Route path="controls" element={<ComingSoon label="Feature Controls" />} />
+                </Route>
 
-              {/* Global catch-all */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </UserProvider>
-        </ThemeProvider>
-      </BrowserRouter>
+                {/* Global catch-all */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </UserProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </GoogleOAuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

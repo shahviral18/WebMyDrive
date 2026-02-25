@@ -95,6 +95,15 @@ class GoogleWorkspaceService {
             }
         });
     }
+    async changePassword(email: string, newPasswordHash: string): Promise<void> {
+        await this.directory.users.update({
+            userKey: email,
+            requestBody: {
+                password: newPasswordHash,
+                changePasswordAtNextLogin: false, // Ensure they don't get prompted again by Google
+            }
+        });
+    }
 }
 
 export const googleWorkspace = new GoogleWorkspaceService();

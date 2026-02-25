@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useUser } from "@/contexts/UserContext";
+import { api } from "@/lib/api";
 import {
     Tabs,
     TabsContent,
@@ -27,6 +28,38 @@ export default function UserSettings() {
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState("profile");
     const { user } = useUser();
+
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [passwordLoading, setPasswordLoading] = useState(false);
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            toast.error("New passwords do not match.");
+            return;
+        }
+        if (newPassword.length < 8) {
+            toast.error("New password must be at least 8 characters.");
+            return;
+        }
+        setPasswordLoading(true);
+        try {
+            await api.post("/auth/change-password", {
+                currentPassword,
+                newPassword
+            });
+            toast.success("Password changed successfully!");
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to change password");
+        } finally {
+            setPasswordLoading(false);
+        }
+    };
 
     return (
         <UserLayout>
@@ -94,21 +127,42 @@ export default function UserSettings() {
                                 <CardDescription>Manage your password and security settings.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="currentPassword">Current Password</Label>
-                                    <Input id="currentPassword" type="password" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="newPassword">New Password</Label>
-                                    <Input id="newPassword" type="password" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="confirmPassword">Confirm Password</Label>
-                                    <Input id="confirmPassword" type="password" />
-                                </div>
-                                <Button variant="outline" className="w-full mt-2">
-                                    Change Password
-                                </Button>
+                                <form onSubmit={handleChangePassword} className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="currentPassword">Current Password</Label>
+                                        <Input
+                                            id="currentPassword"
+                                            type="password"
+                                            value={currentPassword}
+                                            onChange={e => setCurrentPassword(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="newPassword">New Password</Label>
+                                        <Input
+                                            id="newPassword"
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={e => setNewPassword(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                        <Input
+                                            id="confirmPassword"
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={e => setConfirmPassword(e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    <Button type="submit" variant="outline" className="w-full mt-2" disabled={passwordLoading}>
+                                        {passwordLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                        Change Password
+                                    </Button>
+                                </form>
 
                                 <Separator className="my-6" />
 

@@ -69,8 +69,9 @@ export default function DistributorDashboard() {
     const dist = data.distributor;
     const nextTier = data.nextTier;
     const availablePayout = Math.max(0, dist.walletBalance - 2000);
-    const refCode = `DIST-${dist.id}-2026`;
-    const refLink = `${window.location.origin}?ref=${refCode}`;
+    // Use actual referral code from API, not a constructed string
+    const refCode: string = data.referralCode || (dist as any).referralCode || `DIST${dist.id}`;
+    const refLink = `${window.location.origin}/ref/${refCode}`;
 
     const progressValue = nextTier ? (dist.revenueThisYear / nextTier.threshold) * 100 : 100;
 
@@ -88,10 +89,8 @@ export default function DistributorDashboard() {
                                 <Zap className="w-5 h-5 text-yellow-300" />
                                 <span className="text-xs font-semibold uppercase tracking-widest text-blue-100">Distributor Partner</span>
                             </div>
-                            <h1 className="text-2xl font-bold">Current Tier: {dist.tier}</h1>
-                            <p className="text-blue-100 mt-1 text-sm">
-                                Year resets: {new Date(dist.resetDate).toLocaleDateString()}
-                            </p>
+                            <h1 className="text-2xl font-bold">Welcome, {dist.name || dist.email}!</h1>
+                            <p className="text-blue-100 text-sm mt-1">Tier: <strong>{dist.tier}</strong></p>
                         </div>
                         <div className="flex gap-2 shrink-0">
                             <Button size="sm" variant="secondary" className="gap-2 text-primary" onClick={() => {
@@ -105,13 +104,13 @@ export default function DistributorDashboard() {
 
                 {/* KPI Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Card className="border border-blue-100 shadow-sm">
+                    <Card className="border-border shadow-sm">
                         <CardContent className="p-5">
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Wallet Balance</p>
-                            <p className="text-2xl font-bold text-gray-900 mt-2">Rs {dist.walletBalance.toLocaleString()}</p>
+                            <p className="text-2xl font-bold text-foreground mt-2">Rs {dist.walletBalance.toLocaleString()}</p>
                         </CardContent>
                     </Card>
-                    <Card className="border border-green-100 shadow-sm">
+                    <Card className="border-border shadow-sm">
                         <CardContent className="p-5 relative">
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Available Payout</p>
                             <p className="text-2xl font-bold text-green-600 mt-2">Rs {availablePayout.toLocaleString()}</p>
@@ -123,7 +122,7 @@ export default function DistributorDashboard() {
                             )}
                         </CardContent>
                     </Card>
-                    <Card className="border border-indigo-100 shadow-sm col-span-2">
+                    <Card className="border-border shadow-sm col-span-2">
                         <CardContent className="p-5">
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Tier Progress (This Year's Revenue)</p>
                             <div className="flex justify-between text-sm font-bold mb-2">

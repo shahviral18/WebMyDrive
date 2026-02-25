@@ -1,42 +1,51 @@
 /**
  * QueueService — gracefully degrades if Redis is unavailable.
- * In development without Redis, all queue.add() calls become no-ops.
+ * All queue.add() calls become no-ops when Redis is offline.
  */
 
-let Queue: any, Worker: any, QueueEvents: any;
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
+
+// ── Probe Redis availability synchronously via require ────────────────────────
+let Queue: any = null;
+let Worker: any = null;
 let redisAvailable = false;
 
 try {
     const bullmq = require('bullmq');
     Queue = bullmq.Queue;
     Worker = bullmq.Worker;
-    QueueEvents = bullmq.QueueEvents;
     redisAvailable = true;
 } catch {
     redisAvailable = false;
 }
 
 const connection = {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
+    host: REDIS_HOST,
+    port: REDIS_PORT,
     maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: true,
+    // Stop retrying after 1 attempt so we don't flood logs
+    retryStrategy: () => null,
 };
 
-// Stub queue that does nothing if Redis is unavailable
+// ── Stub queue that does nothing when Redis is unavailable ────────────────────
 class NullQueue {
     name: string;
     constructor(name: string) { this.name = name; }
-    async add(jobName: string, data: any) {
-        console.warn(`[Queue:${this.name}] Redis unavailable — job '${jobName}' skipped. Data:`, data);
-    }
+    async add(_jobName: string, _data: any) { /* no-op */ }
+    on(_event: string, _handler: any) { return this; }
 }
 
 function makeQueue(name: string) {
-    if (!redisAvailable) return new NullQueue(name) as any;
+    if (!redisAvailable || !Queue) return new NullQueue(name) as any;
     try {
-        return new Queue(name, { connection });
+        const q = new Queue(name, { connection });
+        // Absorb connection errors — do NOT let them propagate
+        q.on('error', (_err: any) => { /* suppressed */ });
+        return q;
     } catch {
-        console.warn(`[Queue] Could not create queue '${name}' — Redis may be offline.`);
         return new NullQueue(name) as any;
     }
 }
@@ -47,17 +56,14 @@ export const SuspendUserQueue = makeQueue('SuspendUserQueue');
 export const SyncQueue = makeQueue('SyncQueue');
 
 export const createWorker = (queueName: string, processor: (job: any) => Promise<any>) => {
-    if (!redisAvailable || !Worker) {
-        console.warn(`[Worker] Redis unavailable — worker for '${queueName}' not started.`);
-        return null;
-    }
+    if (!redisAvailable || !Worker) return null;
     try {
         const worker = new Worker(queueName, processor, { connection });
+        worker.on('error', (_err: any) => { /* suppressed */ });
         worker.on('completed', (job: any) => console.log(`[Worker:${queueName}] Job ${job.id} completed`));
         worker.on('failed', (job: any, err: any) => console.error(`[Worker:${queueName}] Job ${job?.id} failed: ${err.message}`));
         return worker;
     } catch {
-        console.warn(`[Worker] Could not start worker for '${queueName}'.`);
         return null;
     }
 };

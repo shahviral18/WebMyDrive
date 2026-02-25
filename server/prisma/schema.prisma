@@ -11,11 +11,15 @@ model User {
   id            Int      @id @default(autoincrement())
   name          String?
   email         String   @unique
+  displayEmail  String?
   passwordHash  String?
   referralCode  String?  @unique
   walletBalance Float    @default(0.0)
   role          String   @default("USER") // 'USER', 'ADMIN', 'SUPERADMIN'
   distributorId Int?
+  isDisabled    Boolean  @default(false)
+  passwordResetRequired Boolean @default(false)
+  first_login   Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -56,13 +60,17 @@ model Plan {
   id         Int         @id @default(autoincrement())
   name       String
   price      Float
+  hasOverride Boolean     @default(false)
   features   String?
   isActive   Boolean     @default(true)
-  priceINR   Float?      // To match frontend expectations
+  priceINR   Float?      // Legacy or default price
+  priceMonthlyINR Float? // Price when billed monthly
+  priceYearlyINR  Float? // Price when billed annually (per month equivalent)
   storageGB  Int         @default(0)
   maxUsers   Int         @default(0)
   googleSKU  String?
   workspaces Workspace[]
+  orders     Order[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 }
@@ -70,6 +78,7 @@ model Plan {
 model Order {
   id          Int      @id @default(autoincrement())
   userId      Int
+  planId      Int?
   amount      Float
   currency    String   @default("INR")
   gatewayTxId String?  // Duplicate payment prevention enforced in application layer
@@ -78,12 +87,14 @@ model Order {
   updatedAt   DateTime @updatedAt
 
   user             User              @relation(fields: [userId], references: [id])
+  plan             Plan?             @relation(fields: [planId], references: [id])
   referralLogs     ReferralLog[]
   distributorSales DistributorSale[]
 
   @@index([userId])
   @@index([status])
   @@index([gatewayTxId])
+  @@index([planId])
 }
 
 model ReferralLog {
@@ -124,6 +135,7 @@ model Distributor {
   id              Int       @id @default(autoincrement())
   userId          Int?      @unique
   email           String    @unique
+  displayEmail    String?
   passwordHash    String?
   name            String?
   referralCode    String?   @unique
@@ -133,6 +145,7 @@ model Distributor {
   joinDate        DateTime  @default(now())
   resetDate       DateTime?
   revenueThisYear Float     @default(0.0)
+  passwordResetRequired Boolean @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -190,3 +203,33 @@ model AdminConfig {
   updatedAt DateTime @updatedAt
 }
 
+model ReferralLink {
+  id         Int       @id @default(autoincrement())
+  code       String    @unique
+  referrerId Int
+  role       String    // "USER" or "DISTRIBUTOR"
+  status     String    @default("ACTIVE") // ACTIVE, USED, EXPIRED
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  @@index([code])
+  @@index([referrerId])
+  @@index([role])
+  @@index([status])
+}
+
+model SecurityLink {
+  id         Int       @id @default(autoincrement())
+  token      String    @unique
+  userId     Int
+  role       String    @default("USER") // USER, DISTRIBUTOR
+  type       String    // PASSWORD_RESET, PRIVATE_ACCESS
+  status     String    @default("ACTIVE") // ACTIVE, USED, EXPIRED
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  @@index([token])
+  @@index([userId])
+  @@index([status])
+}

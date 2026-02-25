@@ -1,39 +1,39 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Megaphone, Copy, QrCode, Link, Image, FileText, Share2, CheckCheck, Palette } from "lucide-react";
+import { Megaphone, Copy, QrCode, Link, FileText, Share2, CheckCheck, Palette, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import DistributorLayout from "@/components/distributor/DistributorLayout";
 import { toast } from "sonner";
 import { copyToClipboard } from "@/lib/utils";
-
-const REF_CODE = "PRIYA-NET-2026";
-const REF_LINK = `${typeof window !== "undefined" ? window.location.origin : ""}/login?ref=${REF_CODE}`;
+import { api } from "@/lib/api";
 
 const templates = [
     { id: 1, name: "Cloud Storage Promo", type: "Banner", size: "1200×628", desc: "LinkedIn/Facebook ad banner", preview: "🖼️" },
-    { id: 2, name: "Referral Whatsapp Post", type: "Social", size: "1080×1080", desc: "Square WhatsApp/Instagram post", preview: "📱" },
+    { id: 2, name: "Referral WhatsApp Post", type: "Social", size: "1080×1080", desc: "Square WhatsApp/Instagram post", preview: "📱" },
     { id: 3, name: "Email Signature Block", type: "Email", size: "HTML", desc: "Professional email signature with referral link", preview: "✉️" },
     { id: 4, name: "A4 Flyer Template", type: "Print", size: "A4 PDF", desc: "Printable partner flyer for events", preview: "🖨️" },
 ];
 
-const trackingLinks = [
-    { id: 1, name: "LinkedIn Campaign", url: `${REF_LINK}&utm_source=linkedin&utm_medium=social`, clicks: 142, conversions: 9 },
-    { id: 2, name: "WhatsApp Blast", url: `${REF_LINK}&utm_source=whatsapp&utm_medium=chat`, clicks: 298, conversions: 18 },
-    { id: 3, name: "Email Sequence", url: `${REF_LINK}&utm_source=email&utm_medium=newsletter`, clicks: 87, conversions: 5 },
-];
-
-function QRPlaceholder({ value }: { value: string }) {
-    // Simple visual QR placeholder using a grid pattern (real app would use qrcode library)
+/** Simple deterministic visual QR placeholder — same pattern every render */
+function QRPlaceholder({ code }: { code: string }) {
+    const seed = code.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
     return (
-        <div className="w-36 h-36 mx-auto bg-white rounded-xl p-3 flex items-center justify-center shadow-inner">
+        <div className="w-36 h-36 mx-auto bg-surface-1 rounded-xl p-3 flex items-center justify-center shadow-inner">
             <div className="w-full h-full grid grid-cols-7 gap-0.5">
-                {Array.from({ length: 49 }).map((_, i) => (
-                    <div key={i} className={`rounded-sm ${Math.random() > 0.45 ? "bg-gray-900" : "bg-white"}`} />
-                ))}
+                {Array.from({ length: 49 }).map((_, i) => {
+                    // corner finder patterns (top-left, top-right, bottom-left)
+                    const row = Math.floor(i / 7);
+                    const col = i % 7;
+                    const isCorner =
+                        (row < 2 && col < 2) || (row < 2 && col > 4) || (row > 4 && col < 2);
+                    const filled = isCorner || ((seed * (i + 1) * 2654435761) >>> 0) % 3 !== 0;
+                    return (
+                        <div key={i} className={`rounded-sm ${filled ? "bg-foreground" : "bg-surface-1"}`} />
+                    );
+                })}
             </div>
         </div>
     );
@@ -41,14 +41,44 @@ function QRPlaceholder({ value }: { value: string }) {
 
 export default function DistributorMarketing() {
     const [copied, setCopied] = useState<string | null>(null);
+    const [refCode, setRefCode] = useState<string | null>(null);
+    const [distName, setDistName] = useState("Distributor");
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get("/distributor/dashboard")
+            .then((data: any) => {
+                const code =
+                    data?.referralCode ||
+                    (data?.distributor as any)?.referralCode ||
+                    null;
+                setRefCode(code);
+                setDistName(data?.distributor?.name || "Distributor");
+            })
+            .catch(() => toast.error("Failed to load referral code"))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const refLink = refCode
+        ? `${window.location.origin}/plans?ref=${refCode}`
+        : "";
 
     const copyLink = (url: string, label: string) => {
+        if (!url) { toast.error("Referral code not loaded yet."); return; }
         copyToClipboard(url).then(() => {
             setCopied(label);
             toast.success(`${label} copied!`);
             setTimeout(() => setCopied(null), 2000);
         }).catch(() => toast.error("Failed to copy."));
     };
+
+    const trackingLinks = refLink
+        ? [
+            { id: 1, name: "LinkedIn Campaign", url: `${refLink}&utm_source=linkedin&utm_medium=social`, clicks: 0, conversions: 0 },
+            { id: 2, name: "WhatsApp Blast", url: `${refLink}&utm_source=whatsapp&utm_medium=chat`, clicks: 0, conversions: 0 },
+            { id: 3, name: "Email Sequence", url: `${refLink}&utm_source=email&utm_medium=newsletter`, clicks: 0, conversions: 0 },
+        ]
+        : [];
 
     return (
         <DistributorLayout>
@@ -57,31 +87,66 @@ export default function DistributorMarketing() {
                     <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
                         <Megaphone className="w-6 h-6 text-primary" /> Marketing Hub
                     </h1>
-                    <p className="text-muted-foreground text-sm mt-1">All the tools you need to promote WebMyDrive and grow your referral network.</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                        Hi <span className="font-semibold text-foreground">{distName}</span> — all the tools you need to promote WebMyDrive and grow your network.
+                    </p>
                 </div>
 
                 {/* My Referral Hub Card */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* QR + Link */}
+                    {/* QR + Code */}
                     <Card className="border-border bg-gradient-to-br from-primary/5 to-indigo-500/5">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><QrCode className="w-5 h-5 text-primary" /> My Referral Code</CardTitle>
-                            <CardDescription>Share your unique QR code or link to earn commissions.</CardDescription>
+                            <CardTitle className="flex items-center gap-2">
+                                <QrCode className="w-5 h-5 text-primary" /> My Referral Code
+                            </CardTitle>
+                            <CardDescription>Share your unique code to earn commissions on every sale.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-6">
-                            <QRPlaceholder value={REF_LINK} />
-                            <div className="text-center">
-                                <p className="text-xs text-muted-foreground mb-1">Your referral code</p>
-                                <div className="inline-flex items-center gap-2 bg-surface-3 rounded-lg px-3 py-2">
-                                    <span className="font-mono text-sm font-bold text-primary-glow tracking-widest">{REF_CODE}</span>
+                        <CardContent className="space-y-5">
+                            {loading ? (
+                                <div className="flex justify-center py-10">
+                                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Input value={REF_LINK} readOnly className="font-mono text-xs bg-surface-2 border-border text-muted-foreground" />
-                                <Button size="icon" variant="outline" onClick={() => copyLink(REF_LINK, "Referral link")} className="shrink-0">
-                                    {copied === "Referral link" ? <CheckCheck className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                                </Button>
-                            </div>
+                            ) : refCode ? (
+                                <>
+                                    <QRPlaceholder code={refCode} />
+
+                                    {/* Big code badge */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-1 bg-primary/5 border-2 border-primary/20 rounded-xl px-5 py-4 flex items-center justify-between hover:border-primary/40 transition-colors">
+                                            <span className="font-mono text-2xl font-extrabold tracking-widest text-primary select-all">
+                                                {refCode}
+                                            </span>
+                                            <Button
+                                                variant="ghost" size="icon"
+                                                onClick={() => copyLink(refCode, "Referral code")}
+                                                className={copied === "Referral code" ? "text-green-600" : "text-muted-foreground hover:text-primary"}
+                                                title="Copy code"
+                                            >
+                                                {copied === "Referral code" ? <CheckCheck className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* Full link (secondary) */}
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Or share the full link</p>
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                value={refLink} readOnly
+                                                className="font-mono text-xs bg-surface-2 border-border text-muted-foreground h-8"
+                                            />
+                                            <Button size="icon" variant="outline" onClick={() => copyLink(refLink, "Referral link")} className="shrink-0 h-8 w-8">
+                                                {copied === "Referral link" ? <CheckCheck className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="py-10 text-center text-sm text-muted-foreground">
+                                    No referral code assigned — contact support.
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -93,19 +158,24 @@ export default function DistributorMarketing() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             {[
-                                { name: "WhatsApp", icon: "💬", color: "bg-green-600 hover:bg-green-700", msg: `Hi! I'm sharing WebMyDrive with you. Use my link: ${REF_LINK}` },
-                                { name: "LinkedIn", icon: "💼", color: "bg-blue-700 hover:bg-blue-800", msg: REF_LINK },
-                                { name: "Email Share", icon: "✉️", color: "bg-indigo-600 hover:bg-indigo-700", msg: `mailto:?subject=Try WebMyDrive&body=Hi! Check out WebMyDrive: ${REF_LINK}` },
-                                { name: "Copy Message", icon: "📋", color: "bg-surface-3 hover:bg-muted text-foreground", msg: `🚀 Get Google Workspace storage with WebMyDrive! Use my referral link for a special discount: ${REF_LINK}` },
+                                { name: "WhatsApp", icon: "💬", color: "bg-green-600 hover:bg-green-700" },
+                                { name: "LinkedIn", icon: "💼", color: "bg-blue-700 hover:bg-blue-800" },
+                                { name: "Email Share", icon: "✉️", color: "bg-indigo-600 hover:bg-indigo-700" },
+                                { name: "Copy Message", icon: "📋", color: "bg-surface-3 hover:bg-muted border border-border text-foreground" },
                             ].map((s, i) => (
                                 <motion.button key={i} whileTap={{ scale: 0.97 }}
                                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white font-medium text-sm transition-colors ${s.color}`}
+                                    disabled={!refLink}
                                     onClick={() => {
-                                        if (s.name === "WhatsApp") window.open(`https://wa.me/?text=${encodeURIComponent(s.msg)}`, "_blank");
-                                        else if (s.name === "LinkedIn") window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(REF_LINK)}`, "_blank");
-                                        else if (s.name === "Email Share") window.location.href = s.msg;
-                                        else { copyToClipboard(s.msg).then(() => toast.success("Message copied to clipboard!")); }
-                                    }}>
+                                        if (!refLink) { toast.error("Code not loaded yet."); return; }
+                                        const waMsg = `Hi! I'm sharing WebMyDrive with you. Use my referral code *${refCode}* or link: ${refLink}`;
+                                        const copyMsg = `🚀 Get Google Workspace storage with WebMyDrive! Use my referral code *${refCode}* for tracking: ${refLink}`;
+                                        if (s.name === "WhatsApp") window.open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`, "_blank");
+                                        else if (s.name === "LinkedIn") window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(refLink)}`, "_blank");
+                                        else if (s.name === "Email Share") window.location.href = `mailto:?subject=Try WebMyDrive&body=${encodeURIComponent(`Hi! Check out WebMyDrive: ${refLink}`)}`;
+                                        else copyToClipboard(copyMsg).then(() => toast.success("Message copied to clipboard!"));
+                                    }}
+                                >
                                     <span className="text-lg">{s.icon}</span> Share on {s.name}
                                 </motion.button>
                             ))}
@@ -120,24 +190,30 @@ export default function DistributorMarketing() {
                         <CardDescription>Track your referral link performance across different marketing channels.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {trackingLinks.map(tl => (
-                            <div key={tl.id} className="flex items-center gap-4 p-4 rounded-xl bg-surface-2 border border-border">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <p className="text-sm font-semibold text-foreground">{tl.name}</p>
-                                        <Badge variant="outline" className="text-[10px] text-success border-success/30 bg-success/10">{tl.conversions} converted</Badge>
-                                    </div>
-                                    <p className="font-mono text-xs text-muted-foreground truncate">{tl.url}</p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                    <p className="text-sm font-bold text-foreground">{tl.clicks}</p>
-                                    <p className="text-xs text-muted-foreground">clicks</p>
-                                </div>
-                                <Button size="icon" variant="outline" onClick={() => copyLink(tl.url, tl.name)} className="shrink-0 text-muted-foreground hover:text-primary">
-                                    {copied === tl.name ? <CheckCheck className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                                </Button>
+                        {trackingLinks.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-muted-foreground">
+                                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Tracking links will appear once your referral code loads."}
                             </div>
-                        ))}
+                        ) : (
+                            trackingLinks.map(tl => (
+                                <div key={tl.id} className="flex items-center gap-4 p-4 rounded-xl bg-surface-2 border border-border">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-semibold text-foreground">{tl.name}</p>
+                                            <Badge variant="outline" className="text-[10px] text-success border-success/30 bg-success/10">{tl.conversions} converted</Badge>
+                                        </div>
+                                        <p className="font-mono text-xs text-muted-foreground truncate">{tl.url}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-sm font-bold text-foreground">{tl.clicks}</p>
+                                        <p className="text-xs text-muted-foreground">clicks</p>
+                                    </div>
+                                    <Button size="icon" variant="outline" onClick={() => copyLink(tl.url, tl.name)} className="shrink-0 text-muted-foreground hover:text-primary">
+                                        {copied === tl.name ? <CheckCheck className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                                    </Button>
+                                </div>
+                            ))
+                        )}
                         <Button variant="outline" className="w-full gap-2 border-dashed border-border text-muted-foreground hover:text-primary">
                             <Link className="w-4 h-4" /> Create New Tracking Link
                         </Button>

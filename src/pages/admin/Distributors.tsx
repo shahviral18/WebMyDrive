@@ -327,21 +327,35 @@ export default function DistributorsPage() {
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-    const handleAdd = (data: Partial<Distributor>) => {
-        const newDist: Distributor = {
-            id: `dist_${Date.now()}`,
-            name: data.name ?? "", email: data.email ?? "",
-            phone: data.phone ?? "", status: "pending",
-            referralCode: (data.name ?? "NEW").replace(/\s+/g, "-").toUpperCase().slice(0, 10),
-            tier: "Starter", commissionPct: 10, totalCustomers: 0, activeCustomers: 0,
-            revenueThisYearINR: 0, revenueGeneratedINR: 0, commissionEarnedINR: 0,
-            walletBalanceINR: 0, pendingWithdrawalINR: 0,
-            joinedAt: new Date().toISOString(),
-            lastActiveAt: new Date().toISOString(),
-            monthlyBreakdown: [],
-        };
-        setDistributors(prev => [newDist, ...prev]);
-        toast.success(`${newDist.name} added — invite sent`);
+    const handleAdd = async (data: Partial<Distributor>) => {
+        try {
+            const res = await api.post("/admin/distributors", data);
+            const d = res.distributor;
+            const newDist: Distributor = {
+                id: String(d.id),
+                name: d.name ?? d.email,
+                email: d.email,
+                phone: d.phone ?? "",
+                status: (d.status?.toLowerCase() as DistributorStatus) || "active",
+                referralCode: d.referralCode ?? "",
+                tier: d.tier ?? "Starter",
+                commissionPct: d.commissionPct ?? 10,
+                totalCustomers: 0,
+                activeCustomers: 0,
+                revenueGeneratedINR: 0,
+                commissionEarnedINR: 0,
+                walletBalanceINR: d.walletBalance ?? 0,
+                pendingWithdrawalINR: 0,
+                revenueThisYearINR: d.revenueThisYear ?? 0,
+                joinedAt: d.createdAt ?? new Date().toISOString(),
+                lastActiveAt: d.updatedAt ?? new Date().toISOString(),
+                monthlyBreakdown: [],
+            };
+            setDistributors((prev) => [newDist, ...prev]);
+            toast.success(res.message || `${newDist.name} added successfully`);
+        } catch (e: any) {
+            toast.error(e.message || "Failed to create distributor");
+        }
     };
 
     const handleUpdate = (id: string, patch: Partial<Distributor>) => {

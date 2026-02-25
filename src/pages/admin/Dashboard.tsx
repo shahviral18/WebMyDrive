@@ -234,15 +234,6 @@ export default function Dashboard() {
       tooltip: "Number of active distributor accounts.",
       onClick: () => navigate("/admin/distributors"),
     },
-    {
-      label: "Pending Orders",
-      value: kpis?.pendingOrders || 0,
-      deltaLabel: kpis?.pendingOrders > 0 ? "Awaiting payment" : "All clear",
-      deltaUp: (kpis?.pendingOrders || 0) === 0,
-      icon: <BarChart3 className="w-4 h-4 text-orange-500" />,
-      tooltip: "Orders that are pending payment verification.",
-      onClick: () => navigate("/admin/orders"),
-    },
   ];
 
   return (

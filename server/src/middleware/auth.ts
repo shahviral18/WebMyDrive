@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { prisma } from "../models";
 
 const getSecret = () => {
     const secret = process.env.JWT_SECRET;
@@ -11,7 +12,7 @@ const getSecret = () => {
     return secret || "default_secret";
 };
 
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -25,6 +26,18 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     try {
         const payload = jwt.verify(token, getSecret()) as { userId: number; role: string };
         req.user = { userId: payload.userId, role: payload.role };
+
+        // Check if the user account is disabled (not applicable for distributors — they have negative IDs)
+        if (payload.role !== "DISTRIBUTOR" && payload.role !== "ADMIN" && payload.role !== "SUPERADMIN") {
+            const user = await prisma.user.findUnique({
+                where: { id: payload.userId },
+                select: { isDisabled: true }
+            });
+            if (user && (user as any).isDisabled) {
+                return res.status(403).json({ error: "Your account has been suspended. Please contact support." });
+            }
+        }
+
         next();
     } catch (error: any) {
         if (error.name === "TokenExpiredError") {

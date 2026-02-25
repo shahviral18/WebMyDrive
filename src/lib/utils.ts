@@ -10,7 +10,7 @@ export function copyToClipboard(text: string): Promise<void> {
     return navigator.clipboard.writeText(text);
   } else {
     // Fallback for non-HTTPS environments like local dev IPs
-    let textArea = document.createElement("textarea");
+    const textArea = document.createElement("textarea");
     textArea.value = text;
     textArea.style.position = "fixed";
     textArea.style.left = "-999999px";
@@ -20,7 +20,12 @@ export function copyToClipboard(text: string): Promise<void> {
     textArea.select();
     return new Promise((resolve, reject) => {
       try {
-        document.execCommand('copy') ? resolve() : reject(new Error('Copy failed'));
+        const copied = document.execCommand('copy');
+        if (copied) {
+          resolve();
+        } else {
+          reject(new Error('Copy failed'));
+        }
       } catch (error) {
         reject(error);
       } finally {

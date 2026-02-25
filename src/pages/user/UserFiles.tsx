@@ -89,7 +89,7 @@ export default function UserFiles() {
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4">
                             {files.map((file) => (
-                                <div key={file.id} className="group p-4 rounded-xl border border-border hover:border-blue-100 hover:bg-blue-50/50 transition-all cursor-pointer">
+                                <div key={file.id} className="group p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer">
                                     <div className="flex justify-between items-start mb-3">
                                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${file.type === 'folder' ? 'bg-primary/10 text-primary' : 'bg-card border border-border'}`}>
                                             {file.type === 'folder' ? (

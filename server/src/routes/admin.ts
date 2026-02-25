@@ -7,35 +7,42 @@ const router = Router();
 // All admin routes require SUPERADMIN or ADMIN role
 const adminOnly = [authenticate, authorize(['SUPERADMIN', 'ADMIN'])];
 
-// Config — read is admin-only to protect business rules from leaking
+// ── Config ────────────────────────────────────────────────────────────────────
 router.get('/config', ...adminOnly, AdminController.getConfig);
 router.post('/config', ...adminOnly, AdminController.updateConfig);
 
-// KPIs — admin-only
+// ── KPIs ──────────────────────────────────────────────────────────────────────
 router.get('/kpis', ...adminOnly, AdminController.getKpis);
 
-// Users
+// ── Users ─────────────────────────────────────────────────────────────────────
 router.get('/users', ...adminOnly, AdminController.getUsers);
 router.get('/users/:id', ...adminOnly, AdminController.getUser);
 router.post('/users', ...adminOnly, AdminController.createUser);
 router.post('/users/:id/reset-password', ...adminOnly, AdminController.resetUserPassword);
 router.delete('/users/:id', ...adminOnly, AdminController.deleteUser);
+router.post('/users/:id/adjust-wallet', ...adminOnly, AdminController.adjustWallet);
+router.post('/users/:id/toggle-status', ...adminOnly, AdminController.toggleUserStatus);
 
-// Orders
+// ── Orders ────────────────────────────────────────────────────────────────────
 router.get('/orders', ...adminOnly, AdminController.getOrders);
 
-// Distributors
+// ── Distributors ──────────────────────────────────────────────────────────────
 router.get('/distributors', ...adminOnly, AdminController.getDistributors);
 router.post('/distributors', ...adminOnly, AdminController.createDistributor);
 router.post('/distributors/:id/reset-password', ...adminOnly, AdminController.resetDistributorPassword);
+router.post('/distributors/:id/adjust-wallet', ...adminOnly, AdminController.adjustDistributorWallet);
 
-// Audit Logs
+// ── Referrals ─────────────────────────────────────────────────────────────────
+router.get('/referrals', ...adminOnly, AdminController.getAllReferrals);
+router.patch('/referrals/:id/override-commission', ...adminOnly, AdminController.overrideCommission);
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
 router.get('/audit-logs', ...adminOnly, AdminController.getAuditLogs);
 
-// Referral Analytics
+// ── Referral Analytics ────────────────────────────────────────────────────────
 router.get('/referral-analytics', ...adminOnly, AdminController.getReferralAnalytics);
 
-// Plans — read is admin-only
+// ── Plans ─────────────────────────────────────────────────────────────────────
 router.get('/plans', ...adminOnly, AdminController.getPlans);
 router.post('/plans', ...adminOnly, AdminController.upsertPlan);
 router.delete('/plans/:id', ...adminOnly, AdminController.deletePlan);

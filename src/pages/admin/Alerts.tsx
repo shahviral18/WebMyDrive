@@ -19,7 +19,7 @@ interface Alert {
   timestamp: string;
 }
 
-// ─── Design tokens per severity ────────────────────────────────────────────
+// Design tokens per severity
 const severityConfig: Record<AlertSeverity, {
   label: string;
   badgeClass: string;
@@ -56,7 +56,7 @@ const statusConfig: Record<AlertStatus, { label: string; className: string }> = 
   dismissed: { label: "Dismissed", className: "bg-muted text-muted-foreground border-border" },
 };
 
-// ─── Alert card ────────────────────────────────────────────────────────────
+// Alert card
 function AlertCard({
   alert,
   onAcknowledge,
@@ -146,14 +146,13 @@ function AlertCard({
   );
 }
 
-// ─── Page ──────────────────────────────────────────────────────────────────
+// Page
 export default function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<AlertSeverity | "">("");
   const [statusFilter, setStatusFilter] = useState<AlertStatus | "">("");
-
-  // Map audit logs → alert objects
+  // Map audit logs to alert objects
   const loadAlerts = useCallback(async () => {
     try {
       const token = localStorage.getItem("wmd_token") || sessionStorage.getItem("wmd_token");
@@ -171,7 +170,7 @@ export default function Alerts() {
           const payload = log.payloadJson ? JSON.parse(log.payloadJson) : {};
           if (log.actionName === "PLAN_PURCHASE_REQUEST") {
             severity = "warning";
-            message = `New purchase request: "${payload.planName}" — ₹${payload.amount?.toLocaleString("en-IN")} (Order #${payload.orderId})`;
+            message = `New purchase request: "${payload.planName}" - INR ${payload.amount?.toLocaleString("en-IN")} (Order #${payload.orderId})`;
             category = "Purchase";
           } else if (log.actionName?.includes("DELETE")) {
             severity = "critical";
@@ -180,7 +179,9 @@ export default function Alerts() {
             severity = "info";
             category = "Admin";
           }
-        } catch { }
+        } catch {
+          // Ignore invalid payload in audit log row.
+        }
         return {
           id: String(log.id),
           severity,
@@ -195,7 +196,9 @@ export default function Alerts() {
         const stateMap = new Map(prev.map(a => [a.id, a.status]));
         return mapped.map(a => ({ ...a, status: stateMap.get(a.id) ?? a.status }));
       });
-    } catch (_) { }
+    } catch (_) {
+      // Ignore transient fetch errors; polling will retry.
+    }
   }, []);
 
   useEffect(() => {
@@ -248,7 +251,7 @@ export default function Alerts() {
             Alerts
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {counts.active} active · {counts.acknowledged} acknowledged · {counts.dismissed} dismissed
+            {counts.active} active | {counts.acknowledged} acknowledged | {counts.dismissed} dismissed
           </p>
         </div>
         {counts.active > 0 && (
@@ -289,7 +292,7 @@ export default function Alerts() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search message, distributor, category…"
+            placeholder="Search message, distributor, category..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pl-9 bg-surface-1 border-border/50 h-9 text-sm"

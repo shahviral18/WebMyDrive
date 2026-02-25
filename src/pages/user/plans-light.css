@@ -1,0 +1,82 @@
+/* ============================================================
+   SCOPED LIGHT THEME — /plans page only
+   Applied via .plans-light wrapper — does NOT affect any other route.
+   ============================================================ */
+
+.plans-light {
+    /* Override CSS variables to light values inside this wrapper */
+    --background: 248 250 252;
+    /* #f8fafc */
+    --foreground: 15 23 42;
+    /* #0f172a  */
+    --card: 255 255 255;
+    /* #ffffff  */
+    --card-foreground: 15 23 42;
+    /* #0f172a  */
+    --popover: 255 255 255;
+    --popover-foreground: 15 23 42;
+    --muted: 241 245 249;
+    /* #f1f5f9  */
+    --muted-foreground: 100 116 139;
+    /* #64748b  */
+    --border: 226 232 240;
+    /* #e2e8f0  */
+    --input: 226 232 240;
+    --surface-1: 255 255 255;
+    --surface-2: 248 250 252;
+
+    /* Plan card CSS variables for light theme */
+    --plan-card-bg: #ffffff;
+    --plan-card-header-bg: #f8fafc;
+    --plan-card-border: #e2e8f0;
+    --plan-card-title: #1e293b;
+    --plan-price-color: #0f172a;
+    --plan-label-color: #64748b;
+    --plan-feature-color: #475569;
+    --plan-feature-value-color: #1e293b;
+
+    background-color: #f8fafc;
+    color: #0f172a;
+}
+
+/* Page wrapper */
+.plans-light * {
+    color-scheme: light;
+}
+
+/* Plan cards */
+.plans-light .plan-card {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #0f172a !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.07), 0 4px 20px 0 rgba(0, 0, 0, 0.04) !important;
+}
+
+.plans-light .plan-card:hover {
+    box-shadow: 0 4px 24px 0 rgba(59, 130, 246, 0.10), 0 1px 4px 0 rgba(0, 0, 0, 0.07) !important;
+    border-color: #bfdbfe !important;
+}
+
+/* Card header strip */
+.plans-light .plan-card-header {
+    background-color: #f8fafc !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+/* Referral input */
+.plans-light .referral-input input,
+.plans-light .referral-input {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+.plans-light .referral-input input::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Remove any dark gradients from plan area */
+.plans-light .plan-grid-wrapper {
+    background: transparent !important;
+}

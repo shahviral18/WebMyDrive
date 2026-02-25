@@ -45,6 +45,12 @@ export function AuthGuard({ children, requiredRole, redirectTo = "/login" }: Aut
     }
 
     if (isForbidden) {
+        // If the user is an admin trying to access a user/distributor route,
+        // redirect them to the admin dashboard instead of showing a confusing 403.
+        if (normalizedRole === "admin" || normalizedRole === "superadmin") {
+            return <Navigate to="/admin/dashboard" replace />;
+        }
+
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-background text-center gap-4 p-6">
                 <div className="w-20 h-20 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center text-4xl">🚫</div>

@@ -1,12 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-    Search, Users, Gift, TrendingUp, Wallet,
-    CheckCircle2, Clock, XCircle, Banknote, Filter, Loader2
+    Search, Gift, TrendingUp, Wallet,
+    CheckCircle2, Clock, XCircle, Banknote, Filter, Loader2, Settings2, Save
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { formatDistanceToNow, format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 
 type ReferralStatus = "pending" | "vested" | "redeemed" | "cancelled" | "PENDING" | "VESTED" | "CANCELLED" | "REDEEMED";
 
@@ -31,6 +33,12 @@ const statusConfig: Record<string, { label: string; className: string; icon: Rea
     cancelled: { label: "Cancelled", className: "bg-muted text-muted-foreground border-border", icon: <XCircle className="w-3 h-3" /> },
 };
 
+const DEFAULT_REF_CONFIG = {
+    referralCreditRate: 0.05,
+    distributorCreditRate: 0.08,
+    customerDiscountRate: 0.0,
+};
+
 export default function Referrals() {
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("");
@@ -38,16 +46,45 @@ export default function Referrals() {
     const [logs, setLogs] = useState<ReferralLog[]>([]);
     const [analytics, setAnalytics] = useState<any>(null);
 
+    // Referral Engine Config
+    const [refConfig, setRefConfig] = useState<typeof DEFAULT_REF_CONFIG>(DEFAULT_REF_CONFIG);
+    const [savingConfig, setSavingConfig] = useState(false);
+
     useEffect(() => {
         setLoading(true);
-        api.get("/admin/referral-analytics")
-            .then(data => {
+        Promise.all([
+            api.get("/admin/referral-analytics"),
+            api.get("/admin/config?type=GLOBAL_PLAN_SETTINGS"),
+        ])
+            .then(([data, cfg]) => {
                 setAnalytics(data);
                 setLogs(data.recentLogs || []);
+                if (cfg && typeof cfg === "object") {
+                    setRefConfig({
+                        referralCreditRate: cfg.referralCreditRate ?? 0.05,
+                        distributorCreditRate: cfg.distributorCreditRate ?? 0.08,
+                        customerDiscountRate: cfg.customerDiscountRate ?? 0.0,
+                    });
+                }
             })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
+
+    const saveRefConfig = async () => {
+        setSavingConfig(true);
+        try {
+            // Merge referral rates back into full GLOBAL_PLAN_SETTINGS
+            const current = await api.get("/admin/config?type=GLOBAL_PLAN_SETTINGS");
+            const merged = { ...(current || {}), ...refConfig };
+            await api.post("/admin/config", { type: "GLOBAL_PLAN_SETTINGS", data: merged });
+            toast.success("Referral engine settings saved");
+        } catch (e: any) {
+            toast.error(e.message || "Failed to save settings");
+        } finally {
+            setSavingConfig(false);
+        }
+    };
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase();
@@ -70,23 +107,69 @@ export default function Referrals() {
     return (
         <div className="p-6 space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-foreground">Referrals & Wallet</h1>
-                <p className="text-muted-foreground text-sm mt-0.5">
-                    Live referral ledger · 5% wallet credit to referrer · Decaying over 5 years
-                </p>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <h1 className="text-2xl font-bold text-foreground">Referrals &amp; Wallet</h1>
+                    <p className="text-muted-foreground text-sm mt-0.5">
+                        Live referral ledger — configure commission rates below
+                    </p>
+                </div>
             </div>
 
-            {/* Programme summary */}
-            <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-                <p className="text-sm font-semibold text-primary mb-1 flex items-center gap-2">
-                    <Gift className="w-4 h-4" /> Referral & Commission System
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                    When a referred user makes their first payment, the referrer earns a <strong className="text-foreground">5% wallet credit</strong> of the order value.
-                    Credits decay over years 1–5: <strong className="text-foreground">5% → 4% → 3% → 2% → 1% → 0%</strong>.
-                    Annual soft reset applies to distributor tiers. Wallet minimum balance protects against forfeit on lapse.
-                </p>
+            {/* Referral Engine Settings */}
+            <div className="bg-surface-1 border border-border rounded-xl p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                            <Settings2 className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-semibold text-foreground">Referral Engine Settings</h2>
+                            <p className="text-xs text-muted-foreground">Controls all commission &amp; discount rates globally</p>
+                        </div>
+                    </div>
+                    <Button
+                        size="sm"
+                        onClick={saveRefConfig}
+                        disabled={savingConfig}
+                        className="bg-primary hover:bg-primary/90 h-8 text-xs gap-1.5"
+                    >
+                        {savingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Save Settings
+                    </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-muted-foreground">User Referral Credit (%)</label>
+                        <p className="text-[11px] text-muted-foreground/70">Wallet credit % given to the referring user</p>
+                        <Input
+                            type="number" min={0} max={100} step={0.5}
+                            value={refConfig.referralCreditRate * 100}
+                            onChange={e => setRefConfig(c => ({ ...c, referralCreditRate: Number(e.target.value) / 100 }))}
+                            className="h-9 bg-surface-2 border-border/60"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-muted-foreground">Distributor Credit (%)</label>
+                        <p className="text-[11px] text-muted-foreground/70">Commission % credited to distributors per sale</p>
+                        <Input
+                            type="number" min={0} max={100} step={0.5}
+                            value={refConfig.distributorCreditRate * 100}
+                            onChange={e => setRefConfig(c => ({ ...c, distributorCreditRate: Number(e.target.value) / 100 }))}
+                            className="h-9 bg-surface-2 border-border/60"
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs font-semibold text-muted-foreground">Customer Discount (%)</label>
+                        <p className="text-[11px] text-muted-foreground/70">Discount given to buyer when using a referral code</p>
+                        <Input
+                            type="number" min={0} max={100} step={0.5}
+                            value={refConfig.customerDiscountRate * 100}
+                            onChange={e => setRefConfig(c => ({ ...c, customerDiscountRate: Number(e.target.value) / 100 }))}
+                            className="h-9 bg-surface-2 border-border/60"
+                        />
+                    </div>
+                </div>
             </div>
 
             {/* KPI row */}

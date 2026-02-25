@@ -32,7 +32,6 @@ export default function DistributorCustomers() {
     );
 
     const active = customers.filter(c => c.status === "active").length;
-    const trial = customers.filter(c => c.status === "trial").length;
     const direct = customers.filter(c => c.level === "Direct").length;
     const l2 = customers.filter(c => c.level === "L2 Chain").length;
 
@@ -46,13 +45,23 @@ export default function DistributorCustomers() {
                     <p className="text-muted-foreground text-sm mt-1">All customers in your referral network — direct and downline.</p>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Totals */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {[
-                        { label: "Total Customers", value: customers.length, icon: Users, color: "text-foreground", bg: "bg-surface-3" },
-                        { label: "Active", value: active, icon: ShieldCheck, color: "text-success", bg: "bg-success/10" },
-                        { label: "On Trial", value: trial, icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
-                        { label: "L2 Network", value: l2, icon: Users, color: "text-indigo-400", bg: "bg-indigo-500/10" },
+                        { label: "Total Customers", value: customers.length, display: customers.length, icon: Users, color: "text-foreground", bg: "bg-surface-3" },
+                        { label: "Direct", value: direct, display: direct, icon: Users, color: "text-primary", bg: "bg-primary/10" },
+                        { label: "L2 Network", value: l2, display: l2, icon: Users, color: "text-indigo-400", bg: "bg-indigo-500/10" },
+                        { label: "Active", value: active, display: active, icon: ShieldCheck, color: "text-success", bg: "bg-success/10" },
+                        {
+                            label: "Total Commission",
+                            display: `₹${customers.reduce((s: number, c: any) => {
+                                const v = typeof c.commission === "string"
+                                    ? parseFloat(c.commission.replace(/[^\d.]/g, "")) || 0
+                                    : (c.commission || 0);
+                                return s + v;
+                            }, 0).toLocaleString("en-IN")}`,
+                            value: 0, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10"
+                        },
                     ].map((s, i) => (
                         <Card key={i} className="border-border">
                             <CardContent className="p-5 flex items-center gap-4">
@@ -61,7 +70,7 @@ export default function DistributorCustomers() {
                                 </div>
                                 <div>
                                     <p className="text-xs text-muted-foreground">{s.label}</p>
-                                    <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                                    <p className={`text-2xl font-bold ${s.color}`}>{s.display ?? s.value}</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -83,7 +92,6 @@ export default function DistributorCustomers() {
                             <select value={filter} onChange={e => setFilter(e.target.value)} className="h-9 px-3 rounded-md border border-border bg-surface-2 text-sm text-foreground">
                                 <option value="all">All</option>
                                 <option value="active">Active</option>
-                                <option value="trial">Trial</option>
                                 <option value="suspended">Suspended</option>
                                 <option value="direct">Direct Only</option>
                                 <option value="l2 chain">L2 Only</option>
