@@ -15,6 +15,8 @@ import Billing from "./pages/admin/Billing";
 import Distributors from "./pages/admin/Distributors";
 import ReferralEngine from "./pages/admin/ReferralEngine";
 import Settings from "./pages/admin/Settings";
+import PricingPage from "./pages/PricingPage";
+import Subscribe from "./pages/Subscribe";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
 import UserFiles from "./pages/user/UserFiles";
@@ -65,6 +67,8 @@ const App = () => (
             <UserProvider>
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/subscribe/:planId" element={<Subscribe />} />
                 <Route path="/plans" element={<UserPlans />} />
                 <Route path="/ref/:code" element={<ReferralRedirect />} />
 
