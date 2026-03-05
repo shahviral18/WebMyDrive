@@ -650,15 +650,6 @@ export default function Plans() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
-                        variant="outline" size="sm"
-                        onClick={handleSeedDefaults}
-                        disabled={seedingDefaults}
-                        className="border-border/60 gap-1.5 text-xs"
-                    >
-                        {seedingDefaults ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        Load Website Plans
-                    </Button>
-                    <Button
                         onClick={() => setCreating(true)}
                         disabled={creating}
                         className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
@@ -696,9 +687,6 @@ export default function Plans() {
                     <div className="flex gap-2">
                         <Button onClick={() => setCreating(true)} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
                             <Plus className="w-3.5 h-3.5" /> New Plan
-                        </Button>
-                        <Button onClick={handleSeedDefaults} disabled={seedingDefaults} size="sm" variant="outline" className="gap-2">
-                            <Download className="w-3.5 h-3.5" /> Load Website Plans
                         </Button>
                     </div>
                 </div>

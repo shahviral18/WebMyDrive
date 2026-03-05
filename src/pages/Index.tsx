@@ -1,4 +1,5 @@
 import { Navigate } from "react-router-dom";
+import Landing from "./Landing";
 
 export default function Index() {
   const isAdminAuth = sessionStorage.getItem("wmd_admin_auth") === "true";
@@ -11,5 +12,5 @@ export default function Index() {
     return <Navigate to="/user/dashboard" replace />;
   }
 
-  return <Navigate to="/login" replace />;
+  return <Landing />;
 }

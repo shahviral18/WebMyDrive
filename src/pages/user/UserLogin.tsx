@@ -1,33 +1,29 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Cloud, Eye, EyeOff, Lock, Mail, Loader2, Sun, Moon, Tag, ArrowLeft, KeyRound } from "lucide-react";
+import { Cloud, Eye, EyeOff, Lock, Mail, Loader2, Tag, ArrowLeft, KeyRound } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useUser } from "@/contexts/UserContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
-
-const DEMO_ACCOUNTS = [
-    { label: "User · Referrer", badge: "PR", email: "priya@webmydrive.com", pass: "priya123", colours: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-400/25" },
-    { label: "User · Buyer", badge: "AM", email: "amit@webmydrive.com", pass: "amit123", colours: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-400/25" },
-    { label: "Distributor", badge: "DS", email: "partner@webmydrive.com", pass: "partner123", colours: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-400/25" },
-];
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 export default function Login() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { loginAs } = useUser();
+    const { isDark, toggleTheme } = useTheme();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [shake, setShake] = useState(false);
     const [error, setError] = useState("");
-    const [isDark, setIsDark] = useState(true);
     const [pendingRef, setPendingRef] = useState<string | null>(null);
 
     const [mode, setMode] = useState<"login" | "forgot" | "force_change">("login");
@@ -37,7 +33,6 @@ export default function Login() {
     const [isFirstLogin, setIsFirstLogin] = useState(false);
 
     useEffect(() => {
-        setIsDark(document.documentElement.classList.contains("dark"));
         const refFromUrl = searchParams.get("ref");
         if (refFromUrl) {
             const code = refFromUrl.toUpperCase();
@@ -50,10 +45,8 @@ export default function Login() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const toggleTheme = () => {
-        const next = !isDark;
-        setIsDark(next);
-        document.documentElement.classList.toggle("dark", next);
+    const handleThemeChange = (next: boolean) => {
+        if (next !== isDark) toggleTheme();
     };
 
     const triggerShake = () => {
@@ -191,9 +184,7 @@ export default function Login() {
             </div>
 
             <div className="absolute top-4 right-4 z-50">
-                <Button variant="outline" size="icon" onClick={toggleTheme} className="bg-card/50 backdrop-blur border-border/50 text-foreground hover:bg-muted">
-                    {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </Button>
+                <ThemeSwitch checked={isDark} onCheckedChange={handleThemeChange} size={12} ariaLabel="Toggle theme" />
             </div>
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className={`relative z-10 w-full max-w-md mx-4 ${shake ? "animate-shake" : ""}`}>
@@ -251,7 +242,7 @@ export default function Login() {
                                 <Label htmlFor="email" className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Email</Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input id="email" type="email" placeholder="you@webmydrive.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" className="pl-10 bg-card border-border focus:border-primary h-11" />
+                                    <Input id="email" type="email" placeholder="you@webmydrive.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" className="pl-10 bg-card border-border focus:border-primary h-11" />
                                 </div>
                             </div>
 
@@ -274,22 +265,6 @@ export default function Login() {
                             <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-semibold mt-2 shadow-lg transition-all hover:scale-[1.01]" disabled={loading}>
                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
                             </Button>
-
-                            <div className="mt-6 pt-5 border-t border-border/40">
-                                <p className="text-[11px] text-muted-foreground text-center mb-3 uppercase tracking-widest font-semibold">Demo Accounts · Click to fill</p>
-                                <div className="grid gap-2">
-                                    {DEMO_ACCOUNTS.map(acc => (
-                                        <button key={acc.email} type="button" onClick={() => { setEmail(acc.email); setPassword(acc.pass); }} className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg border text-left transition-all hover:opacity-75 active:scale-[0.98] ${acc.colours}`}>
-                                            <span className="w-7 h-7 rounded-full bg-background/50 flex items-center justify-center text-[11px] font-bold shrink-0">{acc.badge}</span>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-xs font-semibold text-foreground">{acc.label}</p>
-                                                <p className="text-[10px] font-mono text-muted-foreground truncate">{acc.email} · {acc.pass}</p>
-                                            </div>
-                                            <span className="text-[11px] shrink-0 opacity-60">⇧ fill</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
                         </form>
                     ) : (
                         <form onSubmit={handlePasswordAction} className="space-y-4">
@@ -298,7 +273,7 @@ export default function Login() {
                                     <Label htmlFor="reset-email" className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Email</Label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                        <Input id="reset-email" type="email" placeholder="you@webmydrive.com" value={email} onChange={e => setEmail(e.target.value)} className="pl-10 bg-card border-border focus:border-primary h-11" />
+                                        <Input id="reset-email" type="email" placeholder="you@webmydrive.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" className="pl-10 bg-card border-border focus:border-primary h-11" />
                                     </div>
                                 </div>
                             )}
@@ -307,7 +282,7 @@ export default function Login() {
                                 <Label htmlFor="new-password" className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">New Password</Label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input id="new-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="pl-10 pr-10 bg-card border-border focus:border-primary h-11" />
+                                    <Input id="new-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" className="pl-10 pr-10 bg-card border-border focus:border-primary h-11" />
                                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
@@ -318,7 +293,7 @@ export default function Login() {
                                 <Label htmlFor="confirm-password" className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Confirm Password</Label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input id="confirm-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="pl-10 pr-10 bg-card border-border focus:border-primary h-11" />
+                                    <Input id="confirm-password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" className="pl-10 pr-10 bg-card border-border focus:border-primary h-11" />
                                 </div>
                             </div>
 

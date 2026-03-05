@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Eye, EyeOff, Lock, Mail, Loader2, Sun, Moon } from "lucide-react";
+import { Shield, Eye, EyeOff, Lock, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -14,16 +16,9 @@ export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isDark, setIsDark] = useState(true);
-
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains("dark"));
-  }, []);
-
-  const toggleTheme = () => {
-    const next = !isDark;
-    setIsDark(next);
-    document.documentElement.classList.toggle("dark", next);
+  const { isDark, toggleTheme } = useTheme();
+  const handleThemeChange = (next: boolean) => {
+    if (next !== isDark) toggleTheme();
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -83,9 +78,7 @@ export default function AdminLogin() {
 
       {/* Theme toggle */}
       <div className="absolute top-4 right-4 z-50">
-        <Button variant="outline" size="icon" onClick={toggleTheme} className="bg-card/50 backdrop-blur border-border/50 text-foreground hover:bg-muted">
-          {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </Button>
+        <ThemeSwitch checked={isDark} onCheckedChange={handleThemeChange} size={12} ariaLabel="Toggle theme" />
       </div>
 
       <motion.div
@@ -203,13 +196,13 @@ export default function AdminLogin() {
             <div className="grid gap-2">
               <button
                 type="button"
-                onClick={() => { setEmail("admin@webmydrive.com"); setPassword("Admin@123"); }}
+                onClick={() => { setEmail("admin@webmydrive.com"); setPassword("admin123"); }}
                 className="flex items-center gap-3 w-full px-3 py-2 rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/40 text-left transition-all group"
               >
                 <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">SA</span>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-foreground">Super Admin</p>
-                  <p className="text-[11px] text-muted-foreground font-mono truncate">admin@webmydrive.com · Admin@123</p>
+                  <p className="text-[11px] text-muted-foreground font-mono truncate">admin@webmydrive.com · admin123</p>
                 </div>
                 <span className="ml-auto text-[10px] text-muted-foreground group-hover:text-primary transition-colors shrink-0">Click to fill</span>
               </button>

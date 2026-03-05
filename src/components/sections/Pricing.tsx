@@ -1,3 +1,4 @@
+import React from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +40,7 @@ function getStorageValue(storage: string): string {
 export function Pricing() {
   const { data: plans, isLoading, error } = usePlans();
   const navigate = useNavigate();
+  const [billingPeriod, setBillingPeriod] = React.useState<'monthly' | 'yearly'>('monthly');
 
   const themeColors = [
     {
@@ -87,9 +89,33 @@ export function Pricing() {
           <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 mb-5">
             Pick your cloud storage plan
           </h3>
-          <p className="text-lg text-slate-600">
-            Simple monthly view, billed annually, and one-click subscribe.
+          <p className="text-lg text-slate-600 mb-8">
+            Choose between monthly or annual billing.
           </p>
+          
+          <div className="flex justify-center gap-3 mb-2">
+            <button
+              onClick={() => setBillingPeriod('monthly')}
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${
+                billingPeriod === 'monthly'
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingPeriod('yearly')}
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${
+                billingPeriod === 'yearly'
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Yearly
+            </button>
+          </div>
+          <p className="text-sm text-slate-500 mb-8">Save up to 40% with annual billing</p>
         </div>
 
         {error ? (
@@ -127,12 +153,10 @@ export function Pricing() {
                     </div>
                   ))
                 : plans?.map((plan, index) => {
-                  const annualAmount = parseAmount(plan.price);
-                  const monthlyAmountOriginal = Math.round((annualAmount / 12) / 10) * 10;
+                  const monthlyAmount = plan.monthlyPrice || parseAmount(plan.price);
+                  const yearlyAmount = plan.yearlyPrice || monthlyAmount * 12;
+                  const displayAmount = billingPeriod === 'monthly' ? monthlyAmount : Math.round(yearlyAmount / 12);
                   const discountVal = plan.discount ? parseInt(plan.discount) : 0;
-                  const monthlyAmount = discountVal > 0
-                    ? Math.round((annualAmount * (1 - discountVal / 100) / 12) / 10) * 10
-                    : monthlyAmountOriginal;
                   const storageValue = getStorageValue(plan.storage);
                   const theme = themeColors[index % themeColors.length];
 
@@ -157,17 +181,12 @@ export function Pricing() {
                             {plan.discount}
                           </span>
                         )}
-                        <p className="text-5xl font-display font-bold text-slate-900 flex items-center justify-center gap-3">
-                          {formatInr(monthlyAmount)}
-                          {discountVal > 0 && (
-                            <span className="text-2xl text-slate-400 line-through">
-                              {formatInr(monthlyAmountOriginal)}
-                            </span>
-                          )}
+                        <p className="text-5xl font-display font-bold text-slate-900">
+                          {formatInr(displayAmount)}
                         </p>
                         <div className="text-lg text-slate-600 mt-2 flex flex-col items-center gap-2">
-                          <span>Per Month / Billed Annually</span>
-                          {plan.coupon && (
+                          <span>{billingPeriod === 'monthly' ? 'Per Month' : 'Per Year'}</span>
+                          {billingPeriod === 'monthly' && plan.coupon && (
                             <span className="text-sm tracking-wide mt-1">
                               Use code:{" "}
                               <span className={`font-bold border px-2 py-0.5 rounded text-transparent bg-clip-text bg-gradient-to-r shadow-sm ${theme.couponBg} ${theme.couponText}`}>

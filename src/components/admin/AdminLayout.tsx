@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, Users, Building2,
-  ScrollText, Bell, Settings, ChevronLeft, ChevronRight,
-  LogOut, Sun, Moon, Menu, X, Shield, CreditCard, Gift,
+  LayoutDashboard, Users,
+  ScrollText, Settings, ChevronLeft, ChevronRight,
+  LogOut, Menu, X, Shield, CreditCard, Gift,
   FileText, ChevronDown, Handshake,
 } from "lucide-react";
 import {
@@ -14,6 +14,7 @@ import {
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
@@ -170,6 +171,9 @@ function SidebarNav({
 function UserFooter({ collapsed, onLogout, onSettings }: { collapsed: boolean; onLogout: () => void; onSettings: () => void }) {
   const { isDark, toggleTheme } = useTheme();
   const { user } = useUser();
+  const handleThemeChange = (next: boolean) => {
+    if (next !== isDark) toggleTheme();
+  };
 
   const initials = user.name
     ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -177,11 +181,14 @@ function UserFooter({ collapsed, onLogout, onSettings }: { collapsed: boolean; o
 
   return (
     <div className="flex flex-col border-t border-border shrink-0 select-none">
-      <div className={cn("px-3 py-2 flex items-center", collapsed ? "justify-center" : "justify-between")}>
+      <div className={cn("px-3 py-2 flex items-center gap-2", collapsed ? "justify-center" : "justify-between")}>
         {!collapsed && <span className="text-xs font-medium text-muted-foreground pl-1">Theme</span>}
-        <button onClick={toggleTheme} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-center">
-          {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-        </button>
+        <ThemeSwitch
+          checked={isDark}
+          onCheckedChange={handleThemeChange}
+          size={collapsed ? 9 : 10}
+          ariaLabel="Toggle theme"
+        />
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -227,13 +234,8 @@ function UserFooter({ collapsed, onLogout, onSettings }: { collapsed: boolean; o
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const { isDark, toggleTheme } = useTheme();  // ← single global source
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Sync dark class (ThemeContext already does this via useEffect)
-  useEffect(() => { }, []);
 
   const currentPage = allNavItems.find(
     (i) =>

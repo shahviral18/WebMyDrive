@@ -1,0 +1,210 @@
+<?php
+/**
+ * public/index.php — Front Controller (Entry Point)
+ *
+ * ALL requests to the PHP backend must be routed here via Apache/Nginx rewrite rules.
+ *
+ * Architecture:
+ *   public/          ← only publicly accessible directory (document root)
+ *   public/index.php ← this file
+ *   config/          ← env, database
+ *   helpers/         ← Logger, JwtHelper, Request, Response, Router
+ *   middleware/      ← AuthMiddleware
+ *   services/        ← business logic
+ *   controllers/     ← HTTP handlers
+ *   logs/            ← runtime logs (writable)
+ *
+ * IMPORTANT: Set your web server document root to the `public/` folder.
+ *            Apache: DirectoryIndex index.php; with .htaccess below.
+ *            Nginx:  try_files $uri /index.php;
+ */
+
+declare(strict_types=1);
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+define('BASE_PATH', dirname(__DIR__));
+
+// Load helpers and config (order matters)
+require BASE_PATH . '/helpers/Logger.php';
+require BASE_PATH . '/config/env.php';      // defines constants + env()
+require BASE_PATH . '/config/database.php'; // Database class
+require BASE_PATH . '/helpers/JwtHelper.php';
+require BASE_PATH . '/helpers/Request.php';
+require BASE_PATH . '/helpers/Response.php';
+require BASE_PATH . '/helpers/Router.php';
+
+// Services
+require BASE_PATH . '/services/AuditService.php';
+require BASE_PATH . '/services/ConfigService.php';
+require BASE_PATH . '/services/ReferralLinkService.php';
+require BASE_PATH . '/services/ReferralService.php';
+require BASE_PATH . '/services/DistributorService.php';
+require BASE_PATH . '/services/RazorpayService.php';
+require BASE_PATH . '/services/SubscriptionService.php';
+require BASE_PATH . '/services/PaymentHandler.php';
+
+// Middleware
+require BASE_PATH . '/middleware/AuthMiddleware.php';
+require BASE_PATH . '/middleware/SubscriptionMiddleware.php';
+
+// Controllers
+require BASE_PATH . '/controllers/AuthController.php';
+require BASE_PATH . '/controllers/AdminController.php';
+require BASE_PATH . '/controllers/UserController.php';
+require BASE_PATH . '/controllers/ReferralController.php';
+require BASE_PATH . '/controllers/DistributorController.php';
+require BASE_PATH . '/controllers/SubscriptionController.php';
+require BASE_PATH . '/controllers/CheckoutController.php';
+
+// ── Global error handler ──────────────────────────────────────────────────────
+set_exception_handler(function (Throwable $e) {
+    Logger::error('[Unhandled] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['error' => 'Internal Server Error']);
+    exit;
+});
+
+// ── Build Request ─────────────────────────────────────────────────────────────
+$request = new Request();
+
+// ── Build Router ──────────────────────────────────────────────────────────────
+$router = new Router($request);
+
+// Helper: auth middleware array (used inline below)
+$auth = [[AuthMiddleware::class, 'authenticate']];
+$adminOnly = [
+    [AuthMiddleware::class, 'authenticate'],
+    AuthMiddleware::authorize(['ADMIN', 'SUPERADMIN']),
+];
+
+// ── Health ────────────────────────────────────────────────────────────────────
+$router->get('/api/health', function (Request $req) {
+    Response::json(['status' => 'ok', 'timestamp' => date('c'), 'env' => APP_ENV]);
+});
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+$router->post('/api/auth/register', [AuthController::class, 'register']);
+$router->post('/api/auth/login', [AuthController::class, 'login']);
+$router->post('/api/auth/google-login', [AuthController::class, 'googleLogin']);
+$router->post('/api/auth/temp-login', [AuthController::class, 'tempLogin']);
+$router->get('/api/auth/me', [AuthController::class, 'me'], $auth);
+$router->post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+$router->post('/api/auth/change-password', [AuthController::class, 'changePassword'], $auth);
+$router->post('/api/auth/setup-workspace-password', [AuthController::class, 'setupWorkspacePassword'], $auth);
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+$router->get('/api/admin/config', [AdminController::class, 'getConfig'], $adminOnly);
+$router->post('/api/admin/config', [AdminController::class, 'updateConfig'], $adminOnly);
+$router->get('/api/admin/kpis', [AdminController::class, 'getKpis'], $adminOnly);
+$router->get('/api/admin/users', [AdminController::class, 'getUsers'], $adminOnly);
+$router->get('/api/admin/users/:id', [AdminController::class, 'getUser'], $adminOnly);
+$router->post('/api/admin/users', [AdminController::class, 'createUser'], $adminOnly);
+$router->post('/api/admin/users/:id/reset-password', [AdminController::class, 'resetUserPassword'], $adminOnly);
+$router->delete('/api/admin/users/:id', [AdminController::class, 'deleteUser'], $adminOnly);
+$router->post('/api/admin/users/:id/adjust-wallet', [AdminController::class, 'adjustWallet'], $adminOnly);
+$router->post('/api/admin/users/:id/toggle-status', [AdminController::class, 'toggleUserStatus'], $adminOnly);
+$router->get('/api/admin/orders', [AdminController::class, 'getOrders'], $adminOnly);
+$router->get('/api/admin/distributors', [AdminController::class, 'getDistributors'], $adminOnly);
+$router->post('/api/admin/distributors', [AdminController::class, 'createDistributor'], $adminOnly);
+$router->post('/api/admin/distributors/:id/reset-password', [AdminController::class, 'resetDistributorPassword'], $adminOnly);
+$router->post('/api/admin/distributors/:id/adjust-wallet', [AdminController::class, 'adjustDistributorWallet'], $adminOnly);
+$router->get('/api/admin/referrals', [AdminController::class, 'getAllReferrals'], $adminOnly);
+$router->patch('/api/admin/referrals/:id/override-commission', [AdminController::class, 'overrideCommission'], $adminOnly);
+$router->get('/api/admin/audit-logs', [AdminController::class, 'getAuditLogs'], $adminOnly);
+$router->get('/api/admin/referral-analytics', [AdminController::class, 'getReferralAnalytics'], $adminOnly);
+$router->get('/api/admin/plans', [AdminController::class, 'getPlans'], $adminOnly);
+$router->post('/api/admin/plans', [AdminController::class, 'upsertPlan'], $adminOnly);
+$router->delete('/api/admin/plans/:id', [AdminController::class, 'deletePlan'], $adminOnly);
+$router->patch('/api/admin/plans/:id/toggle', [AdminController::class, 'togglePlan'], $adminOnly);
+
+// ── User ──────────────────────────────────────────────────────────────────────
+$router->get('/api/user/workspace', [UserController::class, 'getWorkspace'], $auth);
+$router->get('/api/user/check-username', [UserController::class, 'checkUsername']);
+$router->get('/api/user/plans', [UserController::class, 'getPlans']);
+$router->post('/api/user/plans/:id/purchase', [UserController::class, 'purchasePlan'], $auth);
+$router->get('/api/user/orders', [UserController::class, 'getOrders'], $auth);
+$router->put('/api/user/profile', [UserController::class, 'updateProfile'], $auth);
+
+// ── Referral ──────────────────────────────────────────────────────────────────
+$router->get('/api/referral/dashboard', [ReferralController::class, 'getDashboard'], $auth);
+$router->get('/api/referral/history', [ReferralController::class, 'getHistory'], $auth);
+$router->get('/api/referral/my-orders', [ReferralController::class, 'getMyOrders'], $auth);
+$router->post('/api/referral/validate-code', [ReferralController::class, 'validatePromoCode']);
+$router->get('/api/referral/resolve', [ReferralController::class, 'resolveReferral']);
+$router->post('/api/referral/create-checkout', [ReferralController::class, 'createCheckoutSession'], $auth);
+$router->post('/api/referral/verify-payment', [ReferralController::class, 'verifyPayment'], $auth);
+$router->post('/api/referral/process-purchase', [ReferralController::class, 'processPurchase'], $auth);
+
+// ── Subscription ──────────────────────────────────────────────────────────────
+$router->post('/api/subscription/payment-success', [SubscriptionController::class, 'handlePaymentSuccess']);
+$router->post('/api/subscription/verify-payment', [SubscriptionController::class, 'verifyPayment'], $auth);
+$router->get('/api/subscription/status', [SubscriptionController::class, 'getSubscriptionStatus'], $auth);
+$router->get('/api/subscription/details', [SubscriptionController::class, 'getSubscriptionDetails'], $auth);
+$router->post('/api/subscription/renew', [SubscriptionController::class, 'renewSubscription'], $auth);
+$router->get('/api/subscription/all', [SubscriptionController::class, 'getAllSubscriptions'], $adminOnly);
+$router->get('/api/subscription/stats', [SubscriptionController::class, 'getStats'], $adminOnly);
+// ── Checkout (Public - unauthenticated) ───────────────────────────────────
+$router->post('/api/checkout/create-session', [CheckoutController::class, 'createSession']);
+$router->post('/api/checkout/process-payment', [CheckoutController::class, 'processPayment']);
+// ── Distributor ───────────────────────────────────────────────────────────────
+$router->post('/api/distributor/onboard', [DistributorController::class, 'onboard'], $auth);
+$router->get('/api/distributor/dashboard', [DistributorController::class, 'getDashboard'], $auth);
+$router->get('/api/distributor/history', [DistributorController::class, 'getHistory'], $auth);
+$router->post('/api/distributor/qa-sale', [DistributorController::class, 'simulateSale'], $auth);
+$router->post('/api/distributor/request-payout', [DistributorController::class, 'requestPayout'], $auth);
+$router->get('/api/distributor/payouts', [DistributorController::class, 'getPayouts'], $auth);
+$router->get('/api/distributor/wallet', [DistributorController::class, 'getWallet'], $auth);
+$router->get('/api/distributor/customers', [DistributorController::class, 'getCustomers'], $auth);
+$router->get('/api/distributor/earnings', [DistributorController::class, 'getEarningsStats'], $auth);
+
+// ── Payment webhooks ──────────────────────────────────────────────────────────
+// Raw body available via $request->rawBody
+$router->post('/api/payment/webhook/stripe', function (Request $req) {
+    // Stripe webhook (basic stub — extend with real Stripe SDK if needed)
+    $sig = $req->header('stripe_signature') ?? '';
+    $secret = STRIPE_WEBHOOK_SECRET;
+    $payload = $req->rawBody;
+
+    if ($secret && $sig) {
+        // Simple timestamp+hash verification
+        $parts = [];
+        foreach (explode(',', $sig) as $part) {
+            [$key, $val] = explode('=', $part, 2);
+            $parts[$key] = $val;
+        }
+        $ts = $parts['t'] ?? '';
+        $v1 = $parts['v1'] ?? '';
+        $expected = hash_hmac('sha256', "$ts.$payload", $secret);
+        if (!hash_equals($expected, $v1)) {
+            Response::error('Invalid Stripe webhook signature', 400);
+        }
+    }
+
+    $event = json_decode($payload, true);
+    Logger::info('[Stripe Webhook] Received event: ' . ($event['type'] ?? 'unknown'));
+    Response::json(['received' => true]);
+});
+
+$router->post('/api/payment/webhook/razorpay', function (Request $req) {
+    // Razorpay webhook signature verification
+    $sig = $req->header('x_razorpay_signature') ?? '';
+    $secret = RAZORPAY_KEY_SECRET;
+    $payload = $req->rawBody;
+
+    if ($secret && $sig) {
+        $expected = hash_hmac('sha256', $payload, $secret);
+        if (!hash_equals($expected, $sig)) {
+            Response::error('Invalid Razorpay webhook signature', 400);
+        }
+    }
+
+    $event = json_decode($payload, true);
+    Logger::info('[Razorpay Webhook] Received event: ' . ($event['event'] ?? 'unknown'));
+    Response::json(['received' => true]);
+});
+
+// ── Dispatch ──────────────────────────────────────────────────────────────────
+$router->dispatch();

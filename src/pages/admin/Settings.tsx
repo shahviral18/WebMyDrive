@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { useTheme } from "@/contexts/ThemeContext";
 
 
@@ -23,6 +24,9 @@ const DEFAULT_FEATURES: Record<string, { enabled: boolean; description: string }
 
 export default function Settings() {
     const { isDark, toggleTheme } = useTheme();
+    const handleThemeChange = (next: boolean) => {
+        if (next !== isDark) toggleTheme();
+    };
     const [loading, setLoading] = useState(false);
 
     const [general, setGeneral] = useState({
@@ -342,7 +346,7 @@ export default function Settings() {
                                             <p className="text-sm text-muted-foreground mr-4">Toggle between light and dark themes.</p>
                                         </div>
                                         <div className="shrink-0">
-                                            <Switch checked={isDark} onCheckedChange={toggleTheme} />
+                                            <ThemeSwitch checked={isDark} onCheckedChange={handleThemeChange} size={11} ariaLabel="Toggle theme" />
                                         </div>
                                     </div>
                                     <div className="text-xs text-muted-foreground pt-2">
