@@ -73,7 +73,8 @@ export default function AdminLogin() {
       />
 
       {/* Theme toggle */}
-      <div className="absolute top-4 right-4 z-50">
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-background/40 backdrop-blur-md border border-border/50 shadow-sm">
+        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Theme</span>
         <ThemeSwitch checked={isDark} onCheckedChange={handleThemeChange} size={12} ariaLabel="Toggle theme" />
       </div>
 

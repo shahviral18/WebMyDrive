@@ -182,11 +182,11 @@ function UserFooter({ collapsed, onLogout, onSettings }: { collapsed: boolean; o
   return (
     <div className="flex flex-col border-t border-border shrink-0 select-none">
       <div className={cn("px-3 py-2 flex items-center gap-2", collapsed ? "justify-center" : "justify-between")}>
-        {!collapsed && <span className="text-xs font-medium text-muted-foreground pl-1">Theme</span>}
+        {!collapsed && <span className="text-[10px] font-bold text-muted-foreground pl-1 uppercase tracking-widest leading-none">Theme</span>}
         <ThemeSwitch
           checked={isDark}
           onCheckedChange={handleThemeChange}
-          size={collapsed ? 9 : 10}
+          size={12}
           ariaLabel="Toggle theme"
         />
       </div>

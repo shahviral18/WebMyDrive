@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 interface DistributorLayoutProps {
     children: React.ReactNode;
@@ -139,11 +140,13 @@ export default function DistributorLayout({ children }: DistributorLayoutProps) 
                 <div className={cn("p-3 border-t border-border", collapsed && !mobile ? "flex flex-col items-center gap-2" : "space-y-2")}>
 
                     {/* Theme Toggle */}
-                    <div className={cn("flex items-center", collapsed && !mobile ? "justify-center" : "justify-between px-3 py-1")}>
-                        {(!collapsed || mobile) && <span className="text-xs font-medium text-muted-foreground">Theme</span>}
-                        <button onClick={toggleTheme} className="p-1.5 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex items-center justify-center">
-                            {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                        </button>
+                    <div className={cn("flex items-center", collapsed && !mobile ? "justify-center" : "justify-between px-3 py-1.5")}>
+                        {(!collapsed || mobile) && <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Theme</span>}
+                        <ThemeSwitch
+                            checked={isDark}
+                            onCheckedChange={toggleTheme}
+                            size={collapsed && !mobile ? 10 : 12}
+                        />
                     </div>
 
                     {/* Profile */}

@@ -9,6 +9,8 @@ import { usePlans } from "@/hooks/use-plans";
 import { toast } from "sonner";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { api, getApiUrl } from "@/lib/api";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -37,6 +39,7 @@ export default function SubscribePage() {
   const { planSlug } = useParams<{ planSlug: string }>();
   const navigate = useNavigate();
   const { data: plans, isLoading } = usePlans();
+  const { isDark, toggleTheme } = useTheme();
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -271,7 +274,11 @@ export default function SubscribePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10">
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 relative">
+      <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-sm">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Theme</span>
+        <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
+      </div>
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-10">Checkout: {selectedPlan.name}</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">

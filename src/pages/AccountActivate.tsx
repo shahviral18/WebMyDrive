@@ -6,11 +6,14 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { getApiUrl } from "@/lib/api";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
 
 type Step = "find" | "setup" | "done";
 
 export default function AccountActivatePage() {
     const navigate = useNavigate();
+    const { isDark, toggleTheme } = useTheme();
     const [email, setEmail] = useState("");
     const [finding, setFinding] = useState(false);
     const [step, setStep] = useState<Step>("find");
@@ -124,8 +127,14 @@ export default function AccountActivatePage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4"
-            style={{ background: "linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 50%, #e8f0fe 100%)" }}>
+        <div className="min-h-screen flex items-center justify-center p-4 relative"
+            style={{ background: isDark ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" : "linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 50%, #e8f0fe 100%)" }}>
+
+            {/* Theme toggle */}
+            <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-background/40 backdrop-blur-md border border-border/50 shadow-sm">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Theme</span>
+                <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
+            </div>
 
             <motion.div
                 initial={{ opacity: 0, y: 24 }}
