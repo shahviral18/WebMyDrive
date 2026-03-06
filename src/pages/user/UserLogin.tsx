@@ -60,7 +60,8 @@ export default function Login() {
             sessionStorage.setItem("wmd_token", token);
             sessionStorage.setItem("wmd_admin_auth", "true");
             // Do NOT set wmd_user_auth or call loginAs — keep portals independent
-            window.location.href = "/admin/dashboard";
+            const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+            window.location.href = `${base}/admin/dashboard`;
             return;
         }
 

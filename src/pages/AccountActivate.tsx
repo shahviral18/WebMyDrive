@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
+import { getApiUrl } from "@/lib/api";
 
 type Step = "find" | "setup" | "done";
 
@@ -34,7 +33,7 @@ export default function AccountActivatePage() {
         }
         setFinding(true);
         try {
-            const res = await fetch(`${API_URL}/api/auth/activate-lookup`, {
+            const res = await fetch(getApiUrl("/auth/activate-lookup"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: email.trim().toLowerCase() }),
@@ -64,7 +63,7 @@ export default function AccountActivatePage() {
         if (!username) { setIdCheckStatus("idle"); setSuggestions([]); return; }
         setIdCheckStatus("checking");
         try {
-            const resp = await fetch(`${API_URL}/api/user/check-username?u=${encodeURIComponent(username)}`);
+            const resp = await fetch(getApiUrl(`/user/check-username?u=${encodeURIComponent(username)}`));
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             if (data.available) {
@@ -103,7 +102,7 @@ export default function AccountActivatePage() {
         setSaving(true);
         try {
             const token = foundUser?.token || localStorage.getItem("wmd_token");
-            const resp = await fetch(`${API_URL}/api/user/profile`, {
+            const resp = await fetch(getApiUrl("/user/profile"), {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",

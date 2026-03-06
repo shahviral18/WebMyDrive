@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { usePlans } from "@/hooks/use-plans";
 import { toast } from "sonner";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { api, getApiUrl } from "@/lib/api";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -78,15 +79,7 @@ export default function SubscribePage() {
     return plans.find(p => planToSlug(p.name) === planSlug) || plans.find(p => String(p.id) === planSlug);
   }, [plans, planSlug]);
 
-  const API_BASE = useMemo(() => {
-    const isDev = import.meta.env.DEV;
-    let url = import.meta.env.VITE_API_URL || "";
-    // If prod and points to local network, strip it to use relative proxy
-    if (!isDev && (url.includes("192.168") || url.includes("localhost") || url.includes("127.0.0.1"))) {
-      return "";
-    }
-    return isDev ? "" : url;
-  }, []);
+
 
   // Handlers
   const handleGoogleSuccess = async (response: { token: string; user: any }) => {
@@ -120,7 +113,7 @@ export default function SubscribePage() {
     if (!username) return;
     setIdCheckStatus("checking");
     try {
-      const resp = await fetch(`${API_BASE}/api/user/check-username?u=${encodeURIComponent(username)}`).catch(() => ({ ok: false }));
+      const resp = await fetch(getApiUrl(`/user/check-username?u=${encodeURIComponent(username)}`)).catch(() => ({ ok: false }));
       if (!resp.ok) {
         // Mock for unreachable backend
         setIdCheckStatus("available");
@@ -158,7 +151,7 @@ export default function SubscribePage() {
       // Step 1: Create session (with fallback)
       let sessionData;
       try {
-        const resp = await fetch(`${API_BASE}/api/checkout/create-session`, {
+        const resp = await fetch(getApiUrl("/checkout/create-session"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ planId: selectedPlan.id, planName: selectedPlan.name, customerEmail: formData.email, amount: Math.round(total * 100) / 100 })

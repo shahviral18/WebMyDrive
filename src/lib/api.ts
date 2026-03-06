@@ -18,7 +18,7 @@ if (!import.meta.env.DEV && (BASE_API_URL.includes("localhost") || BASE_API_URL.
     BASE_API_URL = "";
 }
 
-const getApiUrl = (endpoint: string) => {
+export const getApiUrl = (endpoint: string) => {
     if (BASE_API_URL) {
         return `${BASE_API_URL}/api${endpoint}`;
     }

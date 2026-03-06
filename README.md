@@ -1,18 +1,11 @@
-# Welcome to your Lovable project
+# WebMyDrive Admin Console
 
-## Project info
+This is the admin console for managing WebMyDrive plans, billing, and integrations.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
-
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
+## Features
+- **Admin Dashboard**: Manage users, plans, and storage settings.
+- **Billing integration**: Seamless billing workflows.
+- **Analytics**: Comprehensive views of system performance.
 
 **Use your preferred IDE**
 
@@ -62,11 +55,7 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
+The project comes with a build script to compile and deploy.
 
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 

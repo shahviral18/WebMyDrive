@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
+import { api } from "@/lib/api";
 
 type AlertSeverity = "critical" | "warning" | "info";
 type AlertStatus = "active" | "acknowledged" | "dismissed";
@@ -155,12 +156,7 @@ export default function Alerts() {
   // Map audit logs to alert objects
   const loadAlerts = useCallback(async () => {
     try {
-      const token = localStorage.getItem("wmd_token") || sessionStorage.getItem("wmd_token");
-      const res = await fetch("/api/admin/audit-logs?limit=50", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await api.get("/admin/audit-logs?limit=50");
       const logs = data.logs || [];
       const mapped: Alert[] = logs.map((log: any) => {
         let severity: AlertSeverity = "info";

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { api } from "@/lib/api";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -30,14 +31,7 @@ export default function AdminLogin() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Invalid credentials");
-      if (!data.token) throw new Error("No token returned");
+      const data = await api.post("/auth/login", { email, password });
 
       const role = data.user?.role;
       if (role !== "ADMIN" && role !== "SUPERADMIN") {
@@ -46,7 +40,9 @@ export default function AdminLogin() {
 
       sessionStorage.setItem("wmd_token", data.token);
       sessionStorage.setItem("wmd_admin_auth", "true");
-      window.location.href = "/admin/dashboard";
+
+      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+      window.location.href = `${base}/admin/dashboard`;
     } catch (err: any) {
       setError(err.message);
       setLoading(false);

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePlans } from "@/hooks/use-plans";
 import { API_CONFIG } from "@/lib/api-config";
 import { useUser } from "@/contexts/UserContext";
+import { getApiUrl } from "@/lib/api";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -139,7 +140,7 @@ export default function Subscribe() {
       }
 
       // Create checkout session
-      const response = await fetch(`${API_CONFIG.ADMIN_API_URL}/api/referral/create-checkout`, {
+      const response = await fetch(getApiUrl("/referral/create-checkout"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
