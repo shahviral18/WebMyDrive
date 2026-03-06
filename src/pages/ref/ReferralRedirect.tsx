@@ -23,5 +23,5 @@ export default function ReferralRedirect() {
 
     if (!ready) return null; // wait for localStorage to be written before redirecting
 
-    return <Navigate to="/plans" replace />;
+    return <Navigate to="/" replace />;
 }

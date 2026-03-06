@@ -8,17 +8,17 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-    const [isDark, setIsDark] = useState(true);
+    const [isDark, setIsDark] = useState(false);
 
     useEffect(() => {
         const stored = localStorage.getItem("wmd_theme");
-        if (stored === "light") {
-            setIsDark(false);
-            document.documentElement.classList.remove("dark");
-        } else {
+        if (stored === "dark") {
             setIsDark(true);
             document.documentElement.classList.add("dark");
-            localStorage.setItem("wmd_theme", "dark");
+        } else {
+            setIsDark(false);
+            document.documentElement.classList.remove("dark");
+            localStorage.setItem("wmd_theme", "light");
         }
     }, []);
 

@@ -20,7 +20,7 @@ class Logger
         return self::$logDir;
     }
 
-    private static function write(string $level, string $message): void
+    private static function write(string $level, string $message, array $context = []): void
     {
         $dir = self::dir();
         if (!is_dir($dir)) {
@@ -30,25 +30,30 @@ class Logger
         $date = date('Y-m-d');
         $timestamp = date('Y-m-d H:i:s');
         $logFile = "$dir/app-$date.log";
+
+        if (!empty($context)) {
+            $message .= ' ' . json_encode($context);
+        }
+
         $line = "[$timestamp] [$level] $message" . PHP_EOL;
 
         file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
     }
 
-    public static function debug(string $message): void
+    public static function debug(string $message, array $context = []): void
     {
-        self::write('DEBUG', $message);
+        self::write('DEBUG', $message, $context);
     }
-    public static function info(string $message): void
+    public static function info(string $message, array $context = []): void
     {
-        self::write('INFO', $message);
+        self::write('INFO', $message, $context);
     }
-    public static function warn(string $message): void
+    public static function warn(string $message, array $context = []): void
     {
-        self::write('WARN', $message);
+        self::write('WARN', $message, $context);
     }
-    public static function error(string $message): void
+    public static function error(string $message, array $context = []): void
     {
-        self::write('ERROR', $message);
+        self::write('ERROR', $message, $context);
     }
 }

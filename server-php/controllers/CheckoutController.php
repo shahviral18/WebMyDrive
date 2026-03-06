@@ -36,30 +36,42 @@ class CheckoutController
     public function createSession(Request $req): void
     {
         // Validate required fields
-        $planId = trim((string)($req->body['planId'] ?? ''));
-        $planName = trim((string)($req->body['planName'] ?? ''));
-        $amount = (float)($req->body['amount'] ?? 0);
-        $customerName = trim((string)($req->body['customerName'] ?? ''));
-        $customerEmail = strtolower(trim((string)($req->body['customerEmail'] ?? '')));
-        $customerPhone = trim((string)($req->body['customerPhone'] ?? ''));
-        $address = trim((string)($req->body['address'] ?? ''));
-        $city = trim((string)($req->body['city'] ?? ''));
-        $state = trim((string)($req->body['state'] ?? ''));
-        $zipCode = trim((string)($req->body['zipCode'] ?? ''));
-        $country = trim((string)($req->body['country'] ?? 'India'));
+        $planId = trim((string) ($req->body['planId'] ?? ''));
+        $planName = trim((string) ($req->body['planName'] ?? ''));
+        $amount = (float) ($req->body['amount'] ?? 0);
+        $customerName = trim((string) ($req->body['customerName'] ?? ''));
+        $customerEmail = strtolower(trim((string) ($req->body['customerEmail'] ?? '')));
+        $customerPhone = trim((string) ($req->body['customerPhone'] ?? ''));
+        $address = trim((string) ($req->body['address'] ?? ''));
+        $city = trim((string) ($req->body['city'] ?? ''));
+        $state = trim((string) ($req->body['state'] ?? ''));
+        $zipCode = trim((string) ($req->body['zipCode'] ?? ''));
+        $country = trim((string) ($req->body['country'] ?? 'India'));
+        $referralCode = strtoupper(trim((string) ($req->body['referralCode'] ?? '')));
+        $billingPeriod = trim((string) ($req->body['billingPeriod'] ?? 'yearly'));
 
         // Validate required fields
         $errors = [];
-        if (!$planId) $errors[] = 'planId is required';
-        if (!$planName) $errors[] = 'planName is required';
-        if ($amount <= 0) $errors[] = 'amount must be greater than 0';
-        if (!$customerName) $errors[] = 'customerName is required';
-        if (!$customerEmail || !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required';
-        if (!$customerPhone) $errors[] = 'customerPhone is required';
-        if (!$address) $errors[] = 'address is required';
-        if (!$city) $errors[] = 'city is required';
-        if (!$state) $errors[] = 'state is required';
-        if (!$zipCode) $errors[] = 'zipCode is required';
+        if (!$planId)
+            $errors[] = 'planId is required';
+        if (!$planName)
+            $errors[] = 'planName is required';
+        if ($amount <= 0)
+            $errors[] = 'amount must be greater than 0';
+        if (!$customerName)
+            $errors[] = 'customerName is required';
+        if (!$customerEmail || !filter_var($customerEmail, FILTER_VALIDATE_EMAIL))
+            $errors[] = 'Valid email is required';
+        if (!$customerPhone)
+            $errors[] = 'customerPhone is required';
+        if (!$address)
+            $errors[] = 'address is required';
+        if (!$city)
+            $errors[] = 'city is required';
+        if (!$state)
+            $errors[] = 'state is required';
+        if (!$zipCode)
+            $errors[] = 'zipCode is required';
 
         if (!empty($errors)) {
             Response::error('Validation failed: ' . implode(', ', $errors), 400);
@@ -110,6 +122,15 @@ class CheckoutController
                 ]
             );
 
+            // -- Store referral code for attribution in audit log --
+            if ($referralCode) {
+                AuditService::log('CHECKOUT_REFERRAL_CODE', 0, $req->ip, [
+                    'sessionId' => $sessionId,
+                    'referralCode' => $referralCode,
+                    'billingPeriod' => $billingPeriod,
+                ]);
+            }
+
             Logger::info('[Checkout] Session created', [
                 'session_id' => $sessionId,
                 'plan_id' => $planId,
@@ -148,10 +169,10 @@ class CheckoutController
      */
     public function processPayment(Request $req): void
     {
-        $sessionId = trim((string)($req->body['sessionId'] ?? ''));
-        $paymentId = trim((string)($req->body['paymentId'] ?? ''));
-        $orderId = trim((string)($req->body['orderId'] ?? ''));
-        $signature = trim((string)($req->body['signature'] ?? ''));
+        $sessionId = trim((string) ($req->body['sessionId'] ?? ''));
+        $paymentId = trim((string) ($req->body['paymentId'] ?? ''));
+        $orderId = trim((string) ($req->body['orderId'] ?? ''));
+        $signature = trim((string) ($req->body['signature'] ?? ''));
 
         if (!$sessionId || !$paymentId || !$orderId) {
             Response::error('Missing required fields', 400);
@@ -227,14 +248,14 @@ class CheckoutController
                     'SELECT id FROM "User" WHERE email = :email',
                     [':email' => $customerEmail]
                 );
-                $userId = (int)$user['id'];
+                $userId = (int) $user['id'];
 
                 Logger::info('[Checkout] New user created', [
                     'user_id' => $userId,
                     'email' => $customerEmail,
                 ]);
             } else {
-                $userId = (int)$existingUser['id'];
+                $userId = (int) $existingUser['id'];
             }
 
             // Create subscription
@@ -292,12 +313,87 @@ class CheckoutController
                 'amount' => $amount,
             ]);
 
+            // ── PURCHASE ATTRIBUTION ─────────────────────────────────────────
+            // Retrieve referral code stored in audit log at session creation
+            $refCodeRow = Database::queryOne(
+                'SELECT details FROM "AuditLog"
+                 WHERE action = \'CHECKOUT_REFERRAL_CODE\'
+                 AND details LIKE :sid
+                 ORDER BY createdAt DESC LIMIT 1',
+                [':sid' => '%' . $sessionId . '%']
+            );
+            $attribution = $refCodeRow ? @json_decode($refCodeRow['details'], true) : null;
+            $referralCode = $attribution['referralCode'] ?? '';
+
+            // Get the newly created order ID
+            $newOrder = Database::queryOne(
+                'SELECT id FROM "Order" WHERE userId = :uid AND paymentId = :pid LIMIT 1',
+                [':uid' => $userId, ':pid' => $paymentId]
+            );
+            $newOrderId = $newOrder ? (int) $newOrder['id'] : null;
+
+            if ($newOrderId) {
+                // Update order with referral code for audit trail
+                Database::execute(
+                    'UPDATE "Order" SET referralCode = :code WHERE id = :id',
+                    [':code' => $referralCode ?: null, ':id' => $newOrderId]
+                );
+
+                if ($referralCode && str_starts_with($referralCode, 'DIST_')) {
+                    // ── DISTRIBUTOR REFERRAL ─────────────────────────────────
+                    $parts = explode('_', $referralCode, 3); // DIST_{id}_{code}
+                    $distId = isset($parts[1]) ? (int) $parts[1] : 0;
+                    if ($distId > 0) {
+                        DistributorService::processSale($distId, (int) $userId, $newOrderId, (float) $amount);
+                        AuditService::log('ATTRIBUTION_DISTRIBUTOR', (int) $userId, null, [
+                            'orderId' => $newOrderId,
+                            'distributorId' => $distId,
+                            'referralCode' => $referralCode,
+                        ]);
+                        Logger::info('[Checkout] Attribution → Distributor', ['dist_id' => $distId, 'order_id' => $newOrderId]);
+                    }
+                } elseif ($referralCode) {
+                    // ── USER REFERRAL ─────────────────────────────────────────
+                    // Mark order as PAID first so ReferralService processes it
+                    Database::execute(
+                        'UPDATE "Order" SET status = \'PAID\' WHERE id = :id',
+                        [':id' => $newOrderId]
+                    );
+                    ReferralService::processNewOrder($newOrderId, (int) $userId, $referralCode);
+                    // Restore COMPLETED status
+                    Database::execute(
+                        'UPDATE "Order" SET status = \'COMPLETED\' WHERE id = :id',
+                        [':id' => $newOrderId]
+                    );
+                    AuditService::log('ATTRIBUTION_USER_REFERRAL', (int) $userId, null, [
+                        'orderId' => $newOrderId,
+                        'referralCode' => $referralCode,
+                    ]);
+                    Logger::info('[Checkout] Attribution → User Referral', ['code' => $referralCode, 'order_id' => $newOrderId]);
+                } else {
+                    // ── DIRECT SALE ───────────────────────────────────────────
+                    AuditService::log('ATTRIBUTION_DIRECT', (int) $userId, null, [
+                        'orderId' => $newOrderId,
+                        'email' => $customerEmail,
+                    ]);
+                    Logger::info('[Checkout] Attribution → Direct Sale', ['order_id' => $newOrderId]);
+                }
+
+                // Clear the referral code from localStorage (signal via response)
+                // Frontend will clear wmd_pending_ref on success
+            }
+
+            // Generate Token for Auto-Login
+            $role = $existingUser ? $existingUser['role'] : 'USER';
+            $token = JwtHelper::generateToken((int) $userId, $role);
+
             Response::json([
                 'success' => true,
                 'userId' => $userId,
                 'email' => $customerEmail,
-                'message' => 'Payment processed successfully. You can now login.',
-                'loginUrl' => '/login',
+                'token' => $token,
+                'clearReferral' => true,   // ← frontend clears wmd_pending_ref
+                'message' => 'Payment processed successfully.',
             ]);
         } catch (Exception $e) {
             Logger::error('[Checkout] Payment processing error: ' . $e->getMessage());
@@ -323,20 +419,22 @@ class CheckoutController
      */
     private static function generateUniqueReferralCode(string $name, string $email): string
     {
-        $basename = substr(str_replace(' ', '', strtoupper($name)), 0, 3) . 
-                   substr(md5($email), 0, 5);
-        
+        $basename = substr(str_replace(' ', '', strtoupper($name)), 0, 3) .
+            substr(md5($email), 0, 5);
+
         $code = $basename;
         $counter = 1;
-        
-        while (Database::queryOne(
-            'SELECT id FROM "User" WHERE referralCode = :code',
-            [':code' => $code]
-        )) {
+
+        while (
+            Database::queryOne(
+                'SELECT id FROM "User" WHERE referralCode = :code',
+                [':code' => $code]
+            )
+        ) {
             $code = $basename . $counter;
             $counter++;
         }
-        
+
         return $code;
     }
 }

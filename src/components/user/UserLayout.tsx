@@ -52,7 +52,7 @@ export default function UserLayout({ children }: UserLayoutProps) {
         sessionStorage.removeItem("wmd_user_auth");
         sessionStorage.removeItem("wmd_user_email");
         sessionStorage.removeItem("wmd_user_role");
-        window.location.href = "/login";
+        window.location.href = `${import.meta.env.BASE_URL}login`;
     };
 
     const initials = user.name

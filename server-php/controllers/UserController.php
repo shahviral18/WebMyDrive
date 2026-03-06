@@ -141,6 +141,7 @@ class UserController
     {
         $userId = $req->user['userId'] ?? null;
         $webMyDriveId = (string) ($req->body['webMyDriveId'] ?? '');
+        $password = (string) ($req->body['password'] ?? '');
 
         if (!$userId)
             Response::error('Unauthorized', 401);
@@ -163,17 +164,23 @@ class UserController
             $updateDisplay = $user['email'];
         }
 
+        $setClauses = ['email = :e', 'updatedAt = :now'];
+        $params = [':e' => $webMyDriveId, ':now' => $now, ':id' => $userId];
+
         if ($updateDisplay !== null) {
-            Database::execute(
-                'UPDATE "User" SET email = :e, displayEmail = :de, updatedAt = :now WHERE id = :id',
-                [':e' => $webMyDriveId, ':de' => $updateDisplay, ':now' => $now, ':id' => $userId]
-            );
-        } else {
-            Database::execute(
-                'UPDATE "User" SET email = :e, updatedAt = :now WHERE id = :id',
-                [':e' => $webMyDriveId, ':now' => $now, ':id' => $userId]
-            );
+            $setClauses[] = 'displayEmail = :de';
+            $params[':de'] = $updateDisplay;
         }
+
+        if ($password) {
+            $setClauses[] = 'passwordHash = :hash';
+            $setClauses[] = 'passwordResetRequired = 0';
+            $setClauses[] = 'first_login = 0';
+            $params[':hash'] = password_hash($password, PASSWORD_BCRYPT);
+        }
+
+        $sql = 'UPDATE "User" SET ' . implode(', ', $setClauses) . ' WHERE id = :id';
+        Database::execute($sql, $params);
 
         $updated = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $userId]);
         Response::json(['success' => true, 'user' => $updated]);

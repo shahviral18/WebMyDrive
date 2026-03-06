@@ -94,6 +94,9 @@ $router->get('/api/auth/me', [AuthController::class, 'me'], $auth);
 $router->post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword']);
 $router->post('/api/auth/change-password', [AuthController::class, 'changePassword'], $auth);
 $router->post('/api/auth/setup-workspace-password', [AuthController::class, 'setupWorkspacePassword'], $auth);
+$router->post('/api/auth/setup-credentials', [AuthController::class, 'setupCredentials']);
+$router->post('/api/auth/setup-webmydrive-id', [AuthController::class, 'setupWmdId'], $auth);
+$router->post('/api/auth/activate-lookup', [AuthController::class, 'activateLookup']); // Public
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 $router->get('/api/admin/config', [AdminController::class, 'getConfig'], $adminOnly);

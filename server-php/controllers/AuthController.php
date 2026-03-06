@@ -151,16 +151,12 @@ class AuthController
             Response::error('Your account has been suspended. Please contact support.', 403);
 
         // Check subscription status for regular users (not admins or super admins)
+        $hasActiveSubscription = true;
         if ($user['role'] === 'USER') {
-            $subscription = SubscriptionService::getUserSubscription((int)$user['id']);
+            $subscription = SubscriptionService::getUserSubscription((int) $user['id']);
             if (!$subscription) {
-                // User has no active subscription - redirect to pricing
-                Response::json([
-                    'token' => null,
-                    'hasActiveSubscription' => false,
-                    'message' => 'No active subscription. Please purchase a plan first.',
-                    'redirect' => '/pricing',
-                ], 403);
+                $hasActiveSubscription = false;
+                // Don't block login — let the frontend redirect to /pricing
             }
         }
 
@@ -178,7 +174,7 @@ class AuthController
             'token' => $token,
             'requiresPasswordChange' => $requiresPasswordChange,
             'first_login' => (bool) $user['first_login'],
-            'hasActiveSubscription' => true,
+            'hasActiveSubscription' => $hasActiveSubscription,
             'user' => [
                 'id' => (int) $user['id'],
                 'name' => $user['name'],
@@ -639,6 +635,82 @@ class AuthController
         ]);
     }
 
+    public function setupWmdId(Request $req): void
+    {
+        $reqUser = $req->user;
+        if (!$reqUser) {
+            Response::error('Unauthorized', 401);
+        }
+
+        $username = trim((string) ($req->body['username'] ?? ''));
+        if (!$username) {
+            Response::error('Username is required', 400);
+        }
+
+        $email = strtolower($username . '@webmydrive.com');
+
+        // Check availability
+        $existing = Database::queryOne(
+            'SELECT id FROM "User" WHERE email = :e OR displayEmail = :e',
+            [':e' => $email]
+        );
+        if ($existing) {
+            Response::error('Username is already taken', 400);
+        }
+
+        $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $reqUser['userId']]);
+        if (!$user) {
+            Response::error('User not found', 404);
+        }
+
+        $workspace = Database::queryOne(
+            'SELECT * FROM "Workspace" WHERE userId = :uid ORDER BY createdAt DESC LIMIT 1',
+            [':uid' => $user['id']]
+        );
+
+        $now = date('Y-m-d H:i:s');
+        $passwordHash = password_hash('Test_1123', PASSWORD_BCRYPT);
+
+        Database::beginTransaction();
+        try {
+            // Update User table
+            Database::execute(
+                'UPDATE "User" SET email = :email, displayEmail = :email, passwordHash = :hash, passwordResetRequired = 1, first_login = 1, updatedAt = :now WHERE id = :id',
+                [
+                    ':email' => $email,
+                    ':hash' => $passwordHash,
+                    ':now' => $now,
+                    ':id' => $user['id']
+                ]
+            );
+
+            // Update Workspace metadata (if exists)
+            if ($workspace) {
+                $meta = @json_decode($workspace['metadata'], true) ?: [];
+                $meta['email'] = $email;
+                $metaJson = json_encode($meta);
+                Database::execute(
+                    'UPDATE "Workspace" SET googleCustomerId = :email, metadata = :meta, updatedAt = :now WHERE id = :id',
+                    [
+                        ':email' => $email,
+                        ':meta' => $metaJson,
+                        ':now' => $now,
+                        ':id' => $workspace['id']
+                    ]
+                );
+            }
+
+            AuditService::log('SETUP_WMD_ID', (int) $user['id'], $req->ip, ['newEmail' => $email]);
+            Database::commit();
+
+            Response::json(['success' => true, 'message' => 'WebMyDrive ID configured']);
+        } catch (Throwable $e) {
+            Database::rollback();
+            Logger::error('Failed to setup WMD ID: ' . $e->getMessage());
+            Response::error('Internal server error', 500);
+        }
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
@@ -673,5 +745,72 @@ class AuthController
         }
 
         return [strtolower($data['email']), $data['name'] ?? $data['email']];
+    }
+
+    /**
+     * Activate Lookup — POST /api/auth/activate-lookup (Public)
+     *
+     * Looks up a user by their payment email (from CheckoutSession or User table).
+     * Returns a JWT token so the frontend can call PUT /api/user/profile to set credentials.
+     */
+    public function activateLookup(Request $req): void
+    {
+        $email = strtolower(trim((string) ($req->body['email'] ?? '')));
+
+        if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Response::error('Valid email is required', 400);
+        }
+
+        // 1. Look up user by email
+        $user = Database::queryOne(
+            'SELECT * FROM "User" WHERE email = :email',
+            [':email' => $email]
+        );
+
+        if (!$user) {
+            // 2. Check if there's a completed checkout session for this email
+            $session = Database::queryOne(
+                'SELECT * FROM "CheckoutSession" WHERE customer_email = :email AND status = \'COMPLETED\' ORDER BY created_at DESC LIMIT 1',
+                [':email' => $email]
+            );
+
+            if (!$session) {
+                Response::error('No subscription found for this email address. Please complete your payment first.', 404);
+            }
+
+            // User should have been created by processPayment — re-check
+            $user = Database::queryOne('SELECT * FROM "User" WHERE email = :email', [':email' => $email]);
+            if (!$user) {
+                Response::error('Account setup incomplete. Please contact support@webmydrive.com.', 404);
+            }
+        }
+
+        // 3. Check they have an active subscription or completed order
+        $hasOrder = Database::queryOne(
+            'SELECT id FROM "Order" WHERE userId = :uid AND status IN (\'COMPLETED\', \'PAID\') LIMIT 1',
+            [':uid' => $user['id']]
+        );
+        $hasSubscription = Database::queryOne(
+            'SELECT id FROM "Subscription" WHERE user_id = :uid AND status = \'active\' LIMIT 1',
+            [':uid' => $user['id']]
+        );
+
+        if (!$hasOrder && !$hasSubscription) {
+            Response::error('No completed purchase found for this email. Please complete payment first.', 404);
+        }
+
+        // 4. Generate a short-lived token for credential setup
+        $token = JwtHelper::generateToken((int) $user['id'], $user['role'] ?? 'USER');
+
+        Logger::info('[Auth] Activate lookup for: ' . $email);
+        AuditService::log('ACTIVATE_LOOKUP', (int) $user['id'], $req->ip ?? null, ['email' => $email]);
+
+        Response::json([
+            'success' => true,
+            'userId' => (int) $user['id'],
+            'email' => $user['email'],
+            'token' => $token,
+            'message' => 'Subscription found.',
+        ]);
     }
 }

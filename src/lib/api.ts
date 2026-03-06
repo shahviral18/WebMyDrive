@@ -12,6 +12,21 @@ const getHeaders = () => {
     };
 };
 
+// Calculate API base URL
+let BASE_API_URL = import.meta.env.VITE_API_URL || "";
+if (!import.meta.env.DEV && (BASE_API_URL.includes("localhost") || BASE_API_URL.includes("192.168") || BASE_API_URL.includes("127.0.0.1"))) {
+    BASE_API_URL = "";
+}
+
+const getApiUrl = (endpoint: string) => {
+    if (BASE_API_URL) {
+        return `${BASE_API_URL}/api${endpoint}`;
+    }
+    // Remove trailing slash from base URL to avoid double slashes
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    return `${base}/api${endpoint}`;
+};
+
 const handleResponse = async (res: Response) => {
     if (res.status === 204) return null;
 
@@ -36,7 +51,7 @@ const handleResponse = async (res: Response) => {
 
 export const api = {
     async get(endpoint: string) {
-        const res = await fetch(`/api${endpoint}`, {
+        const res = await fetch(getApiUrl(endpoint), {
             method: "GET",
             headers: getHeaders(),
         });
@@ -44,7 +59,7 @@ export const api = {
     },
 
     async post(endpoint: string, data: any) {
-        const res = await fetch(`/api${endpoint}`, {
+        const res = await fetch(getApiUrl(endpoint), {
             method: "POST",
             headers: getHeaders(),
             body: JSON.stringify(data),
@@ -53,7 +68,7 @@ export const api = {
     },
 
     async put(endpoint: string, data: any) {
-        const res = await fetch(`/api${endpoint}`, {
+        const res = await fetch(getApiUrl(endpoint), {
             method: "PUT",
             headers: getHeaders(),
             body: JSON.stringify(data),
@@ -62,7 +77,7 @@ export const api = {
     },
 
     async delete(endpoint: string) {
-        const res = await fetch(`/api${endpoint}`, {
+        const res = await fetch(getApiUrl(endpoint), {
             method: "DELETE",
             headers: getHeaders(),
         });
@@ -70,7 +85,7 @@ export const api = {
     },
 
     async patch(endpoint: string, data: any) {
-        const res = await fetch(`/api${endpoint}`, {
+        const res = await fetch(getApiUrl(endpoint), {
             method: "PATCH",
             headers: getHeaders(),
             body: JSON.stringify(data),

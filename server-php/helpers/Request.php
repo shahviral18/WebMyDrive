@@ -25,7 +25,14 @@ class Request
     public function __construct()
     {
         $this->method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-        $this->path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        $rawPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        // Strip any subdirectory prefix so that /webmydrive/demo/1/api/... becomes /api/...
+        // This allows the app to be deployed in any subdirectory without changing routes.
+        if (preg_match('#(/api/.*)$#', $rawPath, $m)) {
+            $this->path = $m[1];
+        } else {
+            $this->path = $rawPath;
+        }
         $this->ip = $_SERVER['HTTP_X_FORWARDED_FOR']
             ?? $_SERVER['REMOTE_ADDR']
             ?? null;

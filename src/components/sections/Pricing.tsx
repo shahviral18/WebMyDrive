@@ -40,7 +40,7 @@ function getStorageValue(storage: string): string {
 export function Pricing() {
   const { data: plans, isLoading, error } = usePlans();
   const navigate = useNavigate();
-  const [billingPeriod, setBillingPeriod] = React.useState<'monthly' | 'yearly'>('monthly');
+  const [billingPeriod, setBillingPeriod] = React.useState<'monthly' | 'yearly'>('yearly');
 
   const themeColors = [
     {
@@ -76,9 +76,9 @@ export function Pricing() {
   return (
     <section
       id="pricing"
-      className="py-24 bg-white relative overflow-hidden"
+      className="py-24 bg-gradient-to-b from-blue-50/50 via-white to-blue-50/50 relative scroll-mt-24"
     >
-      <div className="absolute top-0 left-0 w-80 h-80 bg-gradient-to-br from-blue-100/30 to-transparent rounded-full blur-3xl -z-10" />
+      <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-gradient-to-l from-indigo-100/40 to-transparent rounded-full blur-3xl -z-10" />
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-purple-100/30 to-transparent rounded-full blur-3xl -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -90,27 +90,25 @@ export function Pricing() {
             Pick your cloud storage plan
           </h3>
           <p className="text-lg text-slate-600 mb-8">
-            Choose between monthly or annual billing.
+            Switch between monthly and annual billing.
           </p>
-          
+
           <div className="flex justify-center gap-3 mb-2">
             <button
               onClick={() => setBillingPeriod('monthly')}
-              className={`px-6 py-2 rounded-full font-semibold transition-all ${
-                billingPeriod === 'monthly'
-                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${billingPeriod === 'monthly'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
             >
               Monthly
             </button>
             <button
               onClick={() => setBillingPeriod('yearly')}
-              className={`px-6 py-2 rounded-full font-semibold transition-all ${
-                billingPeriod === 'yearly'
-                  ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${billingPeriod === 'yearly'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
             >
               Yearly
             </button>
@@ -153,9 +151,8 @@ export function Pricing() {
                     </div>
                   ))
                 : plans?.map((plan, index) => {
-                  const monthlyAmount = plan.monthlyPrice || parseAmount(plan.price);
-                  const yearlyAmount = plan.yearlyPrice || monthlyAmount * 12;
-                  const displayAmount = billingPeriod === 'monthly' ? monthlyAmount : Math.round(yearlyAmount / 12);
+                  const yearlyAmount = parseAmount(plan.price);
+                  const displayAmount = billingPeriod === 'yearly' ? yearlyAmount : Math.round(yearlyAmount / 12);
                   const discountVal = plan.discount ? parseInt(plan.discount) : 0;
                   const storageValue = getStorageValue(plan.storage);
                   const theme = themeColors[index % themeColors.length];
@@ -186,7 +183,7 @@ export function Pricing() {
                         </p>
                         <div className="text-lg text-slate-600 mt-2 flex flex-col items-center gap-2">
                           <span>{billingPeriod === 'monthly' ? 'Per Month' : 'Per Year'}</span>
-                          {billingPeriod === 'monthly' && plan.coupon && (
+                          {plan.coupon && (
                             <span className="text-sm tracking-wide mt-1">
                               Use code:{" "}
                               <span className={`font-bold border px-2 py-0.5 rounded text-transparent bg-clip-text bg-gradient-to-r shadow-sm ${theme.couponBg} ${theme.couponText}`}>
@@ -210,7 +207,7 @@ export function Pricing() {
 
                       <Button
                         className={`w-full h-11 rounded-md text-sm font-semibold tracking-wide uppercase text-slate-950 bg-gradient-to-r ${theme.button} shadow-lg shadow-black/25 mt-2`}
-                        onClick={() => navigate(`/subscribe/${plan.id}`)}
+                        onClick={() => navigate(`/subscribe/${plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`)}
                       >
                         Subscribe
                       </Button>

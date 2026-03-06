@@ -207,7 +207,7 @@ class AdminController
             [':uid' => $id]
         );
         $referrals = Database::query(
-            'SELECT rl.*, u.email AS refereeEmail FROM "ReferralLog" rl LEFT JOIN "User" u ON u.id = rl.refereeId WHERE rl.referrerUserId = :uid',
+            'SELECT rl.*, u.email AS refereeEmail FROM "ReferralLog" rl LEFT JOIN "User" u ON u.id = rl.refereeId WHERE rl.referrerId = :uid',
             [':uid' => $id]
         );
 
@@ -301,7 +301,7 @@ class AdminController
 
         Database::execute('DELETE FROM "DistributorSale" WHERE purchasingUserId = :id', [':id' => $id]);
         Database::execute('DELETE FROM "Workspace" WHERE userId = :id', [':id' => $id]);
-        Database::execute('DELETE FROM "ReferralLog" WHERE referrerUserId = :id OR refereeId = :id', [':id' => $id]);
+        Database::execute('DELETE FROM "ReferralLog" WHERE referrerId = :id OR refereeId = :id', [':id' => $id]);
         Database::execute('DELETE FROM "Order" WHERE userId = :id', [':id' => $id]);
         Database::execute('DELETE FROM "User" WHERE id = :id', [':id' => $id]);
 
@@ -610,7 +610,7 @@ class AdminController
                     re.id AS reId, re.email AS reEmail,
                     o.id AS orderId, o.amount AS orderAmount, o.status AS orderStatus, p.name AS planName
              FROM "ReferralLog" rl
-             LEFT JOIN "User" rr ON rr.id = rl.referrerUserId
+             LEFT JOIN "User" rr ON rr.id = rl.referrerId
              LEFT JOIN "User" re ON re.id = rl.refereeId
              LEFT JOIN "Order" o ON o.id = rl.orderId
              LEFT JOIN "Plan" p ON p.id = o.planId
@@ -663,7 +663,7 @@ class AdminController
             if ($diff !== 0.0) {
                 Database::execute(
                     'UPDATE "User" SET walletBalance = walletBalance + :diff, updatedAt = :now WHERE id = :uid',
-                    [':diff' => $diff, ':now' => $now, ':uid' => $log['referrerUserId']]
+                    [':diff' => $diff, ':now' => $now, ':uid' => $log['referrerId']]
                 );
             }
             Database::commit();
@@ -720,7 +720,7 @@ class AdminController
         $vestedLogs = Database::query(
             'SELECT rl.*, rr.email AS rrEmail, rr.name AS rrName, re.email AS reEmail
              FROM "ReferralLog" rl
-             LEFT JOIN "User" rr ON rr.id = rl.referrerUserId
+             LEFT JOIN "User" rr ON rr.id = rl.referrerId
              LEFT JOIN "User" re ON re.id = rl.refereeId
              WHERE rl.status = \'VESTED\'
              ORDER BY rl.createdAt DESC

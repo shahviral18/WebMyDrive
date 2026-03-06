@@ -61,50 +61,56 @@ export function usePlans() {
     queryKey: ["plans"],
     queryFn: async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+        const isDev = import.meta.env.DEV;
+        let apiUrl = import.meta.env.VITE_API_URL || "";
+        if (!isDev && (apiUrl.includes("localhost") || apiUrl.includes("192.168") || apiUrl.includes("127.0.0.1"))) {
+          apiUrl = "";
+        }
+        if (isDev) apiUrl = "";
+
         const res = await fetch(`${apiUrl}/api/user/plans`);
         if (res.ok) {
           const data = await res.json();
           let plansArray = (data.plans || data) as any[];
-          
+
           console.log("Raw API plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
-          
+
           // Filter to only include TechnoDoc plans (Cloud Storage – *)
           plansArray = plansArray.filter(p => p.name?.includes('Cloud Storage'));
-          
+
           console.log("Filtered plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
-          
+
           // Transform API response to frontend format
           const transformed = plansArray.map((plan: any) => {
             // Parse features array if it exists
             let discount = "0% OFF";
             let coupon = "";
             let isBestSeller = false;
-            
+
             if (plan.features) {
               try {
                 const features = JSON.parse(plan.features);
                 const featureStr = features.join(" ");
-                
+
                 // Extract discount from features (e.g., "10% OFF", "20% OFF", "40% OFF")
                 const discountMatch = featureStr.match(/(\d+%\s+OFF)/);
                 if (discountMatch) {
                   discount = discountMatch[1];
                 }
-                
+
                 // Extract coupon code (e.g., "Coupon: tds20")
                 const couponMatch = featureStr.match(/Coupon:\s*(\w+)/);
                 if (couponMatch) {
                   coupon = couponMatch[1];
                 }
-                
+
                 // Check for best seller
                 isBestSeller = featureStr.includes("Best Seller");
               } catch (e) {
                 // Ignore parse errors
               }
             }
-            
+
             return {
               id: String(plan.id),
               name: plan.name,
@@ -117,7 +123,7 @@ export function usePlans() {
               isBestSeller,
             };
           }) as Plan[];
-          
+
           console.log("Transformed plans:", transformed.map(p => ({ id: p.id, name: p.name })));
           return transformed;
         }

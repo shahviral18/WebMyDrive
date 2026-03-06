@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, AlertCircle, RefreshCw, Check, Cloud, KeyRound, Eye, EyeOff, AtSign, CheckCircle2, XCircle, Mail, Lock } from "lucide-react";
+import { WmdLogo } from "@/components/WmdLogo";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import UserLayout from "@/components/user/UserLayout";
 import DistributorLayout from "@/components/distributor/DistributorLayout";
@@ -81,15 +82,12 @@ export default function UserPlans() {
     const [authRequiredForPlan, setAuthRequiredForPlan] = useState<Plan | null>(null);
     const [emailInput, setEmailInput] = useState("");
     const [emailAuthLoading, setEmailAuthLoading] = useState(false);
-
-    // --- WebMyDrive ID Selection State ---
-    // Step 1 = enter personal email, Step 2 = choose @webmydrive.com ID
-    const [authStep, setAuthStep] = useState<1 | 2>(1);
+    const [authStep, setAuthStep] = useState(1);
     const [wmdIdInput, setWmdIdInput] = useState("");
     const [idCheckStatus, setIdCheckStatus] = useState<IdCheckStatus>("idle");
     const [idSuggestions, setIdSuggestions] = useState<string[]>([]);
-    const [chosenWmdEmail, setChosenWmdEmail] = useState<string>("");
-    const idCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [chosenWmdEmail, setChosenWmdEmail] = useState("");
+
     const [registerPasswordInput, setRegisterPasswordInput] = useState("");
     const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
@@ -216,17 +214,15 @@ export default function UserPlans() {
     };
 
     const discountedPrice = (plan: Plan) => {
-        const basePrice = isYearly
-            ? (plan.priceINR ?? plan.price ?? 0)
-            : (plan.priceMonthlyINR ?? plan.price ?? 0);
+        const yearlyAmount = Number((plan.priceINR ?? plan.price ?? 0));
+        const basePrice = isYearly ? yearlyAmount : Math.round(yearlyAmount / 12);
         if (!discount || discount.isBannerOnly) return basePrice;
-        return Math.max(1, parseFloat((basePrice * (1 - discount.pct / 100)).toFixed(2)));
+        return Math.max(1, Math.round(basePrice * (1 - discount.pct / 100)));
     };
 
     const originalPriceFor = (plan: Plan) => {
-        return isYearly
-            ? (plan.priceINR ?? plan.price ?? 0)
-            : (plan.priceMonthlyINR ?? plan.price ?? 0);
+        const yearlyAmount = Number((plan.priceINR ?? plan.price ?? 0));
+        return isYearly ? yearlyAmount : Math.round(yearlyAmount / 12);
     };
 
     const pollForCredentials = () => {
@@ -240,20 +236,14 @@ export default function UserPlans() {
             return;
         }
 
-        let targetEmail = chosenWmdEmail || "demo@webmydrive.com";
-        const wmdDemoEmail = sessionStorage.getItem("wmd_demo_email");
-        if (wmdDemoEmail) {
-            targetEmail = wmdDemoEmail;
-        } else if (chosenWmdEmail) {
-            targetEmail = chosenWmdEmail;
-        } else if (emailInput && emailInput.includes('@')) {
-            targetEmail = emailInput;
-        }
+        let targetEmail = emailInput && emailInput.includes('@') ? emailInput : "demo@webmydrive.com";
 
         setProvisionedWorkspace({ email: targetEmail });
     };
 
-    // ─── WebMyDrive ID Checking Logic ────────────────────────────────────────────
+    // ─── WebMyDrive ID Checking Logic ──────────────────────────────────────────
+
+    const idCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     /**
      * Takes a raw input (just the local part like "khushi" or "khushi@webmydrive.com")
@@ -409,6 +399,8 @@ export default function UserPlans() {
         }
     };
 
+
+
     const proceedToPayment = async (plan: Plan) => {
         setPurchasing(plan.id);
 
@@ -554,16 +546,15 @@ export default function UserPlans() {
     const publicHeader = (
         <header className="w-full bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
             <div className="max-w-7xl mx-auto flex items-center justify-between h-20 px-6">
-                <div className="flex items-center gap-2">
-                    <Cloud className="w-8 h-8 text-[#1fb6ff]" />
-                    <span className="text-[#1fb6ff] font-bold text-2xl tracking-tight">WebMyDrive</span>
+                <div className="flex items-center gap-1 cursor-pointer" onClick={() => navigate("/")}>
+                    <WmdLogo size="sm" />
                 </div>
 
                 <nav className="hidden md:flex items-center gap-8 text-gray-600 font-medium text-sm">
-                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors">Features</span>
-                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors">Pricing</span>
-                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors">FAQ</span>
-                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors">Contact</span>
+                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors" onClick={() => navigate("/#features")}>Features</span>
+                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors" onClick={() => navigate("/plans")}>Pricing</span>
+                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors" onClick={() => navigate("/#faq")}>FAQ</span>
+                    <span className="cursor-pointer hover:text-[#1fb6ff] transition-colors" onClick={() => navigate("/#contact")}>Contact</span>
                 </nav>
 
                 <div className="flex items-center gap-4">
@@ -684,7 +675,7 @@ export default function UserPlans() {
                                         <div className="text-center mb-6">
                                             <span className="text-4xl font-extrabold" style={{ color: 'var(--plan-price-color, #0f172a)' }}>₹{finalPrice.toLocaleString("en-IN")}</span>
                                             <p className="text-center text-xs mt-2 font-medium" style={{ color: 'var(--plan-label-color, #64748b)' }}>
-                                                {isYearly ? "Per Month / Billed Annually" : "Billed Monthly"}
+                                                {isYearly ? "Per Year" : "Per Month"}
                                             </p>
                                         </div>
 
@@ -713,6 +704,22 @@ export default function UserPlans() {
                         })}
                     </div>
                 )}
+            </div>
+
+            {/* ── Already purchased CTA ── */}
+            <div className="mt-16 mb-8 text-center py-10">
+                <p className="text-2xl font-normal text-slate-700">
+                    Ready to get started with Google Workspace?
+                </p>
+                <p className="text-lg mt-4 text-slate-600">
+                    Choose a plan above to subscribe and activate your account
+                </p>
+                <a
+                    href="/activate"
+                    className="inline-block mt-5 text-xl font-semibold text-[#1fb6ff] hover:text-[#0ea5e9] hover:underline transition-colors"
+                >
+                    Already purchased, click here to Activate the account
+                </a>
             </div>
         </div>
     );
@@ -914,8 +921,6 @@ export default function UserPlans() {
                                     </motion.div>
                                 )}
                             </AnimatePresence>
-
-
 
                             {/* Action Buttons */}
                             <div className="flex flex-col gap-2 pt-1">

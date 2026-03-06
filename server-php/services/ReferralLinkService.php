@@ -35,8 +35,15 @@ class ReferralLinkService
         if ($link)
             return $link;
 
-        // Create a new one
-        $code = strtoupper(bin2hex(random_bytes(8)));
+        // Get their actual referral code from db instead of random hex string
+        $userRow = null;
+        if ($role === 'USER') {
+            $userRow = Database::queryOne('SELECT referralCode FROM "User" WHERE id = :id', [':id' => $referrerId]);
+        } else {
+            $userRow = Database::queryOne('SELECT referralCode FROM "Distributor" WHERE id = :id', [':id' => $referrerId]);
+        }
+
+        $code = ($userRow && $userRow['referralCode']) ? $userRow['referralCode'] : strtoupper(bin2hex(random_bytes(8)));
         $now = date('Y-m-d H:i:s');
 
         $id = Database::insert(

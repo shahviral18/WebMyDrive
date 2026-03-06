@@ -35,6 +35,7 @@ import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import ReferralRedirect from "./pages/ref/ReferralRedirect";
+import AccountActivate from "./pages/AccountActivate";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const queryClient = new QueryClient({
@@ -62,13 +63,17 @@ const App = () => (
       <Toaster />
       <Sonner richColors position="top-right" />
       <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "337424619711-d1c8p7gkvn2d61h72o91l24t12j6v2n7.apps.googleusercontent.com"}>
-        <BrowserRouter>
+        <BrowserRouter basename="/webmydrive/demo/1">
           <ThemeProvider>
             <UserProvider>
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/pricing" element={<PricingPage />} />
-                <Route path="/subscribe/:planId" element={<Subscribe />} />
+                <Route path="/pricing" element={<Navigate to="/" replace />} />
+                <Route path="/features" element={<Navigate to="/" replace />} />
+                <Route path="/faq" element={<Navigate to="/" replace />} />
+                <Route path="/contact" element={<Navigate to="/" replace />} />
+                <Route path="/subscribe/:planSlug" element={<Subscribe />} />
+                <Route path="/activate" element={<AccountActivate />} />
                 <Route path="/plans" element={<UserPlans />} />
                 <Route path="/ref/:code" element={<ReferralRedirect />} />
 

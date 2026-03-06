@@ -127,8 +127,14 @@ class ReferralController
         if (!$plan['isActive'])
             Response::error('This plan is currently unavailable', 400);
 
-        $globalConfig = ConfigService::getGlobalPlanConfig();
-        $amountINR = $plan['hasOverride'] ? (float) $plan['price'] : (float) $globalConfig['priceINR'];
+        $billingPeriod = $req->body['billingPeriod'] ?? 'yearly';
+        $yearlyAmount = (float) $plan['price'];
+        if ($billingPeriod === 'monthly') {
+            $amountINR = isset($plan['monthlyPrice']) && $plan['monthlyPrice'] > 0 ? (float) $plan['monthlyPrice'] : round($yearlyAmount / 12);
+        } else {
+            $amountINR = $yearlyAmount;
+        }
+
         $discountedAmount = $amountINR;
         $discountPct = 0;
         $finalReferralKey = null;

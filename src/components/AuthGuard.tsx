@@ -56,7 +56,7 @@ export function AuthGuard({ children, requiredRole, redirectTo = "/login" }: Aut
                 <div className="w-20 h-20 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center justify-center text-4xl">🚫</div>
                 <h1 className="text-2xl font-bold text-foreground">403 — Access Forbidden</h1>
                 <p className="text-muted-foreground max-w-sm">You do not have permission to access this page.</p>
-                <a href="/login" className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+                <a href="#" onClick={(e) => { e.preventDefault(); window.location.href = `${import.meta.env.BASE_URL}login`; }} className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
                     Return to Login
                 </a>
             </div>

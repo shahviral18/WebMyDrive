@@ -100,7 +100,7 @@ class ReferralService
 
             // Loop guard: buyer has already referred the referrer
             $reverseReferral = Database::queryOne(
-                'SELECT id FROM "ReferralLog" WHERE referrerUserId = :buyer AND refereeId = :referrer',
+                'SELECT id FROM "ReferralLog" WHERE referrerId = :buyer AND refereeId = :referrer',
                 [':buyer' => $purchasingUserId, ':referrer' => $referrer['id']]
             );
             if ($reverseReferral) {
@@ -134,7 +134,7 @@ class ReferralService
                 $now = date('Y-m-d H:i:s');
                 Database::insert(
                     'INSERT INTO "ReferralLog"
-                     (referrerUserId, refereeId, orderId, amount, referralYear, status, createdAt)
+                     (referrerId, refereeId, orderId, amount, referralYear, status, createdAt)
                      VALUES (:rr, :re, :oid, :amt, 1, \'VESTED\', :now)',
                     [
                         ':rr' => $referrer['id'],
@@ -174,10 +174,10 @@ class ReferralService
                 return;
             }
 
-            $originalReferrerId = (int) $priorReferralAsReferee['referrerUserId'];
+            $originalReferrerId = (int) $priorReferralAsReferee['referrerId'];
             $prevLogsCount = Database::count(
                 '"ReferralLog"',
-                'referrerUserId = :rr AND refereeId = :re',
+                'referrerId = :rr AND refereeId = :re',
                 [':rr' => $originalReferrerId, ':re' => $purchasingUserId]
             );
 
@@ -207,7 +207,7 @@ class ReferralService
                 $now = date('Y-m-d H:i:s');
                 Database::insert(
                     'INSERT INTO "ReferralLog"
-                     (referrerUserId, refereeId, orderId, amount, referralYear, status, createdAt)
+                     (referrerId, refereeId, orderId, amount, referralYear, status, createdAt)
                      VALUES (:rr, :re, :oid, :amt, :yr, \'VESTED\', :now)',
                     [
                         ':rr' => $originalReferrerId,
@@ -252,7 +252,7 @@ class ReferralService
 
         // Unique referred users
         $referredRows = Database::query(
-            'SELECT DISTINCT refereeId FROM "ReferralLog" WHERE referrerUserId = :id',
+            'SELECT DISTINCT refereeId FROM "ReferralLog" WHERE referrerId = :id',
             [':id' => $userId]
         );
         $referredIds = array_column($referredRows, 'refereeId');
@@ -288,7 +288,7 @@ class ReferralService
              FROM "ReferralLog" rl
              LEFT JOIN "User" u ON u.id = rl.refereeId
              LEFT JOIN "Order" o ON o.id = rl.orderId
-             WHERE rl.referrerUserId = :id
+             WHERE rl.referrerId = :id
              ORDER BY rl.createdAt DESC',
             [':id' => $userId]
         );
