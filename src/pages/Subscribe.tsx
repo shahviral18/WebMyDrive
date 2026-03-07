@@ -260,68 +260,10 @@ export default function SubscribePage() {
     );
   }
 
-  // Default Checkout Form
-  // Local Email Step for Purchase
-  if (!googleEmail) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-white font-sans">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full p-8 border border-white/10 rounded-[32px] bg-slate-900 shadow-2xl"
-        >
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mb-6 border border-cyan-500/20">
-              <Mail className="w-8 h-8 text-cyan-400" />
-            </div>
-            <h1 className="text-3xl font-bold text-center tracking-tight">Sign in to Purchase</h1>
-            <p className="text-slate-400 text-sm mt-2 text-center">Enter your email to continue with your subscription.</p>
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const emailVal = (e.currentTarget.elements.namedItem("p-email") as HTMLInputElement).value;
-              if (emailVal && emailVal.includes("@")) {
-                handleGoogleSuccess({ token: "local", user: { email: emailVal } });
-              } else {
-                toast.error("Please enter a valid email address");
-              }
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="p-email" className="text-slate-300 ml-1">Email Address</Label>
-              <Input
-                id="p-email"
-                name="p-email"
-                type="email"
-                placeholder="you@example.com"
-                className="h-14 bg-slate-950 border-white/10 focus:border-cyan-500/50 rounded-2xl"
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full h-14 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-2xl shadow-lg shadow-cyan-500/20 transition-all hover:scale-[1.02]">
-              Continue to Billing
-            </Button>
-          </form>
-
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="w-full mt-4 text-slate-500 hover:text-slate-300 hover:bg-white/5 rounded-xl"
-          >
-            Cancel
-          </Button>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 relative">
       <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-sm">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Theme</span>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Theme</span>
         <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
       </div>
       <div className="max-w-4xl mx-auto">
@@ -340,12 +282,52 @@ export default function SubscribePage() {
           </div>
           <form onSubmit={handlePayment} className="space-y-6 p-6 bg-slate-900 border border-white/10 rounded-2xl">
             <h2 className="text-xl font-bold">Billing Details</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <Input placeholder="First Name" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} className="bg-slate-950" required />
-              <Input placeholder="Last Name" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} className="bg-slate-950" required />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Email Address (For Account)</Label>
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={e => setFormData({ ...formData, email: e.target.value })}
+                className="bg-slate-950 h-11 border-white/10"
+                required
+              />
             </div>
-            <Input placeholder="Mobile" value={formData.mobile} onChange={e => setFormData({ ...formData, mobile: e.target.value })} className="bg-slate-950" required />
-            <Button type="submit" className="w-full h-14 bg-cyan-500 text-lg" disabled={isProcessing}>{isProcessing ? "Processing..." : `Complete Payment`}</Button>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">First Name</Label>
+                <Input
+                  placeholder="First Name"
+                  value={formData.firstName}
+                  onChange={e => setFormData({ ...formData, firstName: e.target.value })}
+                  className="bg-slate-950 h-11 border-white/10"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Last Name</Label>
+                <Input
+                  placeholder="Last Name"
+                  value={formData.lastName}
+                  onChange={e => setFormData({ ...formData, lastName: e.target.value })}
+                  className="bg-slate-950 h-11 border-white/10"
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Mobile Number</Label>
+              <Input
+                placeholder="Mobile"
+                value={formData.mobile}
+                onChange={e => setFormData({ ...formData, mobile: e.target.value })}
+                className="bg-slate-950 h-11 border-white/10"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full h-14 bg-cyan-500 hover:bg-cyan-400 text-white text-lg font-bold shadow-lg shadow-cyan-500/20 transition-all" disabled={isProcessing}>
+              {isProcessing ? <Loader2 className="animate-spin" /> : `Complete Payment`}
+            </Button>
           </form>
         </div>
       </div>
