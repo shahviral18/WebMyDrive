@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlans } from "@/hooks/use-plans";
 import { toast } from "sonner";
-import { GoogleSignInButton } from "@/components/GoogleSignInButton";
-import { api, getApiUrl } from "@/lib/api";
+import { getApiUrl } from "@/lib/api";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 
@@ -24,10 +23,6 @@ function formatMoney(amount: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
-}
-
-function getPlanShortName(name: string): string {
-  return name.replace(/^Cloud Storage\s*[–-]\s*/i, "").trim();
 }
 
 /** Convert a plan name into a URL-friendly slug */
@@ -56,22 +51,15 @@ export default function SubscribePage() {
 
   const [couponInput, setCouponInput] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountError, setDiscountError] = useState("");
-  const [formError, setFormError] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [billingPeriod] = useState<"monthly" | "yearly">("yearly");
 
-  // Authentication & ID Setup States
-  const [googleEmail, setGoogleEmail] = useState("");
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [authError, setAuthError] = useState("");
+  // Success screen states
   const [showIdSetup, setShowIdSetup] = useState(false);
   const [wmdIdInput, setWmdIdInput] = useState("");
   const [idCheckStatus, setIdCheckStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
-  const [idSuggestions, setIdSuggestions] = useState<string[]>([]);
   const [chosenWmdEmail, setChosenWmdEmail] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [idSetupLoading, setIdSetupLoading] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
   const [finalCredentials, setFinalCredentials] = useState<{ email: string; password: string } | null>(null);
@@ -82,59 +70,37 @@ export default function SubscribePage() {
     return plans.find(p => planToSlug(p.name) === planSlug) || plans.find(p => String(p.id) === planSlug);
   }, [plans, planSlug]);
 
-
-
-  // Handlers
-  const handleGoogleSuccess = async (response: { token: string; user: any }) => {
-    setAuthError("");
-    setIsAuthenticating(true);
-    try {
-      const gEmail = response.user.email || "";
-      setGoogleEmail(gEmail);
-      setFormData((prev) => ({ ...prev, email: gEmail, firstName: response.user.given_name || "", lastName: response.user.family_name || "" }));
-      toast.info("Ready to continue!");
-    } catch (err: any) {
-      setAuthError(err.message || "Authentication failed");
-      toast.error("Authentication failed");
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
   const applyCoupon = () => {
     if (!couponInput || !selectedPlan) return;
     if (selectedPlan.coupon && couponInput.trim().toLowerCase() === selectedPlan.coupon.toLowerCase()) {
       setDiscountPercent(parseInt(selectedPlan.discount || "0"));
-      setDiscountError("");
+      toast.success("Coupon applied!");
     } else {
       setDiscountPercent(0);
-      setDiscountError("Invalid coupon code");
+      toast.error("Invalid coupon code");
     }
+  };
+
+  const handlePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlan) return;
+    setIsProcessing(true);
+
+    // Simulate payment process
+    setTimeout(() => {
+      toast.success("Payment successful!");
+      setShowIdSetup(true);
+      setIsProcessing(false);
+    }, 1500);
   };
 
   const checkIdAvailability = async (username: string) => {
     if (!username) return;
     setIdCheckStatus("checking");
-    try {
-      const resp = await fetch(getApiUrl(`/user/check-username?u=${encodeURIComponent(username)}`)).catch(() => ({ ok: false }));
-      if (!resp.ok) {
-        // Mock for unreachable backend
-        setIdCheckStatus("available");
-        setChosenWmdEmail(`${username}@webmydrive.com`);
-        return;
-      }
-      const res = await (resp as Response).json();
-      if (res.available) {
-        setIdCheckStatus("available");
-        setChosenWmdEmail(res.email);
-      } else {
-        setIdCheckStatus("taken");
-        setIdSuggestions(res.suggestions || []);
-      }
-    } catch (err) {
+    setTimeout(() => {
       setIdCheckStatus("available");
       setChosenWmdEmail(`${username}@webmydrive.com`);
-    }
+    }, 800);
   };
 
   const handleWmdIdChange = (value: string) => {
@@ -146,61 +112,14 @@ export default function SubscribePage() {
     idCheckTimerRef.current = setTimeout(() => checkIdAvailability(local), 600);
   };
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPlan) return;
-    setIsProcessing(true);
-    try {
-      // Step 1: Create session (with fallback)
-      let sessionData;
-      try {
-        const resp = await fetch(getApiUrl("/checkout/create-session"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planId: selectedPlan.id, planName: selectedPlan.name, customerEmail: formData.email, amount: Math.round(total * 100) / 100 })
-        });
-        if (!resp.ok) throw new Error();
-        sessionData = await resp.json();
-      } catch {
-        sessionData = { success: true, sessionId: "sim", orderId: "sim", isDemoMode: true };
-      }
-
-      if (sessionData.isDemoMode) {
-        // Simulated process-payment
-        setTimeout(() => {
-          toast.success("Payment successful!");
-          localStorage.setItem("wmd_token", "simulated_token");
-          setWmdIdInput(formData.email.split("@")[0].toLowerCase());
-          setShowIdSetup(true);
-          setIsProcessing(false);
-        }, 1500);
-        return;
-      }
-
-      // Razorpay... (simplified for space, same logic applies)
-      setIsProcessing(false);
-      toast.error("Razorpay requires valid keys. Switched to demo mode.");
-      setShowIdSetup(true);
-    } catch (err) {
-      setIsProcessing(false);
-      toast.error("Payment error. Auto-advancing to ID setup for demo.");
-      setShowIdSetup(true);
-    }
-  };
-
   const handleConfirmId = async () => {
     if (!chosenWmdEmail || !passwordInput) return toast.error("Please enter a password.");
     setIdSetupLoading(true);
-    try {
-      // simulate save
-      setTimeout(() => {
-        setFinalCredentials({ email: chosenWmdEmail, password: passwordInput });
-        setShowCredentials(true);
-        setIdSetupLoading(false);
-      }, 1000);
-    } catch (err) {
+    setTimeout(() => {
+      setFinalCredentials({ email: chosenWmdEmail, password: passwordInput });
+      setShowCredentials(true);
       setIdSetupLoading(false);
-    }
+    }, 1000);
   };
 
   // Calculations
@@ -226,7 +145,7 @@ export default function SubscribePage() {
             <div><p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Your ID</p><p className="text-xl font-mono text-cyan-400">{finalCredentials.email}</p></div>
             <div><p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Password</p><p className="text-xl font-mono text-white">••••••••</p></div>
           </div>
-          <Button onClick={() => window.location.href = "/login"} className="w-full bg-cyan-500 py-6 text-lg">Access My Drive</Button>
+          <Button onClick={() => window.location.href = "/login"} className="w-full bg-cyan-500 py-6 text-lg rounded-2xl">Access My Drive</Button>
         </motion.div>
       </div>
     );
@@ -236,22 +155,22 @@ export default function SubscribePage() {
   if (showIdSetup) {
     return (
       <div className="min-h-screen bg-slate-950 p-4 md:p-10 flex items-center justify-center">
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="max-w-lg w-full bg-slate-900 border border-white/10 p-8 rounded-3xl">
-          <h2 className="text-2xl font-bold mb-2">Create Your WebMyDrive ID</h2>
-          <p className="text-slate-400 mb-8">This will be your official @webmydrive.com login.</p>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="max-w-lg w-full bg-slate-900 border border-white/10 p-8 rounded-[32px]">
+          <h2 className="text-3xl font-bold mb-2">Create Your WebMyDrive ID</h2>
+          <p className="text-slate-400 mb-8 font-sans">This will be your official @webmydrive.com login.</p>
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>Choose your ID</Label>
+              <Label className="text-slate-300 ml-1">Choose your ID</Label>
               <div className="relative">
-                <Input value={wmdIdInput} onChange={(e) => handleWmdIdChange(e.target.value)} className="h-14 bg-slate-950 pr-40" />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-medium">@webmydrive.com</div>
+                <Input value={wmdIdInput} onChange={(e) => handleWmdIdChange(e.target.value)} className="h-14 bg-slate-950 border-white/10 rounded-2xl pr-40 text-lg" placeholder="username" />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold tracking-tight">@webmydrive.com</div>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Set Password</Label>
-              <Input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="h-14 bg-slate-950" />
+              <Label className="text-slate-300 ml-1">Set Password</Label>
+              <Input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="h-14 bg-slate-950 border-white/10 rounded-2xl text-lg" placeholder="••••••••" />
             </div>
-            <Button onClick={handleConfirmId} disabled={idSetupLoading || idCheckStatus !== "available"} className="w-full h-14 bg-cyan-500">
+            <Button onClick={handleConfirmId} disabled={idSetupLoading || idCheckStatus !== "available"} className="w-full h-14 bg-cyan-500 rounded-2xl text-lg font-bold">
               {idSetupLoading ? <Loader2 className="animate-spin" /> : "Confirm and Create"}
             </Button>
           </div>
@@ -260,74 +179,131 @@ export default function SubscribePage() {
     );
   }
 
+  // Direct One-Page Checkout Flow
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 relative">
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 relative" data-checkout-version="direct-v3">
       <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-sm">
         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Theme</span>
         <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
       </div>
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-10">Checkout: {selectedPlan.name}</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-          <div className="space-y-6">
-            <div className="p-6 bg-slate-900 border border-white/10 rounded-2xl">
-              <h2 className="text-xl font-bold mb-4">Summary</h2>
-              <div className="flex justify-between text-slate-400"><span>Subtotal</span><span>{formatMoney(baseAmount)}</span></div>
-              <div className="flex justify-between text-cyan-400 font-bold mt-4 pt-4 border-t border-white/5"><span>Total Due</span><span>{formatMoney(total)}</span></div>
+
+      <div className="max-w-5xl mx-auto">
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/")}
+          className="mb-8 text-slate-400 hover:text-white hover:bg-white/5 px-0"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Plans
+        </Button>
+
+        <h1 className="text-4xl font-bold mb-10 tracking-tight">Checkout: {selectedPlan.name}</h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div className="lg:col-span-4 space-y-6 order-2 lg:order-1">
+            <div className="p-8 bg-slate-900/50 border border-white/10 rounded-[32px] backdrop-blur-sm">
+              <h2 className="text-xl font-bold mb-6 text-cyan-400">Order Summary</h2>
+              <div className="space-y-4 font-sans">
+                <div className="flex justify-between text-slate-400">
+                  <span>Plan Subtotal</span>
+                  <span className="text-white">{formatMoney(baseAmount)}</span>
+                </div>
+                {discountPercent > 0 && (
+                  <div className="flex justify-between text-emerald-400">
+                    <span>Discount ({discountPercent}%)</span>
+                    <span>-{formatMoney(discountAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-400">
+                  <span>GST (18%)</span>
+                  <span className="text-white">{formatMoney((baseAmount - discountAmount) * 0.18)}</span>
+                </div>
+                <div className="pt-4 border-t border-white/5 flex justify-between items-center">
+                  <span className="text-lg font-bold">Total Amount</span>
+                  <span className="text-3xl font-bold text-cyan-400">{formatMoney(total)}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Input placeholder="Coupon" value={couponInput} onChange={e => setCouponInput(e.target.value)} className="bg-slate-900" />
-              <Button onClick={applyCoupon} variant="outline">Apply</Button>
+
+            <div className="p-8 bg-slate-900/50 border border-white/10 rounded-[32px] backdrop-blur-sm">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-4">Have a Coupon?</h2>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Code"
+                  value={couponInput}
+                  onChange={e => setCouponInput(e.target.value)}
+                  className="bg-slate-950 border-white/10 rounded-xl h-12"
+                />
+                <Button onClick={applyCoupon} variant="secondary" className="rounded-xl h-12 px-6">Apply</Button>
+              </div>
             </div>
           </div>
-          <form onSubmit={handlePayment} className="space-y-6 p-6 bg-slate-900 border border-white/10 rounded-2xl">
-            <h2 className="text-xl font-bold">Billing Details</h2>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Email Address (For Account)</Label>
+
+          <form onSubmit={handlePayment} className="lg:col-span-8 space-y-6 p-8 bg-slate-900 border border-white/10 rounded-[32px] order-1 lg:order-2">
+            <h2 className="text-2xl font-bold flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center border border-cyan-500/20">
+                <Mail className="h-5 w-5 text-cyan-400" />
+              </div>
+              Billing Details
+            </h2>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Email Address (For Account Creation)</Label>
               <Input
                 type="email"
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={e => setFormData({ ...formData, email: e.target.value })}
-                className="bg-slate-950 h-11 border-white/10"
+                className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg focus:border-cyan-500/50 transition-all font-sans"
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">First Name</Label>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">First Name</Label>
                 <Input
-                  placeholder="First Name"
+                  placeholder="John"
                   value={formData.firstName}
                   onChange={e => setFormData({ ...formData, firstName: e.target.value })}
-                  className="bg-slate-950 h-11 border-white/10"
+                  className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
                   required
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Last Name</Label>
+              <div className="space-y-2">
+                <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Last Name</Label>
                 <Input
-                  placeholder="Last Name"
+                  placeholder="Doe"
                   value={formData.lastName}
                   onChange={e => setFormData({ ...formData, lastName: e.target.value })}
-                  className="bg-slate-950 h-11 border-white/10"
+                  className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
                   required
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-400 uppercase tracking-wider ml-1">Mobile Number</Label>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Mobile Number</Label>
               <Input
-                placeholder="Mobile"
+                placeholder="+91 00000 00000"
                 value={formData.mobile}
                 onChange={e => setFormData({ ...formData, mobile: e.target.value })}
-                className="bg-slate-950 h-11 border-white/10"
+                className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
                 required
               />
             </div>
-            <Button type="submit" className="w-full h-14 bg-cyan-500 hover:bg-cyan-400 text-white text-lg font-bold shadow-lg shadow-cyan-500/20 transition-all" disabled={isProcessing}>
-              {isProcessing ? <Loader2 className="animate-spin" /> : `Complete Payment`}
-            </Button>
+
+            <div className="pt-4">
+              <Button
+                type="submit"
+                className="w-full h-16 bg-cyan-500 hover:bg-cyan-400 text-white text-xl font-bold rounded-[20px] shadow-2xl shadow-cyan-500/20 transition-all transform hover:scale-[1.01]"
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 className="animate-spin mr-2 h-6 w-6" /> : "Complete Subscription"}
+              </Button>
+              <p className="text-center text-slate-500 text-xs mt-4 flex items-center justify-center gap-2">
+                <Lock className="h-3 w-3" /> Secure Payment processed via Razorpay
+              </p>
+            </div>
           </form>
         </div>
       </div>

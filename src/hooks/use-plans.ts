@@ -71,9 +71,11 @@ export function usePlans() {
         const res = await fetch(`${apiUrl}/api/user/plans`);
         if (res.ok) {
           const data = await res.json();
-          let plansArray = (data.plans || data) as any[];
+          let plansArray = Array.isArray(data.plans) ? data.plans : Array.isArray(data) ? data : [];
 
-          console.log("Raw API plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
+          if (plansArray.length > 0) {
+            console.log("Raw API plans:", plansArray.map((p: any) => ({ id: p.id, name: p.name })));
+          }
 
           // Filter to only include TechnoDoc plans (Cloud Storage – *)
           plansArray = plansArray.filter(p => p.name?.includes('Cloud Storage'));
