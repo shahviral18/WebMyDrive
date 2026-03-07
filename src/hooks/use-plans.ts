@@ -77,14 +77,20 @@ export function usePlans() {
             console.log("Raw API plans:", plansArray.map((p: any) => ({ id: p.id, name: p.name })));
           }
 
-          // Filter to only include TechnoDoc plans (Cloud Storage – *)
-          plansArray = plansArray.filter(p => p.name?.includes('Cloud Storage'));
+          // Filter to only include Cloud Storage plans (if they exist with that naming)
+          const filteredByName = plansArray.filter(p => p.name?.includes('Cloud Storage'));
 
-          console.log("Filtered plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
+          // If we found Cloud Storage plans, use them; otherwise use all plans
+          if (filteredByName.length > 0) {
+            plansArray = filteredByName;
+            console.log("Using Cloud Storage filtered plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
+          } else {
+            console.log("No 'Cloud Storage' named plans found, using all plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
+          }
 
-          // If no plans found after filtering, use fallback
+          // If still no plans found, use fallback
           if (plansArray.length === 0) {
-            console.log("No Cloud Storage plans found, using fallback plans");
+            console.log("No plans found, using fallback plans");
             return fallbackPlans;
           }
 

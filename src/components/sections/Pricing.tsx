@@ -116,7 +116,7 @@ export function Pricing() {
           <p className="text-sm text-slate-500 mb-8">Save up to 40% with annual billing</p>
         </div>
 
-        {error ? (
+        {error || !plans || plans.length === 0 ? (
           <div className="text-center p-10 bg-white rounded-3xl shadow-xl">
             <p className="text-destructive font-semibold text-lg">Unable to load pricing plans.</p>
             <Button
