@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock, AtSign, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, Lock, AtSign, CheckCircle2, XCircle, Loader2, Mail } from "lucide-react";
 import { useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
@@ -261,14 +261,59 @@ export default function SubscribePage() {
   }
 
   // Default Checkout Form
+  // Local Email Step for Purchase
   if (!googleEmail) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-white">
-        <div className="max-w-md w-full p-8 border border-white/10 rounded-3xl bg-slate-900">
-          <h1 className="text-2xl font-bold mb-8 text-center">Sign in to Purchase</h1>
-          <GoogleSignInButton onSuccess={handleGoogleSuccess} />
-          <Button variant="ghost" onClick={() => navigate("/")} className="w-full mt-4 text-slate-500">Cancel</Button>
-        </div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-white font-sans">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-md w-full p-8 border border-white/10 rounded-[32px] bg-slate-900 shadow-2xl"
+        >
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mb-6 border border-cyan-500/20">
+              <Mail className="w-8 h-8 text-cyan-400" />
+            </div>
+            <h1 className="text-3xl font-bold text-center tracking-tight">Sign in to Purchase</h1>
+            <p className="text-slate-400 text-sm mt-2 text-center">Enter your email to continue with your subscription.</p>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const emailVal = (e.currentTarget.elements.namedItem("p-email") as HTMLInputElement).value;
+              if (emailVal && emailVal.includes("@")) {
+                handleGoogleSuccess({ token: "local", user: { email: emailVal } });
+              } else {
+                toast.error("Please enter a valid email address");
+              }
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="p-email" className="text-slate-300 ml-1">Email Address</Label>
+              <Input
+                id="p-email"
+                name="p-email"
+                type="email"
+                placeholder="you@example.com"
+                className="h-14 bg-slate-950 border-white/10 focus:border-cyan-500/50 rounded-2xl"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full h-14 bg-cyan-500 hover:bg-cyan-400 text-white font-bold rounded-2xl shadow-lg shadow-cyan-500/20 transition-all hover:scale-[1.02]">
+              Continue to Billing
+            </Button>
+          </form>
+
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/")}
+            className="w-full mt-4 text-slate-500 hover:text-slate-300 hover:bg-white/5 rounded-xl"
+          >
+            Cancel
+          </Button>
+        </motion.div>
       </div>
     );
   }

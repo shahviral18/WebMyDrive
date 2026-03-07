@@ -113,28 +113,9 @@ export default function AdminLogin() {
             )}
           </AnimatePresence>
 
-          {/* Login form */}
-          <div className="space-y-4">
-            {/* Google Sign In */}
-            <GoogleSignInButton
-              label="Continue with Google"
-              onSuccess={({ token, user }) => {
-                const role = user?.role;
-                if (role !== "ADMIN" && role !== "SUPERADMIN") {
-                  setError("Access denied. Admin role required.");
-                  return;
-                }
-                sessionStorage.setItem("wmd_token", token);
-                sessionStorage.setItem("wmd_admin_auth", "true");
-                window.location.href = "/admin/dashboard";
-              }}
-              onError={(msg) => setError(msg)}
-            />
-
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-border/50" />
-              <span className="text-xs text-muted-foreground font-medium">or sign in with email</span>
-              <div className="flex-1 h-px bg-border/50" />
+          <div className="space-y-4 mb-4">
+            <div className="text-center">
+              <span className="text-xs text-muted-foreground font-bold uppercase tracking-[0.2em]">Super Admin Access</span>
             </div>
           </div>
 

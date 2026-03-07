@@ -225,20 +225,8 @@ export default function Login() {
                     {mode === "login" ? (
                         <form onSubmit={handleLogin} className="space-y-4">
 
-                            {/* Google Sign In */}
-                            <GoogleSignInButton
-                                label="Continue with Google"
-                                onSuccess={({ token, user }) => {
-                                    const role: string = user?.role || "";
-                                    finishLoginProcessing(token, user, role);
-                                }}
-                                onError={(msg) => { setError(msg); triggerShake(); }}
-                            />
-
-                            <div className="flex items-center gap-3 my-2">
-                                <div className="flex-1 h-px bg-border/50" />
-                                <span className="text-xs text-muted-foreground font-medium">or sign in with email</span>
-                                <div className="flex-1 h-px bg-border/50" />
+                            <div className="text-center pb-2">
+                                <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Secure Access</span>
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="email" className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Email</Label>
