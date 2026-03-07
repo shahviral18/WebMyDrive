@@ -67,11 +67,26 @@ export default function SubscribePage() {
   const [showSuccess, setShowSuccess] = useState(false);
 
   const selectedPlan = useMemo(() => {
-    if (!plans) return null;
+    if (!plans || plans.length === 0) {
+      console.warn("No plans available for matching");
+      return null;
+    }
+
     // Try to find by ID first (most reliable), then fallback to slug matching
     const byId = plans.find(p => String(p.id) === planSlug);
-    if (byId) return byId;
-    return plans.find(p => planToSlug(p.name) === planSlug);
+    if (byId) {
+      console.log("Plan matched by ID:", byId);
+      return byId;
+    }
+
+    const bySlug = plans.find(p => planToSlug(p.name) === planSlug);
+    if (bySlug) {
+      console.log("Plan matched by slug:", bySlug);
+      return bySlug;
+    }
+
+    console.warn(`No plan found for planSlug="${planSlug}". Available plans:`, plans.map(p => ({ id: p.id, name: p.name, slug: planToSlug(p.name) })));
+    return null;
   }, [plans, planSlug]);
 
   const applyCoupon = (e: React.MouseEvent) => {
@@ -180,8 +195,15 @@ export default function SubscribePage() {
   const sgst = taxableAmount * 0.09;
   const total = taxableAmount + cgst + sgst;
 
-  if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading...</div>;
-  if (!selectedPlan) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Plan not found</div>;
+  if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading plans...</div>;
+  if (!selectedPlan) {
+    console.error("Subscribe page error: selectedPlan is null. planSlug:", planSlug, "plans:", plans);
+    return <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col gap-4">
+      <div>Plan not found</div>
+      <div className="text-sm text-slate-500">planSlug: {planSlug}</div>
+      {plans && <div className="text-xs text-slate-400">Available plans: {plans.map(p => p.id).join(", ")}</div>}
+    </div>;
+  }
 
   return (
     <div className={cn("min-h-screen bg-[#f8fbff] pb-20 font-sans", isDark && "bg-slate-950")}>

@@ -82,6 +82,12 @@ export function usePlans() {
 
           console.log("Filtered plans:", plansArray.map(p => ({ id: p.id, name: p.name })));
 
+          // If no plans found after filtering, use fallback
+          if (plansArray.length === 0) {
+            console.log("No Cloud Storage plans found, using fallback plans");
+            return fallbackPlans;
+          }
+
           // Transform API response to frontend format
           const transformed = plansArray.map((plan: any) => {
             // Parse features array if it exists
