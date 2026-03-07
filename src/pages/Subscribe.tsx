@@ -68,7 +68,10 @@ export default function SubscribePage() {
 
   const selectedPlan = useMemo(() => {
     if (!plans) return null;
-    return plans.find(p => planToSlug(p.name) === planSlug) || plans.find(p => String(p.id) === planSlug);
+    // Try to find by ID first (most reliable), then fallback to slug matching
+    const byId = plans.find(p => String(p.id) === planSlug);
+    if (byId) return byId;
+    return plans.find(p => planToSlug(p.name) === planSlug);
   }, [plans, planSlug]);
 
   const applyCoupon = (e: React.MouseEvent) => {

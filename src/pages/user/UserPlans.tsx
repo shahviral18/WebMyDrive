@@ -499,9 +499,8 @@ export default function UserPlans() {
     };
 
     const handlePurchase = (plan: Plan) => {
-        // Navigate directly to checkout page - authentication handled there if needed
-        const planSlug = plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        navigate(`/subscribe/${planSlug}`);
+        // Navigate directly to checkout page using plan ID for reliable matching
+        navigate(`/subscribe/${plan.id}`);
     };
 
     const handleSetupPassword = async () => {
