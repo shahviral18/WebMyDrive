@@ -499,28 +499,9 @@ export default function UserPlans() {
     };
 
     const handlePurchase = (plan: Plan) => {
-        // Check for a token in storage — user may already be logged in even if
-        // the context hasn't finished hydrating yet (isLoadingAuth = true).
-        const token = localStorage.getItem("wmd_token") || sessionStorage.getItem("wmd_token");
-
-        if (isLoadingAuth && token) {
-            // Auth is still hydrating but we know a token exists → wait a moment then retry
-            toast.loading("Checking your session…", { id: "auth-check" });
-            setTimeout(() => {
-                toast.dismiss("auth-check");
-                proceedToPayment(plan);
-            }, 1200);
-            return;
-        }
-
-        if (!token && !user?.email) {
-            // Genuinely not logged in → show signup dialog
-            setAuthRequiredForPlan(plan);
-            setAuthStep(1);
-            return;
-        }
-
-        proceedToPayment(plan);
+        // Navigate directly to checkout page - authentication handled there if needed
+        const planSlug = plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        navigate(`/subscribe/${planSlug}`);
     };
 
     const handleSetupPassword = async () => {

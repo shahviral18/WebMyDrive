@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock, Mail, Check, CreditCard, ShoppingCart, Truck, MapPin } from "lucide-react";
+import { ArrowLeft, Lock, Mail, Check, CreditCard, ShoppingCart, Truck, MapPin, Loader2 } from "lucide-react";
 import { useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -87,12 +88,85 @@ export default function SubscribePage() {
     if (!selectedPlan) return;
     setIsProcessing(true);
 
-    // Simulate payment process
-    setTimeout(() => {
+    try {
+      // Create checkout session
+      const sessionData = await api.post("/referral/create-checkout", {
+        planId: selectedPlan.id,
+        promoCode: couponInput || undefined,
+        billingPeriod: "monthly",
+        customerEmail: formData.email,
+        customerName: `${formData.firstName} ${formData.lastName}`,
+        customerPhone: formData.mobile,
+        billingAddress: {
+          country: formData.billing.country,
+          state: formData.billing.state,
+          city: formData.billing.city,
+          address: formData.billing.address,
+          zipCode: formData.billing.zipCode,
+        },
+        shippingAddress: formData.sameAsBilling ? undefined : {
+          country: formData.shipping.country,
+          state: formData.shipping.state,
+          city: formData.shipping.city,
+          address: formData.shipping.address,
+          zipCode: formData.shipping.zipCode,
+        },
+      });
+
+      if (!sessionData.success) {
+        toast.error(sessionData.error || "Failed to create checkout session");
+        setIsProcessing(false);
+        return;
+      }
+
+      // Load Razorpay script and open payment gateway
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => {
+        const rzp = new (window as any).Razorpay({
+          key: sessionData.razorpayKeyId,
+          amount: sessionData.amount * 100,
+          currency: "INR",
+          name: "WebMyDrive",
+          description: selectedPlan.name,
+          order_id: sessionData.rzpOrderId,
+          theme: { color: "#1fb6ff" },
+          handler: async function (response: any) {
+            try {
+              toast.loading("Verifying payment…", { id: "pay-verify" });
+              const verifyData = await api.post("/referral/verify-payment", {
+                orderId: sessionData.orderId,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              toast.dismiss("pay-verify");
+              if (verifyData.success) {
+                toast.success(`🎉 Payment successful!`);
+                setShowSuccess(true);
+              } else {
+                toast.error(verifyData.error || "Payment verification failed");
+              }
+            } catch (err: any) {
+              toast.error(err.message || "Payment verification failed");
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setIsProcessing(false);
+            }
+          }
+        });
+        rzp.open();
+      };
+      document.body.appendChild(script);
+    } catch (err: any) {
+      toast.error(err.message || "Payment failed");
       setIsProcessing(false);
-      setShowSuccess(true);
-      toast.success("Redirecting to payment gateway...");
-    }, 1500);
+    }
   };
 
   // Calculations
