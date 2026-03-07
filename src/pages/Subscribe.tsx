@@ -1,4 +1,4 @@
-import { ArrowLeft, Lock, AtSign, CheckCircle2, XCircle, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, Lock, Mail, Check, CreditCard, ShoppingCart, Truck, MapPin } from "lucide-react";
 import { useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePlans } from "@/hooks/use-plans";
 import { toast } from "sonner";
-import { getApiUrl } from "@/lib/api";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { cn } from "@/lib/utils";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -40,273 +40,372 @@ export default function SubscribePage() {
     firstName: "",
     lastName: "",
     email: "",
-    company: "",
+    companyName: "",
     mobile: "",
-    country: "India",
-    state: "Gujarat",
-    city: "",
-    address: "",
-    zipCode: "",
+    gstNumber: "",
+    billing: {
+      country: "India",
+      state: "Gujarat",
+      city: "",
+      address: "",
+      zipCode: "",
+    },
+    shipping: {
+      country: "India",
+      state: "Gujarat",
+      city: "",
+      address: "",
+      zipCode: "",
+    },
+    sameAsBilling: true
   });
 
   const [couponInput, setCouponInput] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [billingPeriod] = useState<"monthly" | "yearly">("yearly");
-
-  // Success screen states
-  const [showIdSetup, setShowIdSetup] = useState(false);
-  const [wmdIdInput, setWmdIdInput] = useState("");
-  const [idCheckStatus, setIdCheckStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
-  const [chosenWmdEmail, setChosenWmdEmail] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [idSetupLoading, setIdSetupLoading] = useState(false);
-  const [showCredentials, setShowCredentials] = useState(false);
-  const [finalCredentials, setFinalCredentials] = useState<{ email: string; password: string } | null>(null);
-  const idCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const selectedPlan = useMemo(() => {
     if (!plans) return null;
     return plans.find(p => planToSlug(p.name) === planSlug) || plans.find(p => String(p.id) === planSlug);
   }, [plans, planSlug]);
 
-  const applyCoupon = () => {
+  const applyCoupon = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (!couponInput || !selectedPlan) return;
     if (selectedPlan.coupon && couponInput.trim().toLowerCase() === selectedPlan.coupon.toLowerCase()) {
-      setDiscountPercent(parseInt(selectedPlan.discount || "0"));
-      toast.success("Coupon applied!");
+      setDiscountPercent(parseInt(selectedPlan.discount || "5"));
+      toast.success("Coupon applied successfully!");
     } else {
       setDiscountPercent(0);
       toast.error("Invalid coupon code");
     }
   };
 
-  const handlePayment = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPlan) return;
     setIsProcessing(true);
 
     // Simulate payment process
     setTimeout(() => {
-      toast.success("Payment successful!");
-      setShowIdSetup(true);
       setIsProcessing(false);
+      setShowSuccess(true);
+      toast.success("Redirecting to payment gateway...");
     }, 1500);
   };
 
-  const checkIdAvailability = async (username: string) => {
-    if (!username) return;
-    setIdCheckStatus("checking");
-    setTimeout(() => {
-      setIdCheckStatus("available");
-      setChosenWmdEmail(`${username}@webmydrive.com`);
-    }, 800);
-  };
-
-  const handleWmdIdChange = (value: string) => {
-    const local = value.split("@")[0].toLowerCase().trim();
-    setWmdIdInput(local);
-    setIdCheckStatus("idle");
-    if (idCheckTimerRef.current) clearTimeout(idCheckTimerRef.current);
-    if (!local) return;
-    idCheckTimerRef.current = setTimeout(() => checkIdAvailability(local), 600);
-  };
-
-  const handleConfirmId = async () => {
-    if (!chosenWmdEmail || !passwordInput) return toast.error("Please enter a password.");
-    setIdSetupLoading(true);
-    setTimeout(() => {
-      setFinalCredentials({ email: chosenWmdEmail, password: passwordInput });
-      setShowCredentials(true);
-      setIdSetupLoading(false);
-    }, 1000);
-  };
-
   // Calculations
-  const monthlyAmount = selectedPlan ? (selectedPlan.monthlyPrice || parseAmount(selectedPlan.price)) : 0;
-  const yearlyAmount = selectedPlan ? (selectedPlan.yearlyPrice || monthlyAmount * 12) : 0;
-  const baseAmount = billingPeriod === "monthly" ? monthlyAmount : yearlyAmount;
+  const baseAmount = selectedPlan ? (selectedPlan.monthlyPrice || parseAmount(selectedPlan.price)) : 0;
   const discountAmount = (baseAmount * discountPercent) / 100;
-  const total = baseAmount - discountAmount + (baseAmount - discountAmount) * 0.18;
+  const taxableAmount = baseAmount - discountAmount;
+  const cgst = taxableAmount * 0.09;
+  const sgst = taxableAmount * 0.09;
+  const total = taxableAmount + cgst + sgst;
 
-  if (isLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Loading...</div>;
-  if (!selectedPlan) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Plan not found</div>;
+  if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading...</div>;
+  if (!selectedPlan) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Plan not found</div>;
 
-  // Credential Screen
-  if (showCredentials && finalCredentials) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-slate-900 border border-white/10 p-8 rounded-3xl text-center">
-          <div className="w-16 h-16 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="h-10 w-10" />
-          </div>
-          <h2 className="text-2xl font-bold mb-4">Account Ready!</h2>
-          <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5 mb-8 text-left space-y-4">
-            <div><p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Your ID</p><p className="text-xl font-mono text-cyan-400">{finalCredentials.email}</p></div>
-            <div><p className="text-slate-500 text-xs uppercase tracking-widest mb-1">Password</p><p className="text-xl font-mono text-white">••••••••</p></div>
-          </div>
-          <Button onClick={() => window.location.href = "/login"} className="w-full bg-cyan-500 py-6 text-lg rounded-2xl">Access My Drive</Button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // ID Setup Screen
-  if (showIdSetup) {
-    return (
-      <div className="min-h-screen bg-slate-950 p-4 md:p-10 flex items-center justify-center">
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="max-w-lg w-full bg-slate-900 border border-white/10 p-8 rounded-[32px]">
-          <h2 className="text-3xl font-bold mb-2">Create Your WebMyDrive ID</h2>
-          <p className="text-slate-400 mb-8 font-sans">This will be your official @webmydrive.com login.</p>
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label className="text-slate-300 ml-1">Choose your ID</Label>
-              <div className="relative">
-                <Input value={wmdIdInput} onChange={(e) => handleWmdIdChange(e.target.value)} className="h-14 bg-slate-950 border-white/10 rounded-2xl pr-40 text-lg" placeholder="username" />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold tracking-tight">@webmydrive.com</div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-slate-300 ml-1">Set Password</Label>
-              <Input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="h-14 bg-slate-950 border-white/10 rounded-2xl text-lg" placeholder="••••••••" />
-            </div>
-            <Button onClick={handleConfirmId} disabled={idSetupLoading || idCheckStatus !== "available"} className="w-full h-14 bg-cyan-500 rounded-2xl text-lg font-bold">
-              {idSetupLoading ? <Loader2 className="animate-spin" /> : "Confirm and Create"}
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Direct One-Page Checkout Flow
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 relative" data-checkout-version="direct-v3">
-      <div className="absolute top-6 right-6 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-sm">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Theme</span>
-        <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
+    <div className={cn("min-h-screen bg-[#f8fbff] pb-20 font-sans", isDark && "bg-slate-950")}>
+      {/* Theme Toggle Overlay */}
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} />
       </div>
 
-      <div className="max-w-5xl mx-auto">
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/")}
-          className="mb-8 text-slate-400 hover:text-white hover:bg-white/5 px-0"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Plans
-        </Button>
-
-        <h1 className="text-4xl font-bold mb-10 tracking-tight">Checkout: {selectedPlan.name}</h1>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4 space-y-6 order-2 lg:order-1">
-            <div className="p-8 bg-slate-900/50 border border-white/10 rounded-[32px] backdrop-blur-sm">
-              <h2 className="text-xl font-bold mb-6 text-cyan-400">Order Summary</h2>
-              <div className="space-y-4 font-sans">
-                <div className="flex justify-between text-slate-400">
-                  <span>Plan Subtotal</span>
-                  <span className="text-white">{formatMoney(baseAmount)}</span>
-                </div>
-                {discountPercent > 0 && (
-                  <div className="flex justify-between text-emerald-400">
-                    <span>Discount ({discountPercent}%)</span>
-                    <span>-{formatMoney(discountAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-slate-400">
-                  <span>GST (18%)</span>
-                  <span className="text-white">{formatMoney((baseAmount - discountAmount) * 0.18)}</span>
-                </div>
-                <div className="pt-4 border-t border-white/5 flex justify-between items-center">
-                  <span className="text-lg font-bold">Total Amount</span>
-                  <span className="text-3xl font-bold text-cyan-400">{formatMoney(total)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-8 bg-slate-900/50 border border-white/10 rounded-[32px] backdrop-blur-sm">
-              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-4">Have a Coupon?</h2>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Code"
-                  value={couponInput}
-                  onChange={e => setCouponInput(e.target.value)}
-                  className="bg-slate-950 border-white/10 rounded-xl h-12"
-                />
-                <Button onClick={applyCoupon} variant="secondary" className="rounded-xl h-12 px-6">Apply</Button>
-              </div>
-            </div>
+      <div className="max-w-3xl mx-auto pt-12 px-4">
+        {/* Order Summary Section */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mb-8">
+          <div className="bg-[#4a90e2] text-white px-6 py-3 font-semibold text-lg">
+            Order Summary
           </div>
+          <div className="p-0">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 text-slate-400 text-sm">
+                  <th className="px-6 py-4 font-normal">Item</th>
+                  <th className="px-6 py-4 font-normal text-center">Quantity</th>
+                  <th className="px-6 py-4 font-normal text-right">Price</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-700 font-medium">
+                <tr className="border-b border-slate-50">
+                  <td className="px-6 py-6 italic">{selectedPlan.name}</td>
+                  <td className="px-6 py-6 text-center">1</td>
+                  <td className="px-6 py-6 text-right">{formatMoney(baseAmount)}</td>
+                </tr>
+                <tr className="border-b border-slate-50 text-slate-600 font-normal">
+                  <td colSpan={2} className="px-6 py-4">Subtotal</td>
+                  <td className="px-6 py-4 text-right">{formatMoney(baseAmount)}</td>
+                </tr>
+                {discountPercent > 0 && (
+                  <tr className="border-b border-slate-50 text-emerald-600 font-normal">
+                    <td colSpan={2} className="px-6 py-4">Discount ({discountPercent}%)</td>
+                    <td className="px-6 py-4 text-right">-{formatMoney(discountAmount)}</td>
+                  </tr>
+                )}
+                <tr className="border-b border-slate-50 text-slate-600 font-normal">
+                  <td colSpan={2} className="px-6 py-4">CGST9 (9%)</td>
+                  <td className="px-6 py-4 text-right">{formatMoney(cgst)}</td>
+                </tr>
+                <tr className="border-b border-slate-50 text-slate-600 font-normal">
+                  <td colSpan={2} className="px-6 py-4">SGST9 (9%)</td>
+                  <td className="px-6 py-4 text-right">{formatMoney(sgst)}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={3} className="px-6 py-4 border-b border-dashed border-slate-200">
+                    <div className="flex items-center gap-2 max-w-xs">
+                      <Input
+                        placeholder="Coupon Code"
+                        value={couponInput}
+                        onChange={e => setCouponInput(e.target.value)}
+                        className="h-10 border-slate-200 focus-visible:ring-blue-500 rounded"
+                      />
+                      <button
+                        onClick={applyCoupon}
+                        className="text-blue-500 hover:text-blue-600 text-sm font-semibold transition-colors"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="px-6 py-4 border-b border-dashed border-slate-200">
+                    <div className="max-w-xs">
+                      <Input
+                        placeholder="GST Identification Number"
+                        value={formData.gstNumber}
+                        onChange={e => setFormData({ ...formData, gstNumber: e.target.value })}
+                        className="h-10 border-slate-200 focus-visible:ring-blue-500 rounded"
+                      />
+                    </div>
+                  </td>
+                </tr>
+                <tr className="bg-slate-50/30">
+                  <td colSpan={2} className="px-6 py-6 text-[#4a90e2] font-bold text-lg">Total</td>
+                  <td className="px-6 py-6 text-[#4a90e2] font-bold text-lg text-right">{formatMoney(total)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
 
-          <form onSubmit={handlePayment} className="lg:col-span-8 space-y-6 p-8 bg-slate-900 border border-white/10 rounded-[32px] order-1 lg:order-2">
-            <h2 className="text-2xl font-bold flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center border border-cyan-500/20">
-                <Mail className="h-5 w-5 text-cyan-400" />
-              </div>
-              Billing Details
-            </h2>
-
-            <div className="space-y-2">
-              <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Email Address (For Account Creation)</Label>
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={formData.email}
-                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg focus:border-cyan-500/50 transition-all font-sans"
-                required
-              />
-            </div>
-
+        {/* Form Sections */}
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Account Information */}
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+            <h2 className="text-lg font-bold text-slate-800 mb-6 font-sans">Account Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">First Name</Label>
+              <div className="space-y-1.5">
                 <Input
-                  placeholder="John"
+                  placeholder="First Name"
                   value={formData.firstName}
                   onChange={e => setFormData({ ...formData, firstName: e.target.value })}
-                  className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
+                  className="h-11 border-slate-200 rounded"
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Last Name</Label>
+              <div className="space-y-1.5">
                 <Input
-                  placeholder="Doe"
+                  placeholder="Last Name"
                   value={formData.lastName}
                   onChange={e => setFormData({ ...formData, lastName: e.target.value })}
-                  className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
+                  className="h-11 border-slate-200 rounded"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Input
+                  type="email"
+                  placeholder="Email Address*"
+                  value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="h-11 border-slate-200 rounded"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Input
+                  placeholder="Company Name"
+                  value={formData.companyName}
+                  onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                  className="h-11 border-slate-200 rounded"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <div className="flex gap-2">
+                  <div className="w-24 shrink-0">
+                    <select className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option>+91</option>
+                    </select>
+                  </div>
+                  <Input
+                    placeholder="Mobile*"
+                    value={formData.mobile}
+                    onChange={e => setFormData({ ...formData, mobile: e.target.value })}
+                    className="h-11 border-slate-200 rounded w-full"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Billing Address */}
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+            <h2 className="text-lg font-bold text-slate-800 mb-6">Billing Address</h2>
+            <div className="space-y-6">
+              <select
+                className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formData.billing.country}
+                onChange={e => setFormData({ ...formData, billing: { ...formData.billing, country: e.target.value } })}
+              >
+                <option>India</option>
+                <option>United States</option>
+                <option>Others</option>
+              </select>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <select
+                  className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.billing.state}
+                  onChange={e => setFormData({ ...formData, billing: { ...formData.billing, state: e.target.value } })}
+                >
+                  <option>Gujarat</option>
+                  <option>Maharashtra</option>
+                  <option>Delhi</option>
+                  <option>Others</option>
+                </select>
+                <Input
+                  placeholder="City*"
+                  value={formData.billing.city}
+                  onChange={e => setFormData({ ...formData, billing: { ...formData.billing, city: e.target.value } })}
+                  className="h-11 border-slate-200 rounded"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  placeholder="Address*"
+                  value={formData.billing.address}
+                  onChange={e => setFormData({ ...formData, billing: { ...formData.billing, address: e.target.value } })}
+                  className="h-11 border-slate-200 rounded"
+                  required
+                />
+                <Input
+                  placeholder="ZIP Code*"
+                  value={formData.billing.zipCode}
+                  onChange={e => setFormData({ ...formData, billing: { ...formData.billing, zipCode: e.target.value } })}
+                  className="h-11 border-slate-200 rounded"
                   required
                 />
               </div>
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-slate-400 uppercase tracking-widest ml-1 font-bold">Mobile Number</Label>
-              <Input
-                placeholder="+91 00000 00000"
-                value={formData.mobile}
-                onChange={e => setFormData({ ...formData, mobile: e.target.value })}
-                className="bg-slate-950 h-14 border-white/10 rounded-2xl text-lg font-sans"
-                required
-              />
-            </div>
-
-            <div className="pt-4">
-              <Button
-                type="submit"
-                className="w-full h-16 bg-cyan-500 hover:bg-cyan-400 text-white text-xl font-bold rounded-[20px] shadow-2xl shadow-cyan-500/20 transition-all transform hover:scale-[1.01]"
-                disabled={isProcessing}
+          {/* Shipping Address */}
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-slate-800">Shipping Address</h2>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, sameAsBilling: !formData.sameAsBilling })}
+                className="text-blue-500 text-sm hover:underline"
               >
-                {isProcessing ? <Loader2 className="animate-spin mr-2 h-6 w-6" /> : "Complete Subscription"}
-              </Button>
-              <p className="text-center text-slate-500 text-xs mt-4 flex items-center justify-center gap-2">
-                <Lock className="h-3 w-3" /> Secure Payment processed via Razorpay
-              </p>
+                {formData.sameAsBilling ? "Edit Shipping Address" : "Use Billing Address"}
+              </button>
             </div>
-          </form>
-        </div>
+
+            <AnimatePresence>
+              {!formData.sameAsBilling && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden space-y-6"
+                >
+                  <select
+                    className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.shipping.country}
+                    onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, country: e.target.value } })}
+                  >
+                    <option>India</option>
+                  </select>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <select
+                      className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={formData.shipping.state}
+                      onChange={e => setFormData({ ...formData, shipping: { ...formData.shipping, state: e.target.value } })}
+                    >
+                      <option>Gujarat</option>
+                    </select>
+                    <Input placeholder="City" className="h-11 border-slate-200 rounded" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Input placeholder="Address" className="h-11 border-slate-200 rounded" />
+                    <Input placeholder="ZIP Code" className="h-11 border-slate-200 rounded" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {formData.sameAsBilling && (
+              <p className="text-slate-400 text-sm">Same as billing address.</p>
+            )}
+          </div>
+
+          {/* Action Button */}
+          <div className="flex flex-col items-center gap-6">
+            <Button
+              type="submit"
+              disabled={isProcessing}
+              className="w-full md:w-64 h-12 bg-blue-500 hover:bg-blue-600 text-white font-bold text-lg rounded-md shadow-md shadow-blue-500/10 transition-all hover:scale-[1.02]"
+            >
+              {isProcessing ? "Processing..." : "Proceed to Pay"}
+            </Button>
+
+            <div className="flex flex-col items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-xs">
+                <Lock className="w-3 h-3" />
+                <span>Secured by Razorpay • Zoho Billing System</span>
+              </div>
+              <p className="text-[10px] italic">Powered by WebMyDrive Platform</p>
+            </div>
+          </div>
+        </form>
       </div>
+
+      {/* Success Modal Overlay */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 px-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl"
+            >
+              <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Check className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Almost there!</h3>
+              <p className="text-slate-600 mb-8">We are redirecting you to our secure payment gateway to complete the transaction.</p>
+              <Button onClick={() => window.location.href = "/admin/dashboard"} className="w-full h-12 bg-[#4a90e2] rounded-lg">
+                Continue
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
