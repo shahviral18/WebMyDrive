@@ -693,7 +693,7 @@ class AdminController
         $limit = min(200, (int) ($req->query['limit'] ?? 50));
         $skip = ($page - 1) * $limit;
 
-        $keywords = ['PAYMENT', 'CHECKOUT', 'COMMISSION', 'WALLET', 'ORDER', 'PURCHASE', 'REFERRAL', 'RAZORPAY', 'STRIPE', 'PLAN_PURCHASE', 'BILLING', 'PAYOUT'];
+        $keywords = ['PAYMENT', 'CHECKOUT', 'COMMISSION', 'WALLET', 'ORDER', 'PURCHASE', 'REFERRAL', 'RAZORPAY', 'PLAN_PURCHASE', 'BILLING', 'PAYOUT'];
         $orClauses = implode(' OR ', array_map(fn($k) => "actionName LIKE '%$k%'", $keywords));
 
         $total = (int) Database::scalar("SELECT COUNT(*) FROM \"AuditLog\" WHERE $orClauses");

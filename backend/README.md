@@ -141,7 +141,6 @@ All endpoints are identical to the Node.js backend:
 | GET | `/api/user/*` | 🔒 User (some public) |
 | GET | `/api/referral/*` | 🔒 User (some public) |
 | GET | `/api/distributor/*` | 🔒 Distributor |
-| POST | `/api/payment/webhook/stripe` | Stripe signature |
 | POST | `/api/payment/webhook/razorpay` | Razorpay signature |
 
 ---

@@ -71,7 +71,7 @@ class ConfigService
     public static function getConfig(string $key, array $default): array
     {
         $row = Database::queryOne(
-            'SELECT value FROM "AdminConfig" WHERE key = :key',
+            'SELECT value FROM "AdminConfig" WHERE `key` = :key',
             [':key' => $key]
         );
         if (!$row)
@@ -107,11 +107,11 @@ class ConfigService
         $json = json_encode($value);
         $now = date('Y-m-d H:i:s');
 
-        // SQLite UPSERT
+        // MySQL UPSERT
         Database::execute(
-            'INSERT INTO "AdminConfig" (key, value, updatedAt)
+            'INSERT INTO "AdminConfig" (`key`, value, updatedAt)
              VALUES (:key, :value, :now)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt',
+             ON DUPLICATE KEY UPDATE value = VALUES(value), updatedAt = VALUES(updatedAt)',
             [':key' => $key, ':value' => $json, ':now' => $now]
         );
     }

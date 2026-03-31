@@ -68,7 +68,7 @@ class ReferralLinkService
     public static function markUsed(string $code): void
     {
         Database::execute(
-            'UPDATE "ReferralLink" SET status = \'USED\', usedAt = datetime(\'now\') WHERE code = :code',
+            'UPDATE "ReferralLink" SET status = \'USED\', usedAt = NOW() WHERE code = :code',
             [':code' => $code]
         );
     }

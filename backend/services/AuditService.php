@@ -25,7 +25,7 @@ class AuditService
         try {
             Database::insert(
                 'INSERT INTO "AuditLog" (userId, action, details, ip, createdAt)
-                 VALUES (:userId, :action, :details, :ip, datetime(\'now\'))',
+                 VALUES (:userId, :action, :details, :ip, NOW())',
                 [
                     ':userId' => $actorId,
                     ':action' => $actionName,

@@ -232,12 +232,12 @@ echo "Schema created.\n";
 $existing = $pdo->prepare('SELECT id FROM "User" WHERE email = ?');
 $existing->execute(['admin@webmydrive.com']);
 if (!$existing->fetch()) {
-  $hash = password_hash('Admin2026!', PASSWORD_BCRYPT, ['cost' => 10]);
+  $hash = password_hash('Admin@2026!', PASSWORD_BCRYPT, ['cost' => 10]);
   $pdo->prepare(
     'INSERT INTO "User" (name, email, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, 0, 0, 0, datetime(\'now\'), datetime(\'now\'))'
   )->execute(['Super Admin', 'admin@webmydrive.com', $hash, 'SUPERADMIN', 'ADMIN2026']);
-  echo "Seeded SUPERADMIN: admin@webmydrive.com / Admin2026!\n";
+  echo "Seeded SUPERADMIN: admin@webmydrive.com / Admin@2026!\n";
 } else {
   echo "Admin user already exists, skipping seed.\n";
 }

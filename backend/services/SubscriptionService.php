@@ -169,7 +169,7 @@ class SubscriptionService
              FROM "Subscription" s
              LEFT JOIN "User" u ON s.user_id = u.id
              WHERE s.status = :status 
-             AND (s.end_date IS NULL OR datetime(s.end_date) > datetime("now"))
+             AND (s.end_date IS NULL OR s.end_date > NOW())
              ORDER BY s.created_at DESC
              LIMIT :limit OFFSET :offset',
             [
@@ -188,7 +188,7 @@ class SubscriptionService
         $active = Database::queryOne(
             'SELECT COUNT(*) as count FROM "Subscription" 
              WHERE status = :status 
-             AND (end_date IS NULL OR datetime(end_date) > datetime("now"))',
+             AND (end_date IS NULL OR end_date > NOW())',
             [':status' => 'active']
         );
 

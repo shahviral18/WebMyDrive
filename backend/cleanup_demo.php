@@ -1,47 +1,34 @@
 <?php
-try {
-    $dbPath = __DIR__ . '/database/dev.db';
-    $db = new PDO("sqlite:$dbPath");
-    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+/**
+ * cleanup_demo.php — Reset demo MySQL database to clean state.
+ * Preserves admin user, plans, and config. Clears all transactional data.
+ *
+ * Usage: php backend/cleanup_demo.php
+ */
 
-    $tablesToClear = [
-        'AuditLog',
-        'ReferralLog',
-        'ReferralLink',
-        'DistributorWalletTx',
-        'DistributorSale',
-        'Distributor',
-        'CheckoutSession',
-        'Subscription',
-        'Order',
-        'Workspace',
-        'SecurityLink'
-    ];
+declare(strict_types=1);
 
-    foreach ($tablesToClear as $table) {
-        try {
-            $db->exec("DELETE FROM \"$table\"");
-            echo "Cleared $table\n";
-        } catch (Exception $e) {
-            echo "Error clearing $table: " . $e->getMessage() . "\n";
-        }
-    }
+require __DIR__ . '/config/env.php';
+require __DIR__ . '/config/database.php';
 
-    // Delete users except admin
-    $db->prepare('DELETE FROM "User" WHERE email != ?')->execute(['admin@webmydrive.com']);
-    echo "Cleared Users except admin\n";
+header('Content-Type: text/plain; charset=utf-8');
 
-    // Show plans
-    echo "\n--- PLANS REMAINING ---\n";
-    $plans = $db->query("SELECT id, name FROM Plan")->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($plans as $p) {
-        echo "ID: {$p['id']} | Name: {$p['name']}\n";
-    }
+echo "=== Cleanup Demo Data ===\n\n";
 
-    // Reset sequences
-    $db->exec("DELETE FROM sqlite_sequence");
-    echo "Reset sequences\n";
+$tables = [
+    'AuditLog', 'ReferralLog', 'ReferralLink', 'DistributorWalletTx',
+    'DistributorSale', 'Distributor', 'CheckoutSession', 'Subscription',
+    'Order', 'Workspace', 'SecurityLink',
+];
 
-} catch (Exception $e) {
-    echo "Critical Error: " . $e->getMessage();
+foreach ($tables as $t) {
+    $count = Database::count("\"$t\"");
+    Database::execute("DELETE FROM \"$t\"");
+    echo "Cleared $t ($count rows)\n";
 }
+
+// Delete all users except admin
+$count = Database::execute('DELETE FROM "User" WHERE email != :e', [':e' => 'admin@webmydrive.com']);
+echo "Deleted $count non-admin users\n";
+
+echo "\nDone. Run mysql-seed.php to re-create demo accounts.\n";
