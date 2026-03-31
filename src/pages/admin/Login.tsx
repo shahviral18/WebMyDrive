@@ -33,12 +33,16 @@ export default function AdminLogin() {
     try {
       const data = await api.post("/auth/login", { email, password });
 
+      if (!data.success && !data.token) {
+          throw new Error(data.message || "Invalid credentials");
+      }
+
       const role = data.user?.role;
       if (role !== "ADMIN" && role !== "SUPERADMIN") {
         throw new Error("Access denied. Admin role required.");
       }
 
-      sessionStorage.setItem("wmd_token", data.token);
+      sessionStorage.setItem("token", data.token);
       sessionStorage.setItem("wmd_admin_auth", "true");
 
       const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -91,9 +95,9 @@ export default function AdminLogin() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-4 glow-primary"
+              className="inline-flex items-center justify-center mb-4"
             >
-              <Shield className="w-7 h-7 text-primary" />
+              <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="WebMyDrive" className="w-16 h-16 object-contain" />
             </motion.div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">Admin Login</h1>
             <p className="text-muted-foreground text-sm mt-1">WebMyDrive · Super-admin access</p>

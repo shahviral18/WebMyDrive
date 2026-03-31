@@ -73,7 +73,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Full refresh from /auth/me — call this after payments, referrals, etc.
     const refreshUser = useCallback(async () => {
-        const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
+        const token = sessionStorage.getItem("token") || localStorage.getItem("token");
         if (!token) return;
         try {
             const data = await api.get("/auth/me");
@@ -85,7 +85,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // Hydrate on mount
     useEffect(() => {
-        const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
+        const token = sessionStorage.getItem("token") || localStorage.getItem("token");
         if (!token) {
             setIsLoadingAuth(false);
             return;
@@ -99,9 +99,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     applyMeResponse({
                         user: { id: 999999, email: demoEmail, name: demoEmail.split("@")[0], role: "USER", walletBalance: 0, referralCode: "DEMO123", workspace: { status: "ACTIVE", plan: { name: "Pro" } } }
                     });
+                } else if (sessionStorage.getItem("wmd_user_auth") === "true" || sessionStorage.getItem("wmd_admin_auth") === "true") {
+                    // Fallback to session data instead of logging out
+                    const role = sessionStorage.getItem("wmd_user_role") || "user";
+                    const email = sessionStorage.getItem("wmd_user_email") || "";
+                    applyMeResponse({
+                        user: { email, name: email.split("@")[0], role }
+                    });
                 } else {
-                    localStorage.removeItem("wmd_token");
-                    sessionStorage.removeItem("wmd_token");
+                    localStorage.removeItem("token");
+                    sessionStorage.removeItem("token");
                     sessionStorage.removeItem("wmd_user_auth");
                     sessionStorage.removeItem("wmd_admin_auth");
                     setUser(DEFAULT_USER);
@@ -131,7 +138,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const logout = () => {
         setUser(DEFAULT_USER);
         setFiles([]);
-        localStorage.removeItem("wmd_token");
+        localStorage.removeItem("token");
         sessionStorage.removeItem("wmd_user_auth");
         sessionStorage.removeItem("wmd_user_email");
         sessionStorage.removeItem("wmd_user_role");

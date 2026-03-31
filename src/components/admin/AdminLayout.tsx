@@ -245,8 +245,8 @@ export default function AdminLayout() {
 
   const handleLogout = () => {
     sessionStorage.removeItem("wmd_admin_auth");
-    sessionStorage.removeItem("wmd_token");
-    localStorage.removeItem("wmd_token");
+    sessionStorage.removeItem("token");
+    localStorage.removeItem("token");
     navigate("/login");
   };
   const handleSettings = () => navigate("/admin/settings");
@@ -273,9 +273,7 @@ export default function AdminLayout() {
         >
           {/* logo + name */}
           <div className={cn("flex items-center gap-2.5 min-w-0", collapsed && "justify-center")}>
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-sm">
-              <Shield className="w-4 h-4 text-white" />
-            </div>
+            <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="WebMyDrive" className="w-8 h-8 object-contain shrink-0" />
             {!collapsed && (
               <motion.div
                 initial={{ opacity: 0, x: -6 }}
@@ -354,9 +352,7 @@ export default function AdminLayout() {
             >
               <div className="flex items-center justify-between h-14 border-b border-border px-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-                    <Shield className="w-4 h-4 text-white" />
-                  </div>
+                  <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="WebMyDrive" className="w-8 h-8 object-contain shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-foreground leading-tight">WebMyDrive</p>
                     <p className="text-[10px] text-muted-foreground">Admin Console</p>

@@ -12,49 +12,28 @@ export interface Plan {
   isBestSeller?: boolean;
 }
 
-const fallbackPlans: Plan[] = [
-  {
-    id: "4",
-    name: "Cloud Storage – Basic",
-    storage: "500 GB Combined Storage",
-    price: "₹3000",
-    monthlyPrice: 3000,
-    yearlyPrice: 36000,
-    discount: "10% OFF",
-    coupon: "tds20",
-  },
-  {
-    id: "5",
-    name: "Cloud Storage – Professional",
-    storage: "5 TB Combined Storage",
-    price: "₹5000",
-    monthlyPrice: 5000,
-    yearlyPrice: 60000,
-    discount: "20% OFF",
-    coupon: "tds20",
-  },
-  {
-    id: "6",
-    name: "Cloud Storage – Premium",
-    storage: "50 TB Combined Storage",
-    price: "₹9000",
-    monthlyPrice: 9000,
-    yearlyPrice: 108000,
-    discount: "40% OFF",
-    coupon: "tds40",
-    isBestSeller: true,
-  },
-  {
-    id: "7",
-    name: "Cloud Storage – Enterprise",
-    storage: "100 TB Combined Storage",
-    price: "₹15000",
-    monthlyPrice: 15000,
-    yearlyPrice: 180000,
-    discount: "40% OFF",
-    coupon: "tds40",
-  },
+import { MONTHLY_BASE_PRICES, roundDiscountedPrice, getShortPlanName } from "@/lib/pricing";
+
+
+
+const basePlans = [
+  { id: "4", name: "Cloud Storage – Basic", storage: "500 GB Combined Storage", discount: "10% OFF", coupon: "tds20" },
+  { id: "5", name: "Cloud Storage – Professional", storage: "5 TB Combined Storage", discount: "20% OFF", coupon: "tds20" },
+  { id: "6", name: "Cloud Storage – Premium", storage: "50 TB Combined Storage", discount: "40% OFF", coupon: "tds40", isBestSeller: true },
+  { id: "7", name: "Cloud Storage – Enterprise", storage: "100 TB Combined Storage", discount: "40% OFF", coupon: "tds40" },
 ];
+
+const fallbackPlans: Plan[] = basePlans.map(plan => {
+  const shortName = getShortPlanName(plan.name);
+  const monthly = MONTHLY_BASE_PRICES[shortName] || 330;
+  const discountedMonthly = roundDiscountedPrice(monthly);
+  return {
+    ...plan,
+    price: `₹${monthly}`,
+    monthlyPrice: monthly,
+    yearlyPrice: discountedMonthly * 12
+  };
+});
 
 export function usePlans() {
   return useQuery({
@@ -129,9 +108,9 @@ export function usePlans() {
               id: String(plan.id),
               name: plan.name,
               storage: `${plan.storageGB || plan.storage || 500} GB Combined Storage`,
-              price: `₹${plan.priceMonthlyINR || plan.monthlyPrice || plan.price || 499}`,
-              monthlyPrice: plan.priceMonthlyINR || plan.monthlyPrice || plan.price || 499,
-              yearlyPrice: plan.priceYearlyINR || plan.yearlyPrice || (plan.price || 499) * 12,
+              price: `₹${MONTHLY_BASE_PRICES[getShortPlanName(plan.name)] || 499}`,
+              monthlyPrice: MONTHLY_BASE_PRICES[getShortPlanName(plan.name)] || 499,
+              yearlyPrice: roundDiscountedPrice(MONTHLY_BASE_PRICES[getShortPlanName(plan.name)] || 499) * 12,
               discount,
               coupon,
               isBestSeller,

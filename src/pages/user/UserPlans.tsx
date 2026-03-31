@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useUser } from "@/contexts/UserContext";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { MONTHLY_BASE_PRICES, roundDiscountedPrice, getShortPlanName } from "@/lib/pricing";
 import "./plans-light.css";
 
 interface Plan {
@@ -213,16 +214,16 @@ export default function UserPlans() {
         validatePromoCode(code, false);
     };
 
-    const discountedPrice = (plan: Plan) => {
-        const yearlyAmount = Number((plan.priceINR ?? plan.price ?? 0));
-        const basePrice = isYearly ? yearlyAmount : Math.round(yearlyAmount / 12);
-        if (!discount || discount.isBannerOnly) return basePrice;
-        return Math.max(1, Math.round(basePrice * (1 - discount.pct / 100)));
+    const originalPriceFor = (plan: Plan) => {
+        const shortName = getShortPlanName(plan.name);
+        const monthlyBase = MONTHLY_BASE_PRICES[shortName] ?? MONTHLY_BASE_PRICES[plan.name] ?? plan.price;
+        return isYearly ? roundDiscountedPrice(monthlyBase as number) : monthlyBase;
     };
 
-    const originalPriceFor = (plan: Plan) => {
-        const yearlyAmount = Number((plan.priceINR ?? plan.price ?? 0));
-        return isYearly ? yearlyAmount : Math.round(yearlyAmount / 12);
+    const discountedPrice = (plan: Plan) => {
+        const basePrice = originalPriceFor(plan);
+        if (!discount || discount.isBannerOnly) return basePrice;
+        return Math.max(1, Math.round(basePrice * (1 - discount.pct / 100)));
     };
 
     const pollForCredentials = () => {
@@ -308,7 +309,7 @@ export default function UserPlans() {
 
     /** Step 1 → Step 2: called after successful Email / Google auth */
     const handleGoogleAuthSuccess = async (token: string, googleUser: any) => {
-        localStorage.setItem("wmd_token", token);
+        localStorage.setItem("token", token);
         await refreshUser();
         toast.success("Signed in! Now choose your WebMyDrive ID.");
 
@@ -655,7 +656,7 @@ export default function UserPlans() {
                                         <div className="text-center mb-6">
                                             <span className="text-4xl font-extrabold" style={{ color: 'var(--plan-price-color, #0f172a)' }}>₹{finalPrice.toLocaleString("en-IN")}</span>
                                             <p className="text-center text-xs mt-2 font-medium" style={{ color: 'var(--plan-label-color, #64748b)' }}>
-                                                {isYearly ? "Per Year" : "Per Month"}
+                                                {isYearly ? "Per Month / Billed Annually" : "Billed Monthly"}
                                             </p>
                                         </div>
 
@@ -710,7 +711,7 @@ export default function UserPlans() {
             <DialogContent className="sm:max-w-sm bg-white text-gray-900 border-gray-200 shadow-xl">
                 <DialogHeader>
                     <div className="w-12 h-12 rounded-2xl bg-[#1fb6ff] flex items-center justify-center mb-2 mx-auto">
-                        {authStep === 1 ? <Cloud className="w-6 h-6 text-white" /> : <AtSign className="w-6 h-6 text-white" />}
+                        {authStep === 1 ? <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="Logo" className="w-6 h-6 object-contain" /> : <AtSign className="w-6 h-6 text-white" />}
                     </div>
                     <DialogTitle className="text-center text-xl text-gray-900">
                         {authStep === 1 ? "Sign in to continue" : "Choose your @webmydrive.com ID"}

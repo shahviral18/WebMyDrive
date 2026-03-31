@@ -1,8 +1,8 @@
 import { Users2, HardDrive, Server, Award } from "lucide-react";
 
 const stats = [
-    { icon: <Users2 className="h-7 w-7" />, value: "12,000+", label: "Active Users", color: "text-blue-600" },
-    { icon: <HardDrive className="h-7 w-7" />, value: "5 PB+", label: "Data Stored", color: "text-indigo-600" },
+    { icon: <Users2 className="h-7 w-7" />, value: "Up To 300", label: "Active Users", color: "text-blue-600" },
+    { icon: <HardDrive className="h-7 w-7" />, value: "1.32 PB", label: "Data Stored", color: "text-indigo-600" },
     { icon: <Server className="h-7 w-7" />, value: "99.99%", label: "Uptime SLA", color: "text-sky-600" },
     { icon: <Award className="h-7 w-7" />, value: "ISO 27001", label: "Certified", color: "text-blue-700" },
 ];

@@ -45,7 +45,7 @@ export default function AccountActivatePage() {
             if (!res.ok) throw new Error(data.error || "Subscription not found");
 
             // Store token and move to setup
-            if (data.token) localStorage.setItem("wmd_token", data.token);
+            if (data.token) localStorage.setItem("token", data.token);
             setFoundUser({ userId: data.userId, token: data.token, email: data.email });
 
             // Pre-fill ID input from email prefix
@@ -104,7 +104,7 @@ export default function AccountActivatePage() {
         }
         setSaving(true);
         try {
-            const token = foundUser?.token || localStorage.getItem("wmd_token");
+            const token = foundUser?.token || localStorage.getItem("token");
             const resp = await fetch(getApiUrl("/user/profile"), {
                 method: "PUT",
                 headers: {

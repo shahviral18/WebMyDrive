@@ -5,7 +5,7 @@
 const getHeaders = () => {
     // User token is in localStorage; admin token is in sessionStorage
     // Checking sessionStorage first ensures Admin tokens override old User tokens
-    const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
     return {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -22,9 +22,10 @@ export const getApiUrl = (endpoint: string) => {
     if (BASE_API_URL) {
         return `${BASE_API_URL}/api${endpoint}`;
     }
-    // Remove trailing slash from base URL to avoid double slashes
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    return `${base}/api${endpoint}`;
+    // Backend was moved to /backend/ so we route API calls to its public/ entrypoint
+    // The PHP router automatically strips prefixes to match /api/...
+    return `${base}/backend/public/api${endpoint}`;
 };
 
 const handleResponse = async (res: Response) => {

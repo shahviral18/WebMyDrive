@@ -101,7 +101,7 @@ export default function DistributorLayout({ children }: DistributorLayoutProps) 
                     collapsed && !mobile ? "justify-center" : "justify-between"
                 )}>
                     <div className={cn("flex items-center gap-2 text-primary font-bold min-w-0", collapsed && !mobile && "justify-center")}>
-                        <Cloud className="w-6 h-6 shrink-0" />
+                        <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="WebMyDrive" className="w-6 h-6 object-contain shrink-0" />
                         {(!collapsed || mobile) && (
                             <motion.div initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} className="leading-tight min-w-0">
                                 <p className="text-sm font-bold text-foreground truncate">WebMyDrive</p>
@@ -209,7 +209,7 @@ export default function DistributorLayout({ children }: DistributorLayoutProps) 
                 {/* Mobile Top Bar — SINGLE theme toggle lives here */}
                 <header className="lg:hidden h-14 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-20">
                     <div className="flex items-center gap-2 text-primary font-bold">
-                        <Cloud className="w-5 h-5" />
+                        <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="WebMyDrive" className="w-5 h-5 object-contain" />
                         <span className="text-sm">WebMyDrive Dist.</span>
                     </div>
                     <div className="flex items-center gap-1">

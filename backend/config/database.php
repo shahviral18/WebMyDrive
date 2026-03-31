@@ -20,24 +20,19 @@ class Database
     public static function getConnection(): PDO
     {
         if (self::$instance === null) {
-            $dbPath = DB_PATH;
+            $host = 'localhost';
+            $db   = 'wmdtest_webmydrive_db';
+            $user = 'wmdtest_webmydrive_user';
+            $pass = 'Webmydrive123';
+            $charset = 'utf8mb4';
 
-            if (!file_exists($dbPath)) {
-                // Graceful error — helps during first-time setup
-                Logger::error("[Database] SQLite file not found at: $dbPath");
-                throw new RuntimeException("Database file not found. Run: npx prisma migrate deploy (in server/ folder).");
-            }
-
-            $dsn = "sqlite:$dbPath";
-            self::$instance = new PDO($dsn, null, null, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,  // throw exceptions on error
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,        // return assoc arrays
-                PDO::ATTR_EMULATE_PREPARES => false,                   // use native prepares
+            $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+            self::$instance = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='ANSI_QUOTES'",
             ]);
-
-            // Enable WAL mode for better concurrent read performance
-            self::$instance->exec('PRAGMA journal_mode=WAL;');
-            self::$instance->exec('PRAGMA foreign_keys=ON;');
         }
 
         return self::$instance;

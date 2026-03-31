@@ -57,7 +57,7 @@ export default function Login() {
     const finishLoginProcessing = (token: string, user: any, role: string) => {
         // ── Admin / SuperAdmin: redirect to admin console immediately ──
         if (role === "ADMIN" || role === "SUPERADMIN") {
-            sessionStorage.setItem("wmd_token", token);
+            sessionStorage.setItem("token", token);
             sessionStorage.setItem("wmd_admin_auth", "true");
             // Do NOT set wmd_user_auth or call loginAs — keep portals independent
             const base = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -65,18 +65,19 @@ export default function Login() {
             return;
         }
 
-        localStorage.setItem("wmd_token", token);
+        localStorage.setItem("token", token);
+        console.log("Stored Token:", localStorage.getItem("token"));
         sessionStorage.setItem("wmd_user_auth", "true");
-        sessionStorage.setItem("wmd_user_email", user.email);
+        sessionStorage.setItem("wmd_user_email", user?.email);
         sessionStorage.setItem("wmd_user_role", role.toLowerCase());
 
         loginAs({
-            id: user.id,
-            name: user.name,
-            email: user.email,
+            id: user?.id,
+            name: user?.name,
+            email: user?.email,
             role: role.toLowerCase() as "user" | "distributor",
-            referralCode: user.referralCode,
-            walletBalance: user.walletBalance,
+            referralCode: user?.referralCode,
+            walletBalance: user?.walletBalance,
         });
 
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
@@ -105,18 +106,24 @@ export default function Login() {
 
         setLoading(true);
         try {
-            const response = await api.post("/auth/login", { email, password });
+            const data = await api.post("/auth/login", { email, password });
+            console.log("Login API response:", data);
 
-            if (response.requiresPasswordChange) {
-                setPendingLoginData(response);
-                setIsFirstLogin(!!response.first_login); // Use server-sent first_login flag
+            if (!data || !data.user) {
+                setError(data?.message || "Login failed");
+                return;
+            }
+
+            if (data.requiresPasswordChange) {
+                setPendingLoginData(data);
+                setIsFirstLogin(!!data.first_login);
                 setMode("force_change");
                 setNewPassword("");
                 setConfirmPassword("");
                 return;
             }
 
-            const { token, user } = response;
+            const { token, user } = data;
             const role: string = user?.role || "";
             finishLoginProcessing(token, user, role);
         } catch (err: any) {
@@ -204,7 +211,7 @@ export default function Login() {
 
                     <div className="text-center mb-8">
                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1, type: "spring" }} className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary shadow-lg mb-4">
-                            {mode === "login" ? <Cloud className="w-7 h-7 text-primary-foreground" /> : <KeyRound className="w-7 h-7 text-primary-foreground" />}
+                            {mode === "login" ? <img src={`${import.meta.env.BASE_URL}Logo-2.png`} alt="Logo" className="w-7 h-7 object-contain" /> : <KeyRound className="w-7 h-7 text-primary-foreground" />}
                         </motion.div>
                         <h1 className="text-2xl font-bold text-foreground tracking-tight">
                             {mode === "login" ? "WebMyDrive" : (mode === "force_change" ? (isFirstLogin ? "Welcome aboard! 🎉" : "Password Reset Required") : "Reset Password")}

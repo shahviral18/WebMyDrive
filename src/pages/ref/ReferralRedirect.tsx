@@ -10,7 +10,7 @@ export default function ReferralRedirect() {
         if (code) {
             const clean = code.toUpperCase();
             // Force a clean state for the buyer (log out any existing sessions)
-            localStorage.removeItem("wmd_token");
+            localStorage.removeItem("token");
             sessionStorage.removeItem("wmd_user_auth");
             sessionStorage.removeItem("wmd_admin_auth");
             sessionStorage.removeItem("wmd_user_role");

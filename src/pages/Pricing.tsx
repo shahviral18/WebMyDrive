@@ -107,7 +107,7 @@ export default function Subscribe() {
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountError, setDiscountError] = useState("");
 
-  const baseAmount = parseAmount(selectedPlan.price);
+  const baseAmount = selectedPlan.yearlyPrice || parseAmount(selectedPlan.price) * 12;
 
   const applyCoupon = () => {
     if (!couponInput) {

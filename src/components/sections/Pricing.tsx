@@ -151,8 +151,8 @@ export function Pricing() {
                     </div>
                   ))
                 : plans?.map((plan, index) => {
-                  const yearlyAmount = parseAmount(plan.price);
-                  const displayAmount = billingPeriod === 'yearly' ? yearlyAmount : Math.round(yearlyAmount / 12);
+                  const isYearly = billingPeriod === 'yearly';
+                  const displayAmount = isYearly ? Math.round((plan.yearlyPrice || 0) / 12) : plan.monthlyPrice || 0;
                   const discountVal = plan.discount ? parseInt(plan.discount) : 0;
                   const storageValue = getStorageValue(plan.storage);
                   const theme = themeColors[index % themeColors.length];
@@ -182,7 +182,7 @@ export function Pricing() {
                           {formatInr(displayAmount)}
                         </p>
                         <div className="text-lg text-slate-600 mt-2 flex flex-col items-center gap-2">
-                          <span>{billingPeriod === 'monthly' ? 'Per Month' : 'Per Year'}</span>
+                          <span>{billingPeriod === 'monthly' ? 'Billed Monthly' : 'Per Month / Billed Annually'}</span>
                           {plan.coupon && (
                             <span className="text-sm tracking-wide mt-1">
                               Use code:{" "}

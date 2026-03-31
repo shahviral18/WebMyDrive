@@ -3,14 +3,13 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WmdLogo } from "@/components/WmdLogo";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useTheme } from "@/contexts/ThemeContext";
-import { ThemeSwitch } from "@/components/ui/theme-switch";
+
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
-  const { isDark, toggleTheme } = useTheme();
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -98,12 +97,7 @@ export function Navbar() {
                 Get Started
               </Button>
 
-              <div className="h-6 w-px bg-slate-200 mx-2" />
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Theme</span>
-                <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
-              </div>
             </div>
           </div>
 
@@ -151,10 +145,7 @@ export function Navbar() {
             Get Started
           </Button>
 
-          <div className="flex items-center justify-between p-3 border-t border-slate-100 mt-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Theme</span>
-            <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} ariaLabel="Toggle theme" />
-          </div>
+
         </div>
       )}
     </nav>

@@ -114,8 +114,8 @@ export default function UserDashboard() {
             const username = chosenWmdEmail.split("@")[0];
             await api.post("/auth/setup-webmydrive-id", { username });
             toast.success("ID created! Please log in with your new email and password 'Test_1123'.");
-            localStorage.removeItem("wmd_token");
-            sessionStorage.removeItem("wmd_token");
+            localStorage.removeItem("token");
+            sessionStorage.removeItem("token");
             sessionStorage.removeItem("wmd_user_auth");
             sessionStorage.removeItem("wmd_user_email");
             setTimeout(() => {

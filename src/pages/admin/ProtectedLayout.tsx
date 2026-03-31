@@ -21,7 +21,7 @@ export default function ProtectedLayout() {
     );
   }
 
-  const token = sessionStorage.getItem("wmd_token") || localStorage.getItem("wmd_token");
+  const token = sessionStorage.getItem("token") || localStorage.getItem("token");
   if (!token) {
     return <Navigate to="/login" replace />;
   }
@@ -51,5 +51,5 @@ export function setAdminAuthenticated() {
 
 export function clearAdminAuthenticated() {
   sessionStorage.removeItem("wmd_admin_auth");
-  sessionStorage.removeItem("wmd_token");
+  sessionStorage.removeItem("token");
 }
