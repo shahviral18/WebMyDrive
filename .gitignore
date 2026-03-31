@@ -22,3 +22,25 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test outputs
+playwright-report/
+test-results/
+test_output*.txt
+test-out*.txt
+checkout-test-output.txt
+
+# Build artifacts
+backend.zip
+*.zip
+
+# IDE metadata
+.lovable/
+
+# Backend
+backend/logs/
+backend/.env.production
+backend/database/dev.db
+
+# Environment
+.env.production
