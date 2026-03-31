@@ -1,10 +1,8 @@
 <?php
 /**
- * Database Layer — PDO / SQLite Singleton
+ * Database Layer — PDO / MySQL Singleton
  *
- * The PHP backend uses the SAME SQLite database as the Node/Prisma backend.
- * DB_PATH points to `server/prisma/dev.db` (configured in config/env.php).
- *
+ * Loads credentials from secure_config (production) or .env (development).
  * All queries use PDO prepared statements — zero raw interpolation.
  */
 
@@ -20,17 +18,27 @@ class Database
     public static function getConnection(): PDO
     {
         if (self::$instance === null) {
-            $host = 'localhost';
-            $db   = 'wmdtest_webmydrive_db';
-            $user = 'wmdtest_webmydrive_user';
-            $pass = 'Webmydrive123';
-            $charset = 'utf8mb4';
+            // Priority: secure_config file (production) > env vars (dev/.env)
+            $secureConfig = '/home4/wmdtest/secure_config/db_config.php';
+            if (file_exists($secureConfig)) {
+                require $secureConfig;
+                // $secureConfig defines: $db_host, $db_name, $db_user, $db_pass
+            } else {
+                $db_host = DB_HOST;
+                $db_name = DB_NAME;
+                $db_user = DB_USER;
+                $db_pass = DB_PASS;
+            }
 
-            $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-            self::$instance = new PDO($dsn, $user, $pass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            if (empty($db_name) || empty($db_user)) {
+                throw new RuntimeException('Database credentials not configured. Set DB_NAME/DB_USER in .env or create secure_config.');
+            }
+
+            $dsn = "mysql:host=$db_host;dbname=$db_name;charset=" . DB_CHARSET;
+            self::$instance = new PDO($dsn, $db_user, $db_pass, [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_EMULATE_PREPARES   => false,
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='ANSI_QUOTES'",
             ]);
         }

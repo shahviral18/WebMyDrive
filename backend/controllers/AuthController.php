@@ -124,6 +124,7 @@ class AuthController
         );
         if ($distributor && $distributor['passwordHash']) {
             if (!password_verify($password, $distributor['passwordHash'])) {
+                AuditService::log('LOGIN_ATTEMPT', null, $req->ip, ['email' => $email, 'role' => 'DISTRIBUTOR', 'status' => 'failed']);
                 Response::error('Invalid credentials', 401);
             }
             AuditService::log('LOGIN', null, $req->ip, ['email' => $email, 'role' => 'DISTRIBUTOR']);
@@ -143,10 +144,14 @@ class AuthController
 
         // ── Regular user login ────────────────────────────────────────────────
         $user = Database::queryOne('SELECT * FROM "User" WHERE email = :e', [':e' => $email]);
-        if (!$user || !$user['passwordHash'])
+        if (!$user || !$user['passwordHash']) {
+            AuditService::log('LOGIN_ATTEMPT', null, $req->ip, ['email' => $email, 'status' => 'failed']);
             Response::error('Invalid credentials', 401);
-        if (!password_verify($password, $user['passwordHash']))
+        }
+        if (!password_verify($password, $user['passwordHash'])) {
+            AuditService::log('LOGIN_ATTEMPT', (int) $user['id'], $req->ip, ['email' => $email, 'status' => 'failed']);
             Response::error('Invalid credentials', 401);
+        }
         if ($user['isDisabled'])
             Response::error('Your account has been suspended. Please contact support.', 403);
 
@@ -669,7 +674,11 @@ class AuthController
         );
 
         $now = date('Y-m-d H:i:s');
-        $passwordHash = password_hash('Test_1123', PASSWORD_BCRYPT);
+        $password = $req->body['password'] ?? '';
+        if (strlen($password) < 8) {
+            Response::error('Password must be at least 8 characters', 400);
+        }
+        $passwordHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 10]);
 
         Database::beginTransaction();
         try {

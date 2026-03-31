@@ -1,0 +1,17 @@
+# Deny direct web access to all backend directories except public/
+# Only backend/public/ should be web-accessible (via its own .htaccess + index.php)
+
+# Block access to sensitive file types everywhere in backend/
+<FilesMatch "\.(env|env\.example|sql|db|mjs|log|md|json)$">
+    Require all denied
+</FilesMatch>
+
+# Block directory listings
+Options -Indexes
+
+# Block direct access to backend source directories (not public/)
+RewriteEngine On
+RewriteRule ^(config|controllers|services|middleware|helpers|database|logs)(/|$) - [F,L]
+
+# Block PHP files in backend root (but NOT in public/ subdirectory)
+RewriteRule ^[^/]+\.php$ - [F,L]

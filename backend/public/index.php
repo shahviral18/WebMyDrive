@@ -22,13 +22,16 @@
 declare(strict_types=1);
 
 header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
 
+// CORS is handled by Response::sendCorsHeaders() after bootstrap.
+// Handle preflight early but with proper origin checking.
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+    // Bootstrap must load first so CORS config is available
+    define('BASE_PATH', dirname(__DIR__));
+    require BASE_PATH . '/helpers/Logger.php';
+    require BASE_PATH . '/config/env.php';
+    require BASE_PATH . '/helpers/Response.php';
+    Response::handleOptions();
 }
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 define('BASE_PATH', dirname(__DIR__));
@@ -55,6 +58,7 @@ require BASE_PATH . '/services/PaymentHandler.php';
 // Middleware
 require BASE_PATH . '/middleware/AuthMiddleware.php';
 require BASE_PATH . '/middleware/SubscriptionMiddleware.php';
+require BASE_PATH . '/middleware/RateLimiter.php';
 
 // Controllers
 require BASE_PATH . '/controllers/AuthController.php';
@@ -95,12 +99,12 @@ $router->get('/api/health', function (Request $req) {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-$router->post('/api/auth/register', [AuthController::class, 'register']);
-$router->post('/api/auth/login', [AuthController::class, 'login']);
+$router->post('/api/auth/register', [AuthController::class, 'register'], [RateLimiter::limit('REGISTER', 5, 900)]);
+$router->post('/api/auth/login', [AuthController::class, 'login'], [RateLimiter::limit('LOGIN_ATTEMPT', 10, 900)]);
 $router->post('/api/auth/google-login', [AuthController::class, 'googleLogin']);
 $router->post('/api/auth/temp-login', [AuthController::class, 'tempLogin']);
 $router->get('/api/auth/me', [AuthController::class, 'me'], $auth);
-$router->post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+$router->post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword'], [RateLimiter::limit('FORGOT_PASSWORD', 3, 900)]);
 $router->post('/api/auth/change-password', [AuthController::class, 'changePassword'], $auth);
 $router->post('/api/auth/setup-workspace-password', [AuthController::class, 'setupWorkspacePassword'], $auth);
 $router->post('/api/auth/setup-credentials', [AuthController::class, 'setupCredentials']);
@@ -174,32 +178,6 @@ $router->get('/api/distributor/earnings', [DistributorController::class, 'getEar
 
 // ── Payment webhooks ──────────────────────────────────────────────────────────
 // Raw body available via $request->rawBody
-$router->post('/api/payment/webhook/stripe', function (Request $req) {
-    // Stripe webhook (basic stub — extend with real Stripe SDK if needed)
-    $sig = $req->header('stripe_signature') ?? '';
-    $secret = STRIPE_WEBHOOK_SECRET;
-    $payload = $req->rawBody;
-
-    if ($secret && $sig) {
-        // Simple timestamp+hash verification
-        $parts = [];
-        foreach (explode(',', $sig) as $part) {
-            [$key, $val] = explode('=', $part, 2);
-            $parts[$key] = $val;
-        }
-        $ts = $parts['t'] ?? '';
-        $v1 = $parts['v1'] ?? '';
-        $expected = hash_hmac('sha256', "$ts.$payload", $secret);
-        if (!hash_equals($expected, $v1)) {
-            Response::error('Invalid Stripe webhook signature', 400);
-        }
-    }
-
-    $event = json_decode($payload, true);
-    Logger::info('[Stripe Webhook] Received event: ' . ($event['type'] ?? 'unknown'));
-    Response::json(['received' => true]);
-});
-
 $router->post('/api/payment/webhook/razorpay', function (Request $req) {
     // Razorpay webhook signature verification
     $sig = $req->header('x_razorpay_signature') ?? '';
