@@ -26,7 +26,7 @@ test.describe('Referral and Wallet Flows', () => {
     test('Generate Referral Link & Check Wallet Balance', async ({ page }) => {
         await page.goto(`${baseURL}/login`);
         await page.fill('input[type="email"]', 'user@webmydrive.com');
-        await page.fill('input[type="password"]', 'userpassword');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await page.click('button[type="submit"]');
 
         // Simulate going to Referral page
@@ -54,7 +54,7 @@ test.describe('Referral and Wallet Flows', () => {
         // Admin checking referral rules
         await page.goto(`${baseURL}/admin/login`);
         await page.fill('input[type="email"]', 'admin@webmydrive.com');
-        await page.fill('input[type="password"]', 'admin');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await page.click('button[type="submit"]');
 
         await page.goto(`${baseURL}/admin/referrals-engine`); // Assuming a route exists based on mock

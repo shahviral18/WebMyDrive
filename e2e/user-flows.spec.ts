@@ -26,7 +26,7 @@ test.describe('User Flows & UI Validation', () => {
         // Bypass login if possible by directly navigating or mock logging in
         await page.goto(`${baseURL}/login`);
         await page.fill('input[type="email"]', 'user@webmydrive.com');
-        await page.fill('input[type="password"]', 'userpassword');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await page.click('button[type="submit"]');
 
         await page.waitForTimeout(1000);

@@ -38,7 +38,7 @@ test.describe('App E2E Flow', () => {
 
         // Login
         await page.fill('input[type="email"]', 'admin@webmydrive.com');
-        await page.fill('input[type="password"]', 'Admin@123');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await page.click('button[type="submit"]');
 
         await page.waitForTimeout(500);

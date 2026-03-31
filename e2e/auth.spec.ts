@@ -42,7 +42,7 @@ test.describe('Authentication Flows', () => {
         await expect(submitButton).toBeVisible();
 
         await page.fill('input[type="email"]', 'admin@webmydrive.com');
-        await page.fill('input[type="password"]', 'adminpassword');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await submitButton.click();
 
         // Check if it redirects to admin dashboard

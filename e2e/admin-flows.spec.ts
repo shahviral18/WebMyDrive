@@ -26,7 +26,7 @@ test.describe('Admin Flows', () => {
     test('Admin Dashboard & Navigation', async ({ page }) => {
         await page.goto(`${baseURL}/admin/login`);
         await page.fill('input[type="email"]', 'admin@webmydrive.com');
-        await page.fill('input[type="password"]', 'admin');
+        await page.fill('input[type="password"]', 'Admin@2026!');
         await page.click('button[type="submit"]');
 
         await page.waitForTimeout(1000);

@@ -44,7 +44,6 @@ if (-not $phpExe) {
     exit 1
 }
 
-$arguments = @("-S", "$ServerHost`:$Port", "-t", "server-php/public", "server-php/router.php")
 $arguments = @("-S", "$ServerHost`:$Port", "-t", "backend/public", "backend/router.php")
 Start-Process -FilePath $phpExe -ArgumentList $arguments -WorkingDirectory $repoRoot | Out-Null
 
