@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
   LogOut, Menu, X, Shield, CreditCard, Gift,
-  FileText, ChevronDown, Handshake,
+  FileText, ChevronDown, Handshake, Briefcase,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -42,6 +42,7 @@ const navGroups = [
     label: "OPERATIONS",
     items: [
       { label: "Distributors", href: "/admin/distributors", icon: Handshake },
+      { label: "Distributor Applications", href: "/admin/distributor-applications", icon: Briefcase },
       { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
     ],
   },

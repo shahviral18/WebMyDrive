@@ -40,9 +40,16 @@ class UserController
         $base = strtolower(preg_replace('/[^a-z0-9._-]/', '', explode('@', $emailToSearch)[0]));
 
         $existing = Database::queryOne(
-            'SELECT id FROM "User" WHERE email = :e OR displayEmail = :e',
-            [':e' => $emailToSearch]
+            'SELECT id FROM "User" WHERE email = :e1 OR displayEmail = :e2',
+            [':e1' => $emailToSearch, ':e2' => $emailToSearch]
         );
+
+        if (!$existing) {
+            $existing = Database::queryOne(
+                'SELECT id FROM "ExistingUser" WHERE username = :e',
+                [':e' => $emailToSearch]
+            );
+        }
 
         if ($existing) {
             $year = date('Y');
@@ -60,7 +67,10 @@ class UserController
                     break;
                 $candidateEmail = "$candidate@webmydrive.com";
                 $conflict = Database::queryOne(
-                    'SELECT id FROM "User" WHERE email = :e OR displayEmail = :e',
+                    'SELECT id FROM "User" WHERE email = :e1 OR displayEmail = :e2',
+                    [':e1' => $candidateEmail, ':e2' => $candidateEmail]
+                ) ?? Database::queryOne(
+                    'SELECT id FROM "ExistingUser" WHERE username = :e',
                     [':e' => $candidateEmail]
                 );
                 if (!$conflict)

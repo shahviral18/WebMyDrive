@@ -4,7 +4,7 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: '/WebMyDrive/demo/1/',
+  base: '/demo1/',
   server: {
     host: true,
     port: 6173,

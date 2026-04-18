@@ -1,4 +1,5 @@
 import { Facebook, Twitter, Linkedin, Instagram } from "lucide-react";
+import { Link } from "react-router-dom";
 import { WmdLogo } from "@/components/WmdLogo";
 
 export function Footer() {
@@ -34,6 +35,7 @@ export function Footer() {
             <ul className="flex flex-col gap-4">
               <li><a href="#" className="hover:text-sky-400 transition-colors">About Us</a></li>
               <li><a href="#" className="hover:text-blue-400 transition-colors">Careers</a></li>
+              <li><Link to="/resell" className="hover:text-emerald-400 transition-colors">Resell WebMyDrive</Link></li>
               <li><a href="#" className="hover:text-indigo-400 transition-colors">Privacy Policy</a></li>
               <li><a href="#" className="hover:text-cyan-400 transition-colors">Terms of Service</a></li>
             </ul>

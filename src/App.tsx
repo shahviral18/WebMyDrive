@@ -17,6 +17,9 @@ import ReferralEngine from "./pages/admin/ReferralEngine";
 import Settings from "./pages/admin/Settings";
 import PricingPage from "./pages/PricingPage";
 import Subscribe from "./pages/Subscribe";
+import SubscribeUsername from "./pages/SubscribeUsername";
+import Resell from "./pages/Resell";
+import DistributorApplications from "./pages/admin/DistributorApplications";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
 import UserFiles from "./pages/user/UserFiles";
@@ -63,7 +66,7 @@ const App = () => (
       <Toaster />
       <Sonner richColors position="top-right" />
       <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "337424619711-d1c8p7gkvn2d61h72o91l24t12j6v2n7.apps.googleusercontent.com"}>
-        <BrowserRouter basename="/WebMyDrive/demo/1">
+        <BrowserRouter basename="/demo1">
           <ThemeProvider>
             <UserProvider>
               <Routes>
@@ -73,6 +76,8 @@ const App = () => (
                 <Route path="/faq" element={<Navigate to="/" replace />} />
                 <Route path="/contact" element={<Navigate to="/" replace />} />
                 <Route path="/subscribe/:planSlug" element={<Subscribe />} />
+                <Route path="/subscribe/:planSlug/username" element={<SubscribeUsername />} />
+                <Route path="/resell" element={<Resell />} />
                 <Route path="/activate" element={<AccountActivate />} />
                 <Route path="/plans" element={<UserPlans />} />
                 <Route path="/ref/:code" element={<ReferralRedirect />} />
@@ -178,6 +183,7 @@ const App = () => (
                   <Route path="orders" element={<Billing />} />
                   <Route path="referral-engine" element={<ReferralEngine />} />
                   <Route path="distributors" element={<Distributors />} />
+                  <Route path="distributor-applications" element={<DistributorApplications />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="alerts" element={<Alerts />} />
                   <Route path="settings" element={<Settings />} />

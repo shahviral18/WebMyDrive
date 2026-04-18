@@ -68,6 +68,7 @@ require BASE_PATH . '/controllers/ReferralController.php';
 require BASE_PATH . '/controllers/DistributorController.php';
 require BASE_PATH . '/controllers/SubscriptionController.php';
 require BASE_PATH . '/controllers/CheckoutController.php';
+require BASE_PATH . '/controllers/DistributorApplicationController.php';
 
 // ── Global error handler ──────────────────────────────────────────────────────
 set_exception_handler(function (Throwable $e) {
@@ -162,6 +163,14 @@ $router->get('/api/subscription/details', [SubscriptionController::class, 'getSu
 $router->post('/api/subscription/renew', [SubscriptionController::class, 'renewSubscription'], $auth);
 $router->get('/api/subscription/all', [SubscriptionController::class, 'getAllSubscriptions'], $adminOnly);
 $router->get('/api/subscription/stats', [SubscriptionController::class, 'getStats'], $adminOnly);
+// ── Distributor Applications (public gate + admin review) ──────────────────
+$router->get('/api/distributor/check-eligibility', [DistributorApplicationController::class, 'checkEligibility']);
+$router->post('/api/distributor/apply', [DistributorApplicationController::class, 'apply']);
+$router->get('/api/admin/distributor-applications', [DistributorApplicationController::class, 'adminList'], $adminOnly);
+$router->get('/api/admin/distributor-applications/:id', [DistributorApplicationController::class, 'adminDetail'], $adminOnly);
+$router->patch('/api/admin/distributor-applications/:id', [DistributorApplicationController::class, 'adminUpdate'], $adminOnly);
+$router->get('/api/admin/distributor-applications/:id/files/:type', [DistributorApplicationController::class, 'adminDownload'], $adminOnly);
+
 // ── Checkout (Public - unauthenticated) ───────────────────────────────────
 $router->post('/api/checkout/create-session', [CheckoutController::class, 'createSession']);
 $router->post('/api/checkout/process-payment', [CheckoutController::class, 'processPayment']);

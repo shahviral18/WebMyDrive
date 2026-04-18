@@ -1,0 +1,400 @@
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Lock, Check, Eye, EyeOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+
+const DOMAIN = "@webmydrive.com";
+
+type CheckoutState = {
+  planId: number | string;
+  planName: string;
+  amount: number;
+  couponInput?: string;
+  firstName: string;
+  lastName: string;
+  recoveryEmail?: string;
+  whatsapp?: string;
+  email: string;
+  companyName?: string;
+  mobile: string;
+  gstNumber?: string;
+  billing: {
+    country: string;
+    state: string;
+    city: string;
+    address: string;
+    zipCode: string;
+  };
+};
+
+type Availability =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available"; email: string }
+  | { status: "taken"; suggestions: string[] }
+  | { status: "error"; message: string };
+
+function validatePassword(pw: string): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (pw.length < 8) errors.push("at least 8 characters");
+  if (!/[A-Za-z]/.test(pw)) errors.push("one letter");
+  if (!/[0-9]/.test(pw)) errors.push("one number");
+  if (!/[^A-Za-z0-9]/.test(pw)) errors.push("one special character");
+  return { ok: errors.length === 0, errors };
+}
+
+export default function SubscribeUsernamePage() {
+  const { planSlug } = useParams<{ planSlug: string }>();
+  const navigate = useNavigate();
+  const { state } = useLocation() as { state: CheckoutState | null };
+  const { isDark, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    if (!state) navigate(`/subscribe/${planSlug}`, { replace: true });
+  }, [state, planSlug, navigate]);
+
+  const [username, setUsername] = useState("");
+  const [availability, setAvailability] = useState<Availability>({ status: "idle" });
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const normalizedUsername = useMemo(
+    () => username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, ""),
+    [username]
+  );
+
+  useEffect(() => {
+    if (!normalizedUsername || normalizedUsername.length < 3) {
+      setAvailability({ status: "idle" });
+      return;
+    }
+    setAvailability({ status: "checking" });
+    const t = setTimeout(async () => {
+      try {
+        const data = await api.get(`/user/check-username?u=${encodeURIComponent(normalizedUsername)}`);
+        if (data.available) {
+          setAvailability({ status: "available", email: data.email });
+        } else {
+          setAvailability({ status: "taken", suggestions: data.suggestions ?? [] });
+        }
+      } catch (err: any) {
+        setAvailability({ status: "error", message: err.message ?? "Check failed" });
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [normalizedUsername]);
+
+  const pwCheck = validatePassword(password);
+  const pwMatch = password !== "" && password === confirm;
+  const canProceed =
+    availability.status === "available" && pwCheck.ok && pwMatch && !isProcessing && state !== null;
+
+  const handleEdit = () => {
+    navigate(`/subscribe/${planSlug}`, { state });
+  };
+
+  const handleConfirm = async () => {
+    if (!canProceed || !state || availability.status !== "available") return;
+    setIsProcessing(true);
+    try {
+      const sessionData = await api.post("/referral/create-checkout", {
+        planId: state.planId,
+        promoCode: state.couponInput || undefined,
+        billingPeriod: "monthly",
+        customerEmail: state.email,
+        customerName: `${state.firstName} ${state.lastName}`,
+        customerPhone: state.mobile,
+        recoveryEmail: state.recoveryEmail || undefined,
+        whatsapp: state.whatsapp || undefined,
+        companyName: state.companyName || undefined,
+        gstNumber: state.gstNumber || undefined,
+        username: availability.email,
+        password,
+        billingAddress: {
+          country: state.billing.country,
+          state: state.billing.state,
+          city: state.billing.city,
+          address: state.billing.address,
+          zipCode: state.billing.zipCode,
+        },
+      });
+
+      if (!sessionData.success) {
+        toast.error(sessionData.error || "Failed to create checkout session");
+        setIsProcessing(false);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => {
+        const rzp = new (window as any).Razorpay({
+          key: sessionData.razorpayKeyId,
+          amount: sessionData.amount * 100,
+          currency: "INR",
+          name: "WebMyDrive",
+          description: state.planName,
+          order_id: sessionData.rzpOrderId,
+          theme: { color: "#1fb6ff" },
+          handler: async (response: any) => {
+            try {
+              toast.loading("Verifying payment…", { id: "pay-verify" });
+              const verifyData = await api.post("/referral/verify-payment", {
+                orderId: sessionData.orderId,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              toast.dismiss("pay-verify");
+              if (verifyData.success) {
+                toast.success("🎉 Payment successful!");
+                setShowSuccess(true);
+              } else {
+                toast.error(verifyData.error || "Payment verification failed");
+              }
+            } catch (err: any) {
+              toast.error(err.message || "Payment verification failed");
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+          modal: { ondismiss: () => setIsProcessing(false) },
+        });
+        rzp.open();
+      };
+      document.body.appendChild(script);
+    } catch (err: any) {
+      toast.error(err.message || "Payment failed");
+      setIsProcessing(false);
+    }
+  };
+
+  if (!state) return null;
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(n);
+
+  return (
+    <div className={cn("min-h-screen bg-[#f8fbff] pb-20 font-sans", isDark && "bg-slate-950")}>
+      <div className="fixed top-4 right-4 z-50">
+        <ThemeSwitch checked={isDark} onCheckedChange={toggleTheme} size={12} />
+      </div>
+
+      <div className="max-w-3xl mx-auto pt-12 px-4 space-y-8">
+        {/* Username */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-2">Choose your WebMyDrive username</h2>
+          <p className="text-sm text-slate-500 mb-6">This will be your login and email address.</p>
+
+          <div className="flex">
+            <Input
+              placeholder="yourname"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="h-11 rounded-r-none border-slate-200 lowercase"
+              autoFocus
+            />
+            <div className="h-11 flex items-center px-4 rounded-r border border-l-0 border-slate-200 bg-slate-50 text-slate-500 text-sm">
+              {DOMAIN}
+            </div>
+          </div>
+
+          <div className="mt-3 min-h-[24px] text-sm">
+            {availability.status === "checking" && (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking availability…
+              </div>
+            )}
+            {availability.status === "available" && (
+              <div className="flex items-center gap-2 text-emerald-600">
+                <CheckCircle2 className="w-4 h-4" /> {availability.email} is available
+              </div>
+            )}
+            {availability.status === "taken" && (
+              <div className="flex items-start gap-2 text-rose-600">
+                <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  <div>Already taken.</div>
+                  {availability.suggestions.length > 0 && (
+                    <div className="text-slate-600 text-xs mt-1">
+                      Try:{" "}
+                      {availability.suggestions.map((s, i) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setUsername(s.replace(DOMAIN, ""))}
+                          className="text-blue-500 hover:underline"
+                        >
+                          {s}
+                          {i < availability.suggestions.length - 1 ? ", " : ""}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {availability.status === "error" && (
+              <div className="text-rose-600">{availability.message}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Password */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Set your password</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="relative">
+              <Input
+                type={showPw ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-11 border-slate-200 rounded pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Input
+              type={showPw ? "text" : "password"}
+              placeholder="Confirm Password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="h-11 border-slate-200 rounded"
+            />
+          </div>
+
+          <div className="mt-3 text-xs text-slate-500 space-y-1">
+            {[
+              ["at least 8 characters", password.length >= 8],
+              ["one letter", /[A-Za-z]/.test(password)],
+              ["one number", /[0-9]/.test(password)],
+              ["one special character", /[^A-Za-z0-9]/.test(password)],
+              ["passwords match", pwMatch],
+            ].map(([label, ok]) => (
+              <div key={label as string} className="flex items-center gap-1.5">
+                {ok ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 text-slate-300" />
+                )}
+                <span className={ok ? "text-emerald-700" : "text-slate-500"}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Review */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Review your details</h2>
+          <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+            <Row label="Plan" value={`${state.planName} — ${fmt(state.amount)}`} />
+            <Row label="Name" value={`${state.firstName} ${state.lastName}`} />
+            {state.recoveryEmail && <Row label="Recovery Email" value={state.recoveryEmail} />}
+            {state.whatsapp && <Row label="WhatsApp" value={`+91 ${state.whatsapp}`} />}
+            <Row label="Account Email" value={state.email} />
+            <Row label="Account Phone" value={`+91 ${state.mobile}`} />
+            {state.companyName && <Row label="Company" value={state.companyName} />}
+            {state.gstNumber && <Row label="GST" value={state.gstNumber} />}
+            <Row
+              label="Billing Address"
+              value={[
+                state.billing.address,
+                state.billing.city,
+                state.billing.state,
+                state.billing.zipCode,
+                state.billing.country,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              full
+            />
+          </dl>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col md:flex-row items-center justify-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleEdit}
+            className="w-full md:w-48 h-12 rounded-md"
+          >
+            Edit Details
+          </Button>
+          <Button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canProceed}
+            className="w-full md:w-56 h-12 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-md shadow-md shadow-blue-500/10 transition-all disabled:opacity-50"
+          >
+            {isProcessing ? "Processing…" : "Confirm and Pay"}
+          </Button>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 text-slate-400">
+          <div className="flex items-center gap-2 text-xs">
+            <Lock className="w-3 h-3" />
+            <span>Secured by Razorpay • Zoho Billing System</span>
+          </div>
+          <p className="text-[10px] italic">Powered by WebMyDrive Platform</p>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 px-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl"
+            >
+              <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Check className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Almost there!</h3>
+              <p className="text-slate-600 mb-8">
+                We are redirecting you to our secure payment gateway to complete the transaction.
+              </p>
+              <Button
+                onClick={() => (window.location.href = "/user/dashboard")}
+                className="w-full h-12 bg-[#4a90e2] rounded-lg"
+              >
+                Continue
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function Row({ label, value, full }: { label: string; value: string; full?: boolean }) {
+  return (
+    <div className={cn(full && "md:col-span-2")}>
+      <dt className="text-slate-400 text-xs uppercase tracking-wide">{label}</dt>
+      <dd className="text-slate-700 font-medium break-words">{value}</dd>
+    </div>
+  );
+}

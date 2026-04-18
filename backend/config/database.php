@@ -19,7 +19,7 @@ class Database
     {
         if (self::$instance === null) {
             // Priority: secure_config file (production) > env vars (dev/.env)
-            $secureConfig = '/home4/wmdtest/secure_config/db_config.php';
+            $secureConfig = '/home1/wmdadmin/secure_config/db_config.php';
             if (file_exists($secureConfig)) {
                 require $secureConfig;
                 // $secureConfig defines: $db_host, $db_name, $db_user, $db_pass
