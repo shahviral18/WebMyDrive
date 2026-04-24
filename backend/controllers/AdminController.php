@@ -978,4 +978,189 @@ class AdminController
         $valid = GoogleWorkspaceService::validateOrgUnit($path);
         Response::json(['valid' => $valid, 'path' => $path]);
     }
+
+    // ── Change Plan (SUPERADMIN only) ─────────────────────────────────────────
+
+    public function getUsersWithPlans(Request $req): void
+    {
+        $search = trim((string)($req->query['search'] ?? ''));
+        $searchParam = $search ? "%{$search}%" : '%';
+
+        $rows = Database::query(
+            'SELECT u.id, u.name, u.email, u.phone, u.recoveryEmail, u.recoveryPhone,
+                    w.planId, p.name AS planName, w.billingPeriod, w.renewalDate, w.status AS workspaceStatus
+             FROM "User" u
+             LEFT JOIN "Workspace" w ON w.userId = u.id AND w.status = \'ACTIVE\'
+             LEFT JOIN "Plan" p ON p.id = w.planId
+             WHERE u.role = \'USER\'
+               AND (u.email LIKE :s OR u.name LIKE :s)
+             ORDER BY u.createdAt DESC
+             LIMIT 200',
+            [':s' => $searchParam]
+        );
+
+        Response::json($rows ?: []);
+    }
+
+    public function changePlan(Request $req): void
+    {
+        $userId        = (int)($req->params['id'] ?? 0);
+        $body          = $req->body ?? [];
+        $planId        = (int)($body['planId'] ?? 0);
+        $billingPeriod = (string)($body['billingPeriod'] ?? '');
+        $paymentMethod = (string)($body['paymentMethod'] ?? '');
+        $paymentRef    = trim((string)($body['paymentRef'] ?? ''));
+        $note          = trim((string)($body['note'] ?? ''));
+
+        if (!$userId) Response::error('User ID required', 400);
+        if (!$planId) Response::error('Plan ID required', 400);
+        if (!in_array($billingPeriod, ['monthly', 'yearly'], true)) Response::error('Invalid billing period', 400);
+        if (!in_array($paymentMethod, ['NEFT', 'Cash', 'Cheque', 'Other'], true)) Response::error('Invalid payment method', 400);
+        if ($paymentRef === '') Response::error('Payment reference is required', 400);
+
+        $user = Database::queryOne(
+            'SELECT id, name, email FROM "User" WHERE id = :id AND role = \'USER\'',
+            [':id' => $userId]
+        );
+        if (!$user) Response::error('User not found', 404);
+
+        $plan = Database::queryOne(
+            'SELECT id, name, googleOrgUnit FROM "Plan" WHERE id = :id AND isActive = 1',
+            [':id' => $planId]
+        );
+        if (!$plan) Response::error('Plan not found or inactive', 404);
+
+        // Old plan for audit / email
+        $oldWs = Database::queryOne(
+            'SELECT w.planId, p.name AS planName FROM "Workspace" w
+             LEFT JOIN "Plan" p ON p.id = w.planId
+             WHERE w.userId = :uid',
+            [':uid' => $userId]
+        );
+        $oldPlanName = $oldWs['planName'] ?? 'None';
+
+        $now         = date('Y-m-d H:i:s');
+        $renewalDate = date('Y-m-d H:i:s', strtotime($billingPeriod === 'yearly' ? '+365 days' : '+30 days'));
+
+        // Upsert Workspace
+        if ($oldWs) {
+            Database::execute(
+                'UPDATE "Workspace" SET planId=:pid, billingPeriod=:bp, renewalDate=:rd,
+                 status=\'ACTIVE\', nextPlanId=NULL, updatedAt=:now WHERE userId=:uid',
+                [':pid' => $planId, ':bp' => $billingPeriod, ':rd' => $renewalDate, ':now' => $now, ':uid' => $userId]
+            );
+        } else {
+            Database::execute(
+                'INSERT INTO "Workspace" (userId, planId, status, billingPeriod, renewalDate, createdAt, updatedAt)
+                 VALUES (:uid, :pid, \'ACTIVE\', :bp, :rd, :now, :now)',
+                [':uid' => $userId, ':pid' => $planId, ':bp' => $billingPeriod, ':rd' => $renewalDate, ':now' => $now]
+            );
+        }
+
+        // Upsert Subscription
+        $existingSub = Database::queryOne('SELECT id FROM "Subscription" WHERE user_id=:uid', [':uid' => $userId]);
+        if ($existingSub) {
+            Database::execute(
+                'UPDATE "Subscription" SET plan_name=:pn, payment_id=:pi, status=\'active\',
+                 start_date=:sd, end_date=:ed, updated_at=:now WHERE user_id=:uid',
+                [':pn' => $plan['name'], ':pi' => $paymentRef, ':sd' => $now, ':ed' => $renewalDate, ':now' => $now, ':uid' => $userId]
+            );
+        } else {
+            Database::execute(
+                'INSERT INTO "Subscription" (user_id, plan_name, payment_id, status, start_date, end_date, created_at, updated_at)
+                 VALUES (:uid, :pn, :pi, \'active\', :sd, :ed, :now, :now)',
+                [':uid' => $userId, ':pn' => $plan['name'], ':pi' => $paymentRef, ':sd' => $now, ':ed' => $renewalDate, ':now' => $now]
+            );
+        }
+
+        // Create Order record
+        Database::execute(
+            'INSERT INTO "Order" (userId, planId, amount, currency, status, paymentId, orderType, billingPeriod, fromPlanId, createdAt, updatedAt)
+             VALUES (:uid, :pid, 0, \'INR\', \'COMPLETED\', :pi, \'ADMIN_OVERRIDE\', :bp, :fpid, :now, :now)',
+            [
+                ':uid'  => $userId, ':pid'  => $planId, ':pi'   => $paymentRef,
+                ':bp'   => $billingPeriod, ':fpid' => $oldWs['planId'] ?? null, ':now'  => $now,
+            ]
+        );
+
+        // Audit log
+        $actorId = (int)($req->user['userId'] ?? 0);
+        $actor   = Database::queryOne('SELECT email FROM "User" WHERE id=:id', [':id' => $actorId]);
+        AuditService::log('ADMIN_PLAN_CHANGE', $actorId, $req->ip ?? '', [
+            'targetUserId'    => $userId,
+            'targetUserEmail' => $user['email'],
+            'oldPlan'         => $oldPlanName,
+            'newPlan'         => $plan['name'],
+            'billingPeriod'   => $billingPeriod,
+            'paymentMethod'   => $paymentMethod,
+            'paymentRef'      => $paymentRef,
+            'note'            => $note ?: null,
+        ]);
+
+        // Move Google OU (best-effort)
+        if (!empty($plan['googleOrgUnit'])) {
+            try {
+                GoogleWorkspaceService::moveUserToOrgUnit($user['email'], $plan['googleOrgUnit']);
+            } catch (Throwable $e) {
+                Logger::warn('[changePlan] Google OU move failed: ' . $e->getMessage());
+            }
+        }
+
+        // Send emails
+        $adminEmail = $actor['email'] ?? 'admin@webmydrive.com';
+        $this->sendPlanChangeEmails($user, $oldPlanName, $plan['name'], $billingPeriod, $renewalDate, $paymentMethod, $paymentRef, $note, $adminEmail);
+
+        Response::json(['success' => true, 'message' => 'Plan updated successfully']);
+    }
+
+    private function sendPlanChangeEmails(
+        array $user, string $oldPlan, string $newPlan, string $billingPeriod,
+        string $renewalDate, string $paymentMethod, string $paymentRef,
+        string $note, string $adminEmail
+    ): void {
+        $userName    = $user['name'] ?: $user['email'];
+        $renewal     = date('d M Y', strtotime($renewalDate));
+        $billingLabel = ucfirst($billingPeriod);
+
+        // ── Email to user ──────────────────────────────────────────────────────
+        $bodyUser =
+            "Dear {$userName},\n\n"
+            . "Your WebMyDrive plan has been updated by our team.\n\n"
+            . "Previous Plan : {$oldPlan}\n"
+            . "New Plan      : {$newPlan}\n"
+            . "Billing       : {$billingLabel}\n"
+            . "Valid Until   : {$renewal}\n"
+            . "Payment Ref   : {$paymentRef}\n"
+            . ($note ? "Note          : {$note}\n" : '')
+            . "\nIf you have any questions, please contact support@technodoc.in\n\n"
+            . "Thank you,\nWebMyDrive Team";
+
+        @mail(
+            $user['email'],
+            'Your WebMyDrive plan has been updated',
+            $bodyUser,
+            "From: noreply@webmydrive.com\r\nReply-To: support@technodoc.in\r\nContent-Type: text/plain; charset=UTF-8"
+        );
+
+        // ── Email to support ───────────────────────────────────────────────────
+        $bodySupport =
+            "Plan change performed by admin.\n\n"
+            . "Admin          : {$adminEmail}\n"
+            . "User           : {$user['email']}\n"
+            . "Old Plan       : {$oldPlan}\n"
+            . "New Plan       : {$newPlan}\n"
+            . "Billing        : {$billingLabel}\n"
+            . "Renewal Date   : {$renewal}\n"
+            . "Payment Method : {$paymentMethod}\n"
+            . "Payment Ref    : {$paymentRef}\n"
+            . ($note ? "Note           : {$note}\n" : '')
+            . "\nTimestamp: " . date('d M Y H:i:s') . " (server time)";
+
+        @mail(
+            'support@technodoc.in',
+            "[Admin Action] Plan changed: {$user['email']}",
+            $bodySupport,
+            "From: noreply@webmydrive.com\r\nContent-Type: text/plain; charset=UTF-8"
+        );
+    }
 }

@@ -20,6 +20,7 @@ import Subscribe from "./pages/Subscribe";
 import SubscribeUsername from "./pages/SubscribeUsername";
 import Resell from "./pages/Resell";
 import DistributorApplications from "./pages/admin/DistributorApplications";
+import ChangePlan from "./pages/admin/ChangePlan";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
 import UserFiles from "./pages/user/UserFiles";
@@ -184,6 +185,7 @@ const App = () => (
                   <Route path="referral-engine" element={<ReferralEngine />} />
                   <Route path="distributors" element={<Distributors />} />
                   <Route path="distributor-applications" element={<DistributorApplications />} />
+                  <Route path="change-plan" element={<ChangePlan />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="alerts" element={<Alerts />} />
                   <Route path="settings" element={<Settings />} />

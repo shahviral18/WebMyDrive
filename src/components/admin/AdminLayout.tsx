@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
   LogOut, Menu, X, Shield, CreditCard, Gift,
-  FileText, ChevronDown, Handshake, Briefcase,
+  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -28,6 +28,7 @@ const navGroups = [
     items: [
       { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
       { label: "Accounts", href: "/admin/users", icon: Users },
+      { label: "Change Plan", href: "/admin/change-plan", icon: ArrowLeftRight, superAdminOnly: true },
     ],
   },
   {
@@ -132,36 +133,42 @@ function SidebarNav({
   collapsed: boolean;
   onClick?: () => void;
 }) {
+  const { user } = useUser();
+  const isSuperAdmin = (user.role ?? "").toUpperCase() === "SUPERADMIN";
+
   return (
     <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-      {navGroups.map((group, gi) => (
-        <div key={group.label}>
-          {/* Section label */}
-          {!collapsed && (
-            <div className="mb-1.5 px-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground select-none">
-                {group.label}
-              </p>
-              {/* divider */}
-              <div className="mt-1 h-px bg-primary/20" />
+      {navGroups.map((group, gi) => {
+        const visibleItems = group.items.filter(
+          (item: any) => !item.superAdminOnly || isSuperAdmin
+        );
+        if (visibleItems.length === 0) return null;
+        return (
+          <div key={group.label}>
+            {!collapsed && (
+              <div className="mb-1.5 px-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground select-none">
+                  {group.label}
+                </p>
+                <div className="mt-1 h-px bg-primary/20" />
+              </div>
+            )}
+            {collapsed && gi > 0 && (
+              <div className="my-1 mx-3 h-px bg-primary/20" />
+            )}
+            <div className="space-y-0.5">
+              {visibleItems.map((item) => (
+                <NavItem
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  onClick={onClick}
+                />
+              ))}
             </div>
-          )}
-          {/* collapsed: just a small divider between groups */}
-          {collapsed && gi > 0 && (
-            <div className="my-1 mx-3 h-px bg-primary/20" />
-          )}
-          <div className="space-y-0.5">
-            {group.items.map((item) => (
-              <NavItem
-                key={item.href}
-                item={item}
-                collapsed={collapsed}
-                onClick={onClick}
-              />
-            ))}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }

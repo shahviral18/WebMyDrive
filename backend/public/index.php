@@ -144,6 +144,14 @@ $router->post('/api/admin/promo-codes', [AdminController::class, 'upsertPromoCod
 $router->delete('/api/admin/promo-codes/:id', [AdminController::class, 'deletePromoCode'], $adminOnly);
 $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
 
+// ── Super-admin only ──────────────────────────────────────────────────────────
+$superAdminOnly = [
+    [AuthMiddleware::class, 'authenticate'],
+    AuthMiddleware::authorize(['SUPERADMIN']),
+];
+$router->get('/api/admin/users-with-plans',       [AdminController::class, 'getUsersWithPlans'], $superAdminOnly);
+$router->post('/api/admin/users/:id/change-plan', [AdminController::class, 'changePlan'],        $superAdminOnly);
+
 // ── User ──────────────────────────────────────────────────────────────────────
 $router->get('/api/user/workspace', [UserController::class, 'getWorkspace'], $auth);
 $router->get('/api/user/check-username', [UserController::class, 'checkUsername']);
