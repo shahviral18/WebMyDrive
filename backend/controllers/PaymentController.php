@@ -368,9 +368,11 @@ class PaymentController
 
                 $tempPassword = GoogleWorkspaceService::createUser($username, $firstName, $lastName, $orgUnit);
 
-                // Also set recovery email on Google account
-                if (!empty($meta['recoveryEmail'])) {
-                    GoogleWorkspaceService::updateRecovery($username, $meta['recoveryEmail'], null);
+                // Set recovery email and phone on Google account
+                $recoveryEmail = $meta['recoveryEmail'] ?? '';
+                $recoveryPhone = !empty($checkout['customerPhone']) ? '+91' . preg_replace('/\D/', '', $checkout['customerPhone']) : null;
+                if ($recoveryEmail || $recoveryPhone) {
+                    GoogleWorkspaceService::updateRecovery($username, $recoveryEmail ?: null, $recoveryPhone);
                 }
 
                 // Send welcome email

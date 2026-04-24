@@ -72,6 +72,9 @@ class ZohoBooksService
         if ($method === 'POST') {
             $opts[CURLOPT_POST]       = true;
             $opts[CURLOPT_POSTFIELDS] = json_encode($body);
+        } elseif ($method === 'PUT') {
+            $opts[CURLOPT_CUSTOMREQUEST] = 'PUT';
+            $opts[CURLOPT_POSTFIELDS]    = json_encode($body);
         }
 
         curl_setopt_array($ch, $opts);
@@ -104,11 +107,22 @@ class ZohoBooksService
         $search = self::call('GET', '/contacts?email=' . urlencode($email));
         foreach ($search['contacts'] ?? [] as $c) {
             if (strtolower($c['email']) === strtolower($email)) {
+                $contactId = (string) $c['contact_id'];
                 // Reactivate if inactive
                 if (($c['status'] ?? '') === 'inactive') {
-                    self::call('POST', '/contacts/' . $c['contact_id'] . '/active');
+                    self::call('POST', '/contacts/' . $contactId . '/active');
                 }
-                return (string) $c['contact_id'];
+                // Update name if it looks like a username (no space = not a real name)
+                $existingName = trim($c['contact_name'] ?? '');
+                $newName = trim($name ?: $email);
+                if ($newName && $existingName !== $newName) {
+                    try {
+                        self::call('PUT', '/contacts/' . $contactId, ['contact_name' => $newName, 'email' => $email]);
+                    } catch (Throwable $e) {
+                        Logger::warn('[ZohoBooks] Could not update contact name: ' . $e->getMessage());
+                    }
+                }
+                return $contactId;
             }
         }
 
@@ -159,32 +173,19 @@ class ZohoBooksService
         $renewalDate    = date('Y-m-d', strtotime($data['renewalDate'] . ' -1 day'));
 
         $description = sprintf(
-            "Username: %s | Activated: %s | Renewal Type: %s | Next Renewal: %s",
+            "Username: %s\nActivated: %s\nRenewal Type: %s\nNext Renewal: %s",
             $data['username'],
             $activationDate,
             ucfirst($data['billingPeriod'] ?? 'yearly'),
             $renewalDate
         );
 
-        // Build line items with GST
-        // tax_name must match an existing tax in Zoho Books; tax_treatment removed (set at contact level)
-        if ($isGujarat) {
-            $lineItems = [[
-                'name'        => $data['planName'],
-                'description' => $description,
-                'rate'        => $baseAmount,
-                'quantity'    => 1,
-                'tax_name'    => 'GST18',
-            ]];
-        } else {
-            $lineItems = [[
-                'name'        => $data['planName'],
-                'description' => $description,
-                'rate'        => $baseAmount,
-                'quantity'    => 1,
-                'tax_name'    => 'IGST18',
-            ]];
-        }
+        $lineItems = [[
+            'name'        => $data['planName'],
+            'description' => $description,
+            'rate'        => $baseAmount,
+            'quantity'    => 1,
+        ]];
 
         $contactId = self::findOrCreateContact(
             $data['customerName'],
@@ -205,11 +206,7 @@ class ZohoBooksService
             'send_from_org_email_id' => true,
         ];
 
-        // Apply configurable invoice prefix via custom field / invoice number series if available
-        $prefix = defined('ZOHO_BOOKS_INVOICE_PREFIX') ? ZOHO_BOOKS_INVOICE_PREFIX : 'WMD';
-        if ($prefix) {
-            $invoicePayload['invoice_number'] = $prefix . '-' . date('Y') . '-' . strtoupper(substr($data['referenceNumber'], -6));
-        }
+        Logger::info('[ZohoBooks] Creating invoice payload=' . json_encode($invoicePayload));
 
         // Create invoice
         $created = self::call('POST', '/invoices', $invoicePayload);
