@@ -139,10 +139,8 @@ export default function SubscribeUsernamePage() {
       }
 
       // Load Zoho Payments widget SDK
-      const script = document.createElement("script");
-      script.src = "https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js";
-      script.async = true;
-      script.onload = async () => {
+      const existingScript = document.getElementById("zpay-sdk");
+      const loadWidget = async () => {
         try {
           const zpay = new (window as any).ZPayments({
             account_id: sessionData.account_id,
@@ -151,11 +149,11 @@ export default function SubscribeUsernamePage() {
           });
 
           const result = await zpay.requestPaymentMethod({
-            payments_session_id: sessionData.payments_session_id,
             amount: sessionData.amount,
             currency_code: "INR",
+            reference_number: sessionData.referenceNumber,
             business: "WebMyDrive",
-            description: state.planName,
+            description: sessionData.description || state.planName,
             address: {
               name: `${state.firstName} ${state.lastName}`.trim() || state.email,
               email: state.email,
@@ -166,7 +164,6 @@ export default function SubscribeUsernamePage() {
           if (result?.status === "success") {
             setShowSuccess(true);
           } else if (result?.status === "widget_closed") {
-            // user closed without paying
             setIsProcessing(false);
           } else {
             toast.error(result?.message || "Payment was not completed");
@@ -177,11 +174,21 @@ export default function SubscribeUsernamePage() {
           setIsProcessing(false);
         }
       };
-      script.onerror = () => {
-        toast.error("Failed to load payment widget. Please try again.");
-        setIsProcessing(false);
-      };
-      document.body.appendChild(script);
+
+      if (existingScript || (window as any).ZPayments) {
+        loadWidget();
+      } else {
+        const script = document.createElement("script");
+        script.id = "zpay-sdk";
+        script.src = "https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js";
+        script.async = true;
+        script.onload = loadWidget;
+        script.onerror = () => {
+          toast.error("Failed to load payment widget. Please try again.");
+          setIsProcessing(false);
+        };
+        document.body.appendChild(script);
+      }
     } catch (err: any) {
       toast.error(err.message || "Payment failed");
       setIsProcessing(false);

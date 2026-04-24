@@ -45,7 +45,7 @@ class PaymentController
         if ($taken) Response::error('Username already taken. Please choose another.', 409);
 
         $passwordHash    = password_hash($password, PASSWORD_BCRYPT);
-        $referenceNumber = 'WMD-' . strtoupper(substr(uniqid('', true), -10));
+        $referenceNumber = 'WMD-' . strtoupper(bin2hex(random_bytes(5)));
         $now             = date('Y-m-d H:i:s');
         $customerName    = trim("$firstName $lastName") ?: $username;
 
@@ -80,46 +80,22 @@ class PaymentController
             ]
         );
 
-        // Create Zoho payment session
-        try {
-            $description = "WebMyDrive — {$planName} (" . ucfirst($billingPeriod) . ")";
-            $session = ZohoPaymentService::createSession(
-                $amount,
-                $referenceNumber,
-                $description,
-                $customerName,
-                $customerEmail,
-                $customerPhone
-            );
-        } catch (Throwable $e) {
-            Logger::error('[PaymentController] Zoho session error: ' . $e->getMessage());
-            // Clean up pending record
-            Database::execute('DELETE FROM `PendingCheckout` WHERE referenceNumber = :ref', [':ref' => $referenceNumber]);
-            Response::error('Payment gateway unavailable. Please try again.', 502);
-        }
-
-        $zohoSessionId = $session['payments_session_id'] ?? '';
-
-        // Store session ID
-        Database::execute(
-            'UPDATE `PendingCheckout` SET zohoSessionId = :sid, updatedAt = :now WHERE referenceNumber = :ref',
-            [':sid' => $zohoSessionId, ':now' => $now, ':ref' => $referenceNumber]
-        );
-
         AuditService::log('PAYMENT_SESSION_CREATED', null, $req->ip, [
             'referenceNumber' => $referenceNumber,
             'planId'          => $planId,
             'amount'          => $amount,
-            'zohoSessionId'   => $zohoSessionId,
         ]);
 
+        // Return all data the frontend widget needs — no server-side Zoho session required.
+        // The ZPayments widget creates its own session internally using account_id + api_key.
+        // reference_number is passed through the widget call so the webhook can match it back.
         Response::json([
-            'success'             => true,
-            'payments_session_id' => $zohoSessionId,
-            'account_id'          => ZOHO_PAYMENTS_ACCOUNT_ID,
-            'api_key'             => ZOHO_PAYMENTS_API_KEY,
-            'amount'              => $amount,
-            'referenceNumber'     => $referenceNumber,
+            'success'         => true,
+            'account_id'      => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'         => ZOHO_PAYMENTS_API_KEY,
+            'amount'          => $amount,
+            'referenceNumber' => $referenceNumber,
+            'description'     => "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")",
         ]);
     }
 

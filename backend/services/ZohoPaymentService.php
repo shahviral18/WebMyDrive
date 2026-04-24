@@ -30,7 +30,7 @@ class ZohoPaymentService
 
         $payload = [
             'amount'           => (float) round($amount, 2),
-            'currency_code'    => 'INR',
+            'currency'         => 'INR',
             'description'      => substr($description, 0, 255),
             'reference_number' => $referenceNumber,
         ];
