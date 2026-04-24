@@ -1,19 +1,19 @@
 # WebMyDrive Deployment Status & Roadmap
 
-> Last updated: 2026-03-31
+> Last updated: 2026-04-24
 
 ---
 
-## Current Test Deployment
+## Current Deployment (demo1)
 
 | Item | Value |
 |------|-------|
-| **URL** | https://test.webmydrive.com/WebMyDrive/demo/1/ |
-| **cPanel user** | wmdtest |
-| **cPanel host** | test.webmydrive.com:2083 |
-| **Server path** | /home4/wmdtest/public_html/WebMyDrive/demo/1/ |
-| **Database** | MySQL: wmdtest_webmydrive_db |
-| **DB user** | wmdtest_wmd_user |
+| **URL** | https://webmydrive.com/demo1 |
+| **cPanel user** | wmdadmin |
+| **cPanel host** | webmydrive.com:2083 |
+| **Server path** | /home4/wmdadmin/public_html/demo1/ |
+| **Database** | TBD |
+| **DB user** | TBD |
 | **PHP version** | 8.1+ |
 | **SSL** | AutoSSL (valid, auto-renewing) |
 | **Payment gateway** | Razorpay (demo mode — no real keys yet) |
@@ -152,10 +152,9 @@
 1. Go to Google Cloud Console -> APIs & Services -> Credentials
 2. Edit OAuth 2.0 Client ID
 3. Add authorized origins:
-   - `https://test.webmydrive.com` (test)
-   - `https://webmydrive.com` (production, later)
+   - `https://webmydrive.com` (demo1 + production)
 4. Add authorized redirect URIs:
-   - `https://test.webmydrive.com/WebMyDrive/demo/1/login`
+   - `https://webmydrive.com/demo1/login`
 5. Update `VITE_GOOGLE_CLIENT_ID` in `.env.production`
 6. Rebuild and redeploy frontend
 
@@ -207,7 +206,7 @@ The backend's `database.php` already checks for this file first before falling b
 
 ### API Base Path
 - **Dev:** `http://localhost:4000/api/*` (Vite proxy)
-- **Production:** `https://test.webmydrive.com/WebMyDrive/demo/1/backend/public/api/*` (relative path from frontend)
+- **demo1:** `https://webmydrive.com/demo1/backend/public/api/*` (relative path from frontend)
 - **Future prod:** `https://webmydrive.com/backend/public/api/*`
 
 ### Payment Flow

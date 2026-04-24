@@ -34,13 +34,29 @@ class Database
                 throw new RuntimeException('Database credentials not configured. Set DB_NAME/DB_USER in .env or create secure_config.');
             }
 
-            $dsn = "mysql:host=$db_host;dbname=$db_name;charset=" . DB_CHARSET;
-            self::$instance = new PDO($dsn, $db_user, $db_pass, [
+            $dsn = "mysql:host=$db_host;dbname=$db_name;charset=" . (defined('DB_CHARSET') ? DB_CHARSET : 'utf8mb4');
+            $options = [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_PERSISTENT         => true,
                 PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='ANSI_QUOTES'",
-            ]);
+            ];
+            // Retry once on "Too many connections"
+            $attempts = 0;
+            while (true) {
+                try {
+                    self::$instance = new PDO($dsn, $db_user, $db_pass, $options);
+                    break;
+                } catch (\PDOException $e) {
+                    if ($attempts < 1 && ($e->getCode() === '08004' || $e->getCode() === 'HY000' || strpos($e->getMessage(), 'Too many connections') !== false)) {
+                        $attempts++;
+                        usleep(500000); // 0.5s
+                        continue;
+                    }
+                    throw $e;
+                }
+            }
         }
 
         return self::$instance;

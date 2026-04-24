@@ -106,7 +106,9 @@ class GoogleWorkspaceService
         $user->setPrimaryEmail($email);
         $user->setPassword($tempPassword);
         $user->setChangePasswordAtNextLogin(false);
-        $user->setOrgUnitPath($orgUnitPath ?: '/');
+        $finalOuPath = $orgUnitPath ? '/' . ltrim($orgUnitPath, '/') : '/';
+        $user->setOrgUnitPath($finalOuPath);
+        Logger::info("[GWS] createUser orgUnitPath='" . $finalOuPath . "' email=" . $email);
 
         $name = new Google_Service_Directory_UserName();
         $name->setGivenName($firstName ?: explode('@', $email)[0]);
@@ -366,8 +368,10 @@ class GoogleWorkspaceService
     {
         if (!$path) return false;
         try {
-            $service = self::getService();
-            $service->orgunits->get('my_customer', ltrim($path, '/'));
+            $service    = self::getService();
+            // orgunits.get expects path without leading slash, e.g. "webmydrive.com/A - Basic - 500GB"
+            $apiPath    = ltrim($path, '/');
+            $service->orgunits->get('my_customer', $apiPath);
             Logger::info("[GWS] validateOrgUnit: '$path' is valid");
             return true;
         } catch (Throwable $e) {

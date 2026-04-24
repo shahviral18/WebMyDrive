@@ -62,21 +62,53 @@ class DistributorController
         $activeLink = ReferralLinkService::getActiveLink($distributorId, 'DISTRIBUTOR');
         $config = ConfigService::getDistributorConfig();
 
+        $promoRow = Database::queryOne(
+            'SELECT pc.code FROM "DistributorPromoCode" dpc
+             JOIN "PromoCode" pc ON pc.id = dpc.promoCodeId
+             WHERE dpc.distributorId = :id AND dpc.isActive = 1 LIMIT 1',
+            [':id' => $distributorId]
+        );
+
+        $userToken = null;
+        if (!empty($dist['linkedUserId'])) {
+            $userToken = JwtHelper::generateToken((int) $dist['linkedUserId'], 'USER');
+        }
+
         Response::json([
             'distributor' => [
                 'id' => (int) $dist['id'],
                 'name' => $dist['name'],
                 'email' => $dist['displayEmail'] ?? $dist['email'],
-                'tier' => $dist['tier'],
+                'tier' => $dist['tier'] ?? null,
                 'status' => $dist['status'],
                 'walletBalance' => (float) $dist['walletBalance'],
-                'revenueThisYear' => (float) $dist['revenueThisYear'],
+                'revenueThisYear' => (float) ($dist['revenueThisYear'] ?? 0),
                 'totalCustomers' => $custCount,
                 'totalSales' => $salesCount,
                 'totalCommission' => $commission,
                 'referralCode' => $activeLink['code'],
             ],
+            'promoCode' => $promoRow['code'] ?? null,
+            'promoDiscounts' => $config['promoDiscounts'] ?? [],
+            'userToken' => $userToken,
         ]);
+    }
+
+    public function getPromoCodeHistory(Request $req): void
+    {
+        $distributorId = $this->requireDistributor($req);
+
+        $rows = Database::query(
+            'SELECT dpc.id, dpc.isActive, dpc.isFestive, dpc.assignedAt, dpc.revokedAt, dpc.note,
+                    pc.code, pc.name, pc.discountPercent, pc.status AS promoStatus, pc.expiresAt
+             FROM "DistributorPromoCode" dpc
+             JOIN "PromoCode" pc ON pc.id = dpc.promoCodeId
+             WHERE dpc.distributorId = :id
+             ORDER BY dpc.assignedAt DESC',
+            [':id' => $distributorId]
+        );
+
+        Response::json(['history' => $rows]);
     }
 
     public function getHistory(Request $req): void

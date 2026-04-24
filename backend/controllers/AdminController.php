@@ -437,7 +437,10 @@ class AdminController
                     (SELECT COUNT(*) FROM "User" WHERE distributorId = d.id) AS totalCustomers,
                     (SELECT COUNT(*) FROM "DistributorSale" WHERE distributorId = d.id) AS totalSales,
                     (SELECT COALESCE(SUM(commissionEarned),0) FROM "DistributorSale" WHERE distributorId = d.id) AS commissionTotal,
-                    (SELECT COALESCE(SUM(ABS(amount)),0) FROM "DistributorWalletTx" WHERE distributorId = d.id AND status = \'PENDING\') AS pendingWithdrawal
+                    (SELECT COALESCE(SUM(ABS(amount)),0) FROM "DistributorWalletTx" WHERE distributorId = d.id AND status = \'PENDING\') AS pendingWithdrawal,
+                    (SELECT pc.code FROM "DistributorPromoCode" dpc
+                     JOIN "PromoCode" pc ON pc.id = dpc.promoCodeId
+                     WHERE dpc.distributorId = d.id AND dpc.isActive = 1 LIMIT 1) AS promoCode
              FROM "Distributor" d
              ORDER BY d.createdAt DESC
              LIMIT :lim OFFSET :off',
@@ -450,14 +453,15 @@ class AdminController
                 'name' => $d['name'] ?? $d['email'],
                 'email' => $d['email'],
                 'status' => strtolower($d['status'] ?? 'active'),
-                'tier' => $d['tier'],
-                'commissionPct' => 10,
+                'tier' => $d['tier'] ?? null,
+                'commissionPct' => (float) ($d['commissionPct'] ?? 10),
                 'referralCode' => $d['referralCode'],
+                'promoCode' => $d['promoCode'],
                 'totalCustomers' => (int) $d['totalCustomers'],
                 'activeCustomers' => (int) $d['totalCustomers'],
                 'walletBalanceINR' => (float) $d['walletBalance'],
-                'revenueThisYearINR' => (float) $d['revenueThisYear'],
-                'revenueGeneratedINR' => (float) $d['revenueThisYear'],
+                'revenueThisYearINR' => (float) ($d['revenueThisYear'] ?? 0),
+                'revenueGeneratedINR' => (float) ($d['revenueThisYear'] ?? 0),
                 'commissionEarnedINR' => (float) $d['commissionTotal'],
                 'pendingWithdrawalINR' => (float) $d['pendingWithdrawal'],
                 'joinedAt' => $d['joinDate'] ?? $d['createdAt'],
@@ -694,7 +698,7 @@ class AdminController
         $skip = ($page - 1) * $limit;
 
         $keywords = ['PAYMENT', 'CHECKOUT', 'COMMISSION', 'WALLET', 'ORDER', 'PURCHASE', 'REFERRAL', 'RAZORPAY', 'PLAN_PURCHASE', 'BILLING', 'PAYOUT'];
-        $orClauses = implode(' OR ', array_map(fn($k) => "actionName LIKE '%$k%'", $keywords));
+        $orClauses = implode(' OR ', array_map(fn($k) => "action LIKE '%$k%'", $keywords));
 
         $total = (int) Database::scalar("SELECT COUNT(*) FROM \"AuditLog\" WHERE $orClauses");
         $logs = Database::query(
@@ -878,6 +882,92 @@ class AdminController
         Response::json(Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => $id]));
     }
 
+    // ── Distributor Promo Code Assignment ─────────────────────────────────────
+
+    public function getDistributorPromoCodes(Request $req): void
+    {
+        $distributorId = (int)($req->params['id'] ?? 0);
+        if (!$distributorId) Response::error('Distributor ID required', 400);
+
+        $rows = Database::query(
+            'SELECT dpc.id, dpc.distributorId, dpc.isActive, dpc.isFestive,
+                    dpc.assignedAt, dpc.revokedAt, dpc.note,
+                    pc.id AS promoCodeId, pc.code, pc.name, pc.discountPercent,
+                    pc.status AS promoStatus, pc.expiresAt
+             FROM "DistributorPromoCode" dpc
+             JOIN "PromoCode" pc ON pc.id = dpc.promoCodeId
+             WHERE dpc.distributorId = :did
+             ORDER BY dpc.assignedAt DESC',
+            [':did' => $distributorId]
+        );
+
+        Response::json($rows);
+    }
+
+    public function assignDistributorPromoCode(Request $req): void
+    {
+        $distributorId = (int)($req->params['id'] ?? 0);
+        $promoCodeId = (int)($req->body['promoCodeId'] ?? 0);
+        $isFestive = !empty($req->body['isFestive']) ? 1 : 0;
+        $note = trim((string)($req->body['note'] ?? ''));
+        $adminId = $req->user['userId'] ?? null;
+
+        if (!$distributorId) Response::error('Distributor ID required', 400);
+        if (!$promoCodeId) Response::error('promoCodeId required', 400);
+
+        $dist = Database::queryOne('SELECT id FROM "Distributor" WHERE id = :id', [':id' => $distributorId]);
+        if (!$dist) Response::error('Distributor not found', 404);
+
+        $promo = Database::queryOne('SELECT id FROM "PromoCode" WHERE id = :id', [':id' => $promoCodeId]);
+        if (!$promo) Response::error('Promo code not found', 404);
+
+        $now = date('Y-m-d H:i:s');
+
+        Database::execute(
+            'UPDATE "DistributorPromoCode" SET isActive = 0, revokedAt = :now
+             WHERE distributorId = :did AND isActive = 1',
+            [':now' => $now, ':did' => $distributorId]
+        );
+
+        Database::insert(
+            'INSERT INTO "DistributorPromoCode" (distributorId, promoCodeId, isFestive, isActive, assignedAt, assignedBy, note)
+             VALUES (:did, :pcid, :fest, 1, :now, :by, :note)',
+            [
+                ':did' => $distributorId, ':pcid' => $promoCodeId,
+                ':fest' => $isFestive, ':now' => $now,
+                ':by' => $adminId ? abs((int)$adminId) : null,
+                ':note' => $note ?: null,
+            ]
+        );
+
+        AuditService::log('ADMIN_PROMO_CODE_ASSIGNED', $adminId ? abs((int)$adminId) : null, null, [
+            'distributorId' => $distributorId, 'promoCodeId' => $promoCodeId, 'isFestive' => $isFestive,
+        ]);
+
+        Response::json(['success' => true]);
+    }
+
+    public function revokeDistributorPromoCode(Request $req): void
+    {
+        $distributorId = (int)($req->params['id'] ?? 0);
+        $dpcId = (int)($req->params['dpcId'] ?? 0);
+
+        if (!$distributorId || !$dpcId) Response::error('IDs required', 400);
+
+        $row = Database::queryOne(
+            'SELECT id FROM "DistributorPromoCode" WHERE id = :id AND distributorId = :did',
+            [':id' => $dpcId, ':did' => $distributorId]
+        );
+        if (!$row) Response::error('Assignment not found', 404);
+
+        Database::execute(
+            'UPDATE "DistributorPromoCode" SET isActive = 0, revokedAt = :now WHERE id = :id',
+            [':now' => date('Y-m-d H:i:s'), ':id' => $dpcId]
+        );
+
+        Response::json(['success' => true]);
+    }
+
     // ── Promo Codes ───────────────────────────────────────────────────────────
 
     public function getPromoCodes(Request $req): void
@@ -943,11 +1033,11 @@ class AdminController
 
             $newId = Database::insert(
                 'INSERT INTO "PromoCode" (code, name, discountPercent, applicablePlans, status, usesLimit, usesCount, expiresAt, createdAt, updatedAt)
-                 VALUES (:c, :n, :dp, :ap, :s, :ul, 0, :ea, :now, :now)',
+                 VALUES (:c, :n, :dp, :ap, :s, :ul, 0, :ea, :now1, :now2)',
                 [
                     ':c' => $code, ':n' => $name ?: null, ':dp' => $discountFloat,
                     ':ap' => $applicablePlansJson, ':s' => $status,
-                    ':ul' => $usesLimit, ':ea' => $expiresAtVal, ':now' => $now,
+                    ':ul' => $usesLimit, ':ea' => $expiresAtVal, ':now1' => $now, ':now2' => $now,
                 ]
             );
             $row = Database::queryOne('SELECT * FROM "PromoCode" WHERE id = :id', [':id' => $newId]);
@@ -993,10 +1083,10 @@ class AdminController
              LEFT JOIN "Workspace" w ON w.userId = u.id AND w.status = \'ACTIVE\'
              LEFT JOIN "Plan" p ON p.id = w.planId
              WHERE u.role = \'USER\'
-               AND (u.email LIKE :s OR u.name LIKE :s)
+               AND (u.email LIKE :s1 OR u.name LIKE :s2)
              ORDER BY u.createdAt DESC
              LIMIT 200',
-            [':s' => $searchParam]
+            [':s1' => $searchParam, ':s2' => $searchParam]
         );
 
         Response::json($rows ?: []);
@@ -1052,8 +1142,8 @@ class AdminController
         } else {
             Database::execute(
                 'INSERT INTO "Workspace" (userId, planId, status, billingPeriod, renewalDate, createdAt, updatedAt)
-                 VALUES (:uid, :pid, \'ACTIVE\', :bp, :rd, :now, :now)',
-                [':uid' => $userId, ':pid' => $planId, ':bp' => $billingPeriod, ':rd' => $renewalDate, ':now' => $now]
+                 VALUES (:uid, :pid, \'ACTIVE\', :bp, :rd, NOW(), NOW())',
+                [':uid' => $userId, ':pid' => $planId, ':bp' => $billingPeriod, ':rd' => $renewalDate]
             );
         }
 
@@ -1068,18 +1158,18 @@ class AdminController
         } else {
             Database::execute(
                 'INSERT INTO "Subscription" (user_id, plan_name, payment_id, status, start_date, end_date, created_at, updated_at)
-                 VALUES (:uid, :pn, :pi, \'active\', :sd, :ed, :now, :now)',
-                [':uid' => $userId, ':pn' => $plan['name'], ':pi' => $paymentRef, ':sd' => $now, ':ed' => $renewalDate, ':now' => $now]
+                 VALUES (:uid, :pn, :pi, \'active\', :sd, :ed, NOW(), NOW())',
+                [':uid' => $userId, ':pn' => $plan['name'], ':pi' => $paymentRef, ':sd' => $now, ':ed' => $renewalDate]
             );
         }
 
         // Create Order record
         Database::execute(
             'INSERT INTO "Order" (userId, planId, amount, currency, status, paymentId, orderType, billingPeriod, fromPlanId, createdAt, updatedAt)
-             VALUES (:uid, :pid, 0, \'INR\', \'COMPLETED\', :pi, \'ADMIN_OVERRIDE\', :bp, :fpid, :now, :now)',
+             VALUES (:uid, :pid, 0, \'INR\', \'COMPLETED\', :pi, \'ADMIN_OVERRIDE\', :bp, :fpid, NOW(), NOW())',
             [
                 ':uid'  => $userId, ':pid'  => $planId, ':pi'   => $paymentRef,
-                ':bp'   => $billingPeriod, ':fpid' => $oldWs['planId'] ?? null, ':now'  => $now,
+                ':bp'   => $billingPeriod, ':fpid' => $oldWs['planId'] ?? null,
             ]
         );
 
@@ -1097,7 +1187,7 @@ class AdminController
             'note'            => $note ?: null,
         ]);
 
-        // Move Google OU (best-effort)
+        // Move Google OU (best-effort) — User.email is username@webmydrive.com
         if (!empty($plan['googleOrgUnit'])) {
             try {
                 GoogleWorkspaceService::moveUserToOrgUnit($user['email'], $plan['googleOrgUnit']);

@@ -58,8 +58,20 @@ export default function SubscribeUsernamePage() {
   const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
+    // If Zoho redirected back here after payment, go to success page immediately
+    const pending = sessionStorage.getItem("wmd_pending_payment");
+    if (pending) {
+      try {
+        const { ref, email, firstName, wsEmail } = JSON.parse(pending);
+        window.location.href = `/demo1/payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(firstName)}&ws=${encodeURIComponent(wsEmail)}`;
+      } catch {
+        sessionStorage.removeItem("wmd_pending_payment");
+      }
+      return;
+    }
     if (!state) navigate(`/subscribe/${planSlug}`, { replace: true });
   }, [state, planSlug, navigate]);
+
 
   const [username, setUsername] = useState("");
   const [availability, setAvailability] = useState<Availability>({ status: "idle" });
@@ -148,10 +160,30 @@ export default function SubscribeUsernamePage() {
             otherOptions: { api_key: sessionData.api_key },
           });
 
+          const wsEmail = availability.status === "available" ? availability.email : "";
+          const ref = sessionData.referenceNumber;
+          const successUrl = `/demo1/payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(state?.email || "")}&name=${encodeURIComponent(state?.firstName || "")}&ws=${encodeURIComponent(wsEmail)}`;
+
+          // Poll backend every 2s while widget is open — redirect as soon as COMPLETED
+          let pollStopped = false;
+          const poll = setInterval(async () => {
+            if (pollStopped) return;
+            try {
+              const data = await api.get(`/payment/status?ref=${encodeURIComponent(ref)}`);
+              if (data.status === "COMPLETED") {
+                pollStopped = true;
+                clearInterval(poll);
+                window.location.href = successUrl;
+              }
+            } catch {}
+          }, 2000);
+
           const result = await zpay.requestPaymentMethod({
-            amount: sessionData.amount,
+            payments_session_id: sessionData.payments_session_id,
+            transaction_type: "payment",
+            amount: parseFloat(sessionData.amount).toFixed(2),
             currency_code: "INR",
-            reference_number: sessionData.referenceNumber,
+            reference_number: ref,
             business: "WebMyDrive",
             description: sessionData.description || state.planName,
             address: {
@@ -161,12 +193,23 @@ export default function SubscribeUsernamePage() {
             },
           });
 
-          if (result?.status === "success") {
-            setShowSuccess(true);
-          } else if (result?.status === "widget_closed") {
+          // Widget promise resolved — handle result
+          pollStopped = true;
+          clearInterval(poll);
+
+          if (result?.status === "success" || result?.status === "succeeded") {
+            window.location.href = successUrl;
+          } else if (result?.status === "widget_closed" || result?.status === "cancelled") {
             setIsProcessing(false);
           } else {
-            toast.error(result?.message || "Payment was not completed");
+            // Unknown — check one final time if payment actually went through
+            try {
+              const data = await api.get(`/payment/status?ref=${encodeURIComponent(ref)}`);
+              if (data.status === "COMPLETED") {
+                window.location.href = successUrl;
+                return;
+              }
+            } catch {}
             setIsProcessing(false);
           }
         } catch (err: any) {

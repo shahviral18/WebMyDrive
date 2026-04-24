@@ -104,6 +104,10 @@ class ZohoBooksService
         $search = self::call('GET', '/contacts?email=' . urlencode($email));
         foreach ($search['contacts'] ?? [] as $c) {
             if (strtolower($c['email']) === strtolower($email)) {
+                // Reactivate if inactive
+                if (($c['status'] ?? '') === 'inactive') {
+                    self::call('POST', '/contacts/' . $c['contact_id'] . '/active');
+                }
                 return (string) $c['contact_id'];
             }
         }
@@ -163,27 +167,22 @@ class ZohoBooksService
         );
 
         // Build line items with GST
+        // tax_name must match an existing tax in Zoho Books; tax_treatment removed (set at contact level)
         if ($isGujarat) {
             $lineItems = [[
-                'name'          => $data['planName'],
-                'description'   => $description,
-                'rate'          => $baseAmount,
-                'quantity'      => 1,
-                'tax_name'      => 'GST18',
-                'tax_percentage'=> 18,
-                'tax_type'      => 'tax_group',
-                'tax_treatment' => 'intra_state',
+                'name'        => $data['planName'],
+                'description' => $description,
+                'rate'        => $baseAmount,
+                'quantity'    => 1,
+                'tax_name'    => 'GST18',
             ]];
         } else {
             $lineItems = [[
-                'name'          => $data['planName'],
-                'description'   => $description,
-                'rate'          => $baseAmount,
-                'quantity'      => 1,
-                'tax_name'      => 'IGST18',
-                'tax_percentage'=> 18,
-                'tax_type'      => 'tax',
-                'tax_treatment' => 'inter_state',
+                'name'        => $data['planName'],
+                'description' => $description,
+                'rate'        => $baseAmount,
+                'quantity'    => 1,
+                'tax_name'    => 'IGST18',
             ]];
         }
 
@@ -199,7 +198,7 @@ class ZohoBooksService
         $invoicePayload = [
             'customer_id'        => $contactId,
             'invoice_date'       => $activationDate,
-            'due_date'           => $activationDate,
+            'due_date'           => date('Y-m-d', strtotime($activationDate . ' +7 days')),
             'reference_number'   => $data['referenceNumber'],
             'notes'              => "Thank you for subscribing to WebMyDrive.",
             'line_items'         => $lineItems,

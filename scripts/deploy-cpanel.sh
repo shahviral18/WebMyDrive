@@ -10,12 +10,12 @@
 set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-HOST="${CPANEL_HOST:-test.webmydrive.com}"
-USER="${CPANEL_USER:-wmdtest}"
+HOST="${CPANEL_HOST:-webmydrive.com}"
+USER="${CPANEL_USER:-wmdadmin}"
 TOKEN="${CPANEL_TOKEN:?Set CPANEL_TOKEN env var}"
 AUTH="Authorization: cpanel ${USER}:${TOKEN}"
 BASE="https://${HOST}:2083/execute/Fileman/upload_files"
-DEST="public_html/WebMyDrive/demo/1"
+DEST="public_html/demo1"
 
 echo "=== WebMyDrive cPanel Deployment ==="
 echo "Target: ${HOST} -> ${DEST}"
@@ -111,10 +111,10 @@ echo "Backend uploaded."
 
 # ── Step 4: Verify ───────────────────────────────────────────────────────────
 echo "[4/4] Verifying deployment..."
-HEALTH=$(curl -s -k "https://${HOST}/WebMyDrive/demo/1/backend/public/api/health" 2>/dev/null || echo "FAILED")
+HEALTH=$(curl -s -k "https://${HOST}/${DEST}/backend/public/api/health" 2>/dev/null || echo "FAILED")
 echo "Health check: $HEALTH"
 
 echo ""
 echo "=== Deployment complete ==="
-echo "Frontend: https://${HOST}/WebMyDrive/demo/1/"
-echo "Backend:  https://${HOST}/WebMyDrive/demo/1/backend/public/api/health"
+echo "Frontend: https://${HOST}/demo1/"
+echo "Backend:  https://${HOST}/demo1/backend/public/api/health"

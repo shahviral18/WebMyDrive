@@ -122,11 +122,26 @@ class CheckoutController
                 ]
             );
 
-            // -- Store referral code for attribution in audit log --
+            // -- Store referral/promo code for attribution in audit log --
             if ($referralCode) {
+                $finalCode = $referralCode;
+
+                // Check if it's a distributor promo code and transform to DIST_ format
+                $distPromoRow = Database::queryOne(
+                    'SELECT dpc.distributorId FROM "PromoCode" pc
+                     JOIN "DistributorPromoCode" dpc ON dpc.promoCodeId = pc.id
+                     WHERE pc.code = :code AND pc.status = \'ACTIVE\' AND dpc.isActive = 1
+                       AND (pc.expiresAt IS NULL OR pc.expiresAt > datetime(\'now\'))
+                     LIMIT 1',
+                    [':code' => $referralCode]
+                );
+                if ($distPromoRow) {
+                    $finalCode = "DIST_{$distPromoRow['distributorId']}:{$referralCode}";
+                }
+
                 AuditService::log('CHECKOUT_REFERRAL_CODE', 0, $req->ip, [
                     'sessionId' => $sessionId,
-                    'referralCode' => $referralCode,
+                    'referralCode' => $finalCode,
                     'billingPeriod' => $billingPeriod,
                 ]);
             }
@@ -229,7 +244,7 @@ class CheckoutController
                         createdAt, updatedAt
                     ) VALUES (
                         :name, :email, :hash, :role, :refcode,
-                        :wallet, :passreq, :firstlogin, :now, :now
+                        :wallet, :passreq, :firstlogin, :now1, :now2
                     )',
                     [
                         ':name' => $customerName,
@@ -240,7 +255,7 @@ class CheckoutController
                         ':wallet' => 0,
                         ':passreq' => 1,
                         ':firstlogin' => 1,
-                        ':now' => $now,
+                        ':now1' => $now, ':now2' => $now,
                     ]
                 );
 
@@ -282,7 +297,7 @@ class CheckoutController
                     status, createdAt, updatedAt
                 ) VALUES (
                     :uid, :pid, :amt, :curr, :payid,
-                    :status, :now, :now
+                    :status, :now1, :now2
                 )',
                 [
                     ':uid' => $userId,
@@ -291,7 +306,7 @@ class CheckoutController
                     ':curr' => 'INR',
                     ':payid' => $paymentId,
                     ':status' => 'COMPLETED',
-                    ':now' => $now,
+                    ':now1' => $now, ':now2' => $now,
                 ]
             );
 

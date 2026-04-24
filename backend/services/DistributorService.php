@@ -54,14 +54,14 @@ class DistributorService
         $id = Database::insert(
             'INSERT INTO "Distributor"
              (userId, email, tier, joinDate, resetDate, status, walletBalance, revenueThisYear, createdAt, updatedAt)
-             VALUES (:uid, :email, :tier, :joined, :reset, \'ACTIVE\', 0, 0, :now, :now)',
+             VALUES (:uid, :email, :tier, :joined, :reset, \'ACTIVE\', 0, 0, :now1, :now2)',
             [
                 ':uid' => $userId,
                 ':email' => $email,
                 ':tier' => $tierName,
                 ':joined' => $nowStr,
                 ':reset' => $resetStr,
-                ':now' => $nowStr,
+                ':now1' => $nowStr, ':now2' => $nowStr,
             ]
         );
 

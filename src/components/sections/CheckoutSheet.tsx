@@ -38,15 +38,18 @@ export function CheckoutSheet({
 }: CheckoutSheetProps) {
   const navigate = useNavigate();
 
+  const [billToCompany, setBillToCompany] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
+    email: "",
+    mobile: "",
     recoveryEmail: "",
     whatsapp: "",
-    email: "",
     companyName: "",
-    mobile: "",
     gstNumber: "",
+    accountantPhone: "",
+    accountantEmail: "",
     billing: { country: "India", state: "Gujarat", city: "", address: "", zipCode: "" },
   });
   const [couponInput, setCouponInput] = useState("");
@@ -58,9 +61,11 @@ export function CheckoutSheet({
   const planKey = plan?.id;
   useMemo(() => {
     if (planKey) {
+      setBillToCompany(false);
       setFormData({
-        firstName: "", lastName: "", recoveryEmail: "", whatsapp: "",
-        email: "", companyName: "", mobile: "", gstNumber: "",
+        firstName: "", lastName: "", email: "", mobile: "",
+        recoveryEmail: "", whatsapp: "",
+        companyName: "", gstNumber: "", accountantPhone: "", accountantEmail: "",
         billing: { country: "India", state: "Gujarat", city: "", address: "", zipCode: "" },
       });
       setCouponInput("");
@@ -125,7 +130,7 @@ export function CheckoutSheet({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!plan) return;
-    if (!formData.email || !formData.mobile || !formData.billing.city || !formData.billing.address || !formData.billing.zipCode) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.mobile) {
       toast.error("Please fill in all required fields.");
       return;
     }
@@ -133,6 +138,7 @@ export function CheckoutSheet({
     navigate(`/subscribe/${planToSlug(plan.name)}/username`, {
       state: {
         ...formData,
+        billToCompany,
         couponInput,
         planId: plan.id,
         planName: plan.name,
@@ -272,6 +278,17 @@ export function CheckoutSheet({
                 <Input placeholder="Last Name*" required value={formData.lastName}
                   onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                   className="h-11 border-slate-200 rounded" />
+                <Input type="email" placeholder="Email*" required value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="h-11 border-slate-200 rounded" />
+                <div className="flex gap-2">
+                  <select className="h-11 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-sm">
+                    <option>+91</option>
+                  </select>
+                  <Input placeholder="Mobile No.*" required value={formData.mobile}
+                    onChange={e => setFormData({ ...formData, mobile: e.target.value })}
+                    className="h-11 border-slate-200 rounded w-full" />
+                </div>
                 <Input type="email" placeholder="Recovery Email" value={formData.recoveryEmail}
                   onChange={e => setFormData({ ...formData, recoveryEmail: e.target.value })}
                   className="h-11 border-slate-200 rounded" />
@@ -288,29 +305,52 @@ export function CheckoutSheet({
 
             {/* Billing Address */}
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-              <h2 className="text-base font-bold text-slate-800 mb-5">Billing Address</h2>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="text-base font-bold text-slate-800">Billing Address</h2>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <span className="text-sm text-slate-500">Bill to Company?</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={billToCompany}
+                    onClick={() => setBillToCompany(v => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${billToCompany ? "bg-blue-500" : "bg-slate-200"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${billToCompany ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </label>
+              </div>
               <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input placeholder="Company Name" value={formData.companyName}
-                    onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                    className="h-11 border-slate-200 rounded" />
-                  <Input placeholder="GST Number" value={formData.gstNumber}
-                    onChange={e => setFormData({ ...formData, gstNumber: e.target.value })}
-                    className="h-11 border-slate-200 rounded" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex gap-2">
-                    <select className="h-11 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-sm">
-                      <option>+91</option>
-                    </select>
-                    <Input placeholder="Account Phone*" required value={formData.mobile}
-                      onChange={e => setFormData({ ...formData, mobile: e.target.value })}
-                      className="h-11 border-slate-200 rounded w-full" />
-                  </div>
-                  <Input type="email" placeholder="Account Email*" required value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="h-11 border-slate-200 rounded" />
-                </div>
+                {billToCompany && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input placeholder="Company Name" value={formData.companyName}
+                        onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                        className="h-11 border-slate-200 rounded" />
+                      <Input placeholder="GST Number" value={formData.gstNumber}
+                        onChange={e => setFormData({ ...formData, gstNumber: e.target.value })}
+                        className="h-11 border-slate-200 rounded" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="flex gap-2">
+                        <select className="h-11 w-20 shrink-0 rounded border border-slate-200 bg-white px-2 text-sm">
+                          <option>+91</option>
+                        </select>
+                        <Input placeholder="Accountant Phone" value={formData.accountantPhone}
+                          onChange={e => setFormData({ ...formData, accountantPhone: e.target.value })}
+                          className="h-11 border-slate-200 rounded w-full" />
+                      </div>
+                      <Input type="email" placeholder="Accountant Email" value={formData.accountantEmail}
+                        onChange={e => setFormData({ ...formData, accountantEmail: e.target.value })}
+                        className="h-11 border-slate-200 rounded" />
+                    </div>
+                  </>
+                )}
+                {!billToCompany && (
+                  <p className="text-sm text-slate-400 italic">
+                    Billing to: {formData.firstName || "First Name"} {formData.lastName || "Last Name"}
+                  </p>
+                )}
                 <select className="h-11 w-full rounded border border-slate-200 bg-white px-3 text-sm"
                   value={formData.billing.country}
                   onChange={e => setFormData({ ...formData, billing: { ...formData.billing, country: e.target.value } })}>
@@ -327,15 +367,15 @@ export function CheckoutSheet({
                     <option>Delhi</option>
                     <option>Others</option>
                   </select>
-                  <Input placeholder="City*" required value={formData.billing.city}
+                  <Input placeholder="City" value={formData.billing.city}
                     onChange={e => setFormData({ ...formData, billing: { ...formData.billing, city: e.target.value } })}
                     className="h-11 border-slate-200 rounded" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Input placeholder="Address*" required value={formData.billing.address}
+                  <Input placeholder="Address" value={formData.billing.address}
                     onChange={e => setFormData({ ...formData, billing: { ...formData.billing, address: e.target.value } })}
                     className="h-11 border-slate-200 rounded" />
-                  <Input placeholder="ZIP Code*" required value={formData.billing.zipCode}
+                  <Input placeholder="ZIP Code" value={formData.billing.zipCode}
                     onChange={e => setFormData({ ...formData, billing: { ...formData.billing, zipCode: e.target.value } })}
                     className="h-11 border-slate-200 rounded" />
                 </div>

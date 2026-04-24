@@ -49,17 +49,19 @@ class PaymentController
         $now             = date('Y-m-d H:i:s');
         $customerName    = trim("$firstName $lastName") ?: $username;
 
-        $checkoutMeta = json_encode([
-            'username'       => $username,
-            'passwordHash'   => $passwordHash,
-            'firstName'      => $firstName,
-            'lastName'       => $lastName,
-            'recoveryEmail'  => $recoveryEmail,
-            'whatsapp'       => $whatsapp,
-            'companyName'    => $companyName,
-            'gstNumber'      => $gstNumber,
-            'billingAddress' => $billingAddr,
-        ]);
+        // payments_session_id added after session creation below
+        $checkoutMetaArr = [
+            'username'         => $username,
+            'passwordHash'     => $passwordHash,
+            'firstName'        => $firstName,
+            'lastName'         => $lastName,
+            'recoveryEmail'    => $recoveryEmail,
+            'whatsapp'         => $whatsapp,
+            'companyName'      => $companyName,
+            'gstNumber'        => $gstNumber,
+            'billingAddress'   => $billingAddr,
+        ];
+        $checkoutMeta = json_encode($checkoutMetaArr);
 
         // Store pending checkout
         Database::insert(
@@ -86,17 +88,88 @@ class PaymentController
             'amount'          => $amount,
         ]);
 
-        // Return all data the frontend widget needs — no server-side Zoho session required.
-        // The ZPayments widget creates its own session internally using account_id + api_key.
-        // reference_number is passed through the widget call so the webhook can match it back.
+        // Create server-side Zoho payment session (required by widget)
+        try {
+            $description = "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")";
+            $session     = ZohoPaymentService::createSession($amount, $referenceNumber, $description);
+        } catch (Throwable $e) {
+            Logger::error('[PaymentController] ZohoPaymentService::createSession failed: ' . $e->getMessage());
+            Response::error('Payment gateway error: ' . $e->getMessage(), 502);
+        }
+
+        // Store session ID in meta so getStatus can fallback to Zoho API
+        $paymentsSessionId = $session['payments_session_id'] ?? '';
+        if ($paymentsSessionId) {
+            $checkoutMetaArr['paymentsSessionId'] = $paymentsSessionId;
+            Database::execute(
+                'UPDATE `PendingCheckout` SET checkoutMeta=:meta WHERE referenceNumber=:ref',
+                [':meta' => json_encode($checkoutMetaArr), ':ref' => $referenceNumber]
+            );
+        }
+
         Response::json([
-            'success'         => true,
-            'account_id'      => ZOHO_PAYMENTS_ACCOUNT_ID,
-            'api_key'         => ZOHO_PAYMENTS_API_KEY,
-            'amount'          => $amount,
-            'referenceNumber' => $referenceNumber,
-            'description'     => "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")",
+            'success'             => true,
+            'account_id'          => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'             => ZOHO_PAYMENTS_API_KEY,
+            'payments_session_id' => $paymentsSessionId,
+            'amount'              => $amount,
+            'referenceNumber'     => $referenceNumber,
+            'description'         => "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")",
         ]);
+    }
+
+    // ── Payment Status ────────────────────────────────────────────────────────
+
+    public function getStatus(Request $req): void
+    {
+        $ref = trim($req->query['ref'] ?? '');
+        if (!$ref) Response::error('ref is required', 400);
+
+        $checkout = Database::queryOne(
+            'SELECT status, checkoutMeta FROM `PendingCheckout` WHERE referenceNumber = :ref',
+            [':ref' => $ref]
+        );
+
+        if (!$checkout) Response::error('Not found', 404);
+
+        $status = $checkout['status'];
+
+        // If still PENDING, ask Zoho directly as a fallback (in case webhook didn't fire)
+        if ($status === 'PENDING') {
+            $meta = json_decode($checkout['checkoutMeta'] ?? '{}', true);
+            $sessionId = $meta['paymentsSessionId'] ?? '';
+            if ($sessionId) {
+                try {
+                    $zohoStatus = ZohoPaymentService::getSessionStatus($sessionId);
+                    Logger::info("[PaymentStatus] Zoho session {$sessionId} status={$zohoStatus} ref={$ref}");
+                    if (in_array($zohoStatus, ['paid', 'succeeded', 'success', 'completed'], true)) {
+                        // Webhook hasn't fired yet — trigger processing now
+                        Logger::info("[PaymentStatus] Zoho paid but webhook pending — triggering processing for ref={$ref}");
+                        $fakePayload = [
+                            'event_type' => 'payment.succeeded',
+                            'event_id'   => 'fallback-' . time(),
+                            'event_object' => [
+                                'payment' => [
+                                    'reference_number' => $ref,
+                                    'payment_id'       => 'ZOHO-DIRECT-' . time(),
+                                    'amount'           => 0, // will use checkout amount
+                                ]
+                            ]
+                        ];
+                        $this->handlePaymentSucceeded($fakePayload);
+                        // Re-fetch status
+                        $updated = Database::queryOne('SELECT status FROM `PendingCheckout` WHERE referenceNumber=:ref', [':ref' => $ref]);
+                        $status = $updated['status'] ?? $status;
+                    } elseif (in_array($zohoStatus, ['failed', 'cancelled', 'expired'], true)) {
+                        $status = 'FAILED';
+                    }
+                } catch (Throwable $e) {
+                    Logger::warn('[PaymentStatus] Zoho fallback check failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        Response::json(['status' => $status]);
     }
 
     // ── Zoho Webhook Handler ──────────────────────────────────────────────────
@@ -287,6 +360,8 @@ class PaymentController
                 $plan = Database::queryOne('SELECT name, googleOrgUnit FROM `Plan` WHERE id = :id', [':id' => (int)$checkout['planId']]);
                 $orgUnit = $plan['googleOrgUnit'] ?? '/';
 
+                Logger::info("[ZohoWebhook] Creating GWS user orgUnit='" . $orgUnit . "' planId=" . $checkout['planId']);
+
                 $nameParts = explode(' ', $name, 2);
                 $firstName = $nameParts[0] ?? '';
                 $lastName  = $nameParts[1] ?? '';
@@ -316,7 +391,7 @@ class PaymentController
 
             // Send Zoho Books invoice (non-fatal — don't roll back if this fails)
             try {
-                $billingAddr = json_decode($meta['billingAddress'] ?? '[]', true);
+                $billingAddr = $meta['billingAddress'] ?? [];
                 if (!is_array($billingAddr)) $billingAddr = [];
 
                 ZohoBooksService::createAndSendInvoice([
@@ -360,40 +435,71 @@ class PaymentController
         string $renewalDate,
         string $billingPeriod
     ): void {
-        $firstName   = explode(' ', trim($toName))[0] ?: 'there';
-        $renewalLabel= $billingPeriod === 'MONTHLY' ? 'Monthly' : 'Annual';
-        $renewalShow = date('d M Y', strtotime($renewalDate . ' -1 day'));
-        $subject     = "Your WebMyDrive account is ready 🎉";
+        $firstName    = explode(' ', trim($toName))[0] ?: 'there';
+        $renewalLabel = $billingPeriod === 'MONTHLY' ? 'Monthly' : 'Annual';
+        $renewalShow  = date('d M Y', strtotime($renewalDate . ' -1 day'));
+        $subject      = "Your WebMyDrive account is ready - Login Details Inside";
+        $messageId    = '<wmd-' . time() . '-' . bin2hex(random_bytes(4)) . '@webmydrive.com>';
 
-        $body = "Hi {$firstName},\n\n"
-            . "Congratulations! Your {$planName} is now active.\n\n"
-            . "──────────────────────────\n"
-            . "Your WebMyDrive Login Details\n"
-            . "──────────────────────────\n"
-            . "Email:             {$wsEmail}\n"
-            . "Temporary Password: {$tempPassword}\n\n"
-            . "Please change your password after your first login.\n\n"
-            . "──────────────────────────\n"
-            . "Access your services:\n"
-            . "──────────────────────────\n"
-            . "📧 Gmail:   https://mail.google.com\n"
-            . "📁 Drive:   https://drive.google.com\n"
-            . "📸 Photos:  https://photos.google.com\n"
-            . "🌐 Portal:  https://webmydrive.com/user/dashboard\n\n"
-            . "──────────────────────────\n"
-            . "Subscription Details\n"
-            . "──────────────────────────\n"
-            . "Plan:         {$planName}\n"
-            . "Billing:      {$renewalLabel}\n"
-            . "Next Renewal: {$renewalShow}\n\n"
-            . "──────────────────────────\n\n"
-            . "Need help? Reply to this email or visit webmydrive.com\n\n"
-            . "Thank you for choosing WebMyDrive!\n"
-            . "Team WebMyDrive";
+        $htmlBody = "<!DOCTYPE html><html><body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#333;'>
+<div style='background:#4a90e2;padding:24px 32px;border-radius:8px 8px 0 0;'>
+  <h1 style='color:#fff;margin:0;font-size:22px;'>Congratulations, {$firstName}!</h1>
+  <p style='color:#dbeafe;margin:6px 0 0;font-size:14px;'>Your WebMyDrive account is now active.</p>
+</div>
+<div style='background:#fff;border:1px solid #e2e8f0;border-top:none;padding:32px;border-radius:0 0 8px 8px;'>
 
-        $headers  = "From: WebMyDrive <noreply@webmydrive.com>\r\n";
+  <h2 style='font-size:15px;color:#1e293b;margin:0 0 16px;'>Your Login Details</h2>
+  <table style='width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px;border-spacing:0;margin-bottom:24px;'>
+    <tr><td style='padding:6px 12px;color:#64748b;font-size:13px;width:140px;'>Login Email</td><td style='padding:6px 12px;font-weight:bold;font-size:13px;color:#0f172a;'>{$wsEmail}</td></tr>
+    <tr><td style='padding:6px 12px;color:#64748b;font-size:13px;'>Temporary Password</td><td style='padding:6px 12px;font-weight:bold;font-size:13px;color:#0f172a;font-family:monospace;letter-spacing:1px;'>{$tempPassword}</td></tr>
+  </table>
+  <p style='font-size:13px;color:#ef4444;margin:0 0 24px;'>You will be asked to set a new password on your first login.</p>
+
+  <h2 style='font-size:15px;color:#1e293b;margin:0 0 12px;'>Access Your Services</h2>
+  <table style='width:100%;border-spacing:0 8px;margin-bottom:24px;'>
+    <tr><td><a href='https://mail.google.com' style='display:block;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;text-decoration:none;color:#dc2626;font-size:13px;font-weight:600;'>Gmail &rarr;</a></td></tr>
+    <tr><td><a href='https://drive.google.com' style='display:block;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;text-decoration:none;color:#2563eb;font-size:13px;font-weight:600;'>Google Drive &rarr;</a></td></tr>
+    <tr><td><a href='https://photos.google.com' style='display:block;padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;text-decoration:none;color:#16a34a;font-size:13px;font-weight:600;'>Google Photos &rarr;</a></td></tr>
+    <tr><td><a href='https://webmydrive.com/demo1/user/dashboard' style='display:block;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;color:#475569;font-size:13px;font-weight:600;'>WebMyDrive Portal &rarr;</a></td></tr>
+  </table>
+
+  <h2 style='font-size:15px;color:#1e293b;margin:0 0 12px;'>Subscription Details</h2>
+  <table style='width:100%;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px;border-spacing:0;margin-bottom:24px;'>
+    <tr><td style='padding:6px 12px;color:#64748b;font-size:13px;width:140px;'>Plan</td><td style='padding:6px 12px;font-size:13px;color:#0f172a;'>{$planName}</td></tr>
+    <tr><td style='padding:6px 12px;color:#64748b;font-size:13px;'>Billing</td><td style='padding:6px 12px;font-size:13px;color:#0f172a;'>{$renewalLabel}</td></tr>
+    <tr><td style='padding:6px 12px;color:#64748b;font-size:13px;'>Next Renewal</td><td style='padding:6px 12px;font-size:13px;color:#0f172a;'>{$renewalShow}</td></tr>
+  </table>
+
+  <p style='font-size:12px;color:#94a3b8;text-align:center;margin:0;'>Need help? Reply to this email or visit <a href='https://webmydrive.com' style='color:#4a90e2;'>webmydrive.com</a><br>Team WebMyDrive</p>
+</div>
+</body></html>";
+
+        $boundary = md5(uniqid());
+        $plainBody = "Hi {$firstName},\n\nCongratulations! Your WebMyDrive account is now active.\n\n"
+            . "LOGIN EMAIL:        {$wsEmail}\n"
+            . "TEMP PASSWORD:      {$tempPassword}\n\n"
+            . "You will be asked to set a new password on your first login.\n\n"
+            . "SERVICES:\n"
+            . "  Gmail:         https://mail.google.com\n"
+            . "  Google Drive:  https://drive.google.com\n"
+            . "  Google Photos: https://photos.google.com\n"
+            . "  Portal:        https://webmydrive.com/demo1/user/dashboard\n\n"
+            . "PLAN: {$planName} | {$renewalLabel} | Renewal: {$renewalShow}\n\n"
+            . "Team WebMyDrive | support@webmydrive.com";
+
+        $headers  = "From: WebMyDrive <support@webmydrive.com>\r\n";
         $headers .= "Reply-To: support@webmydrive.com\r\n";
-        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $headers .= "Message-ID: {$messageId}\r\n";
+        $headers .= "MIME-Version: 1.0\r\n";
+        $headers .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
+
+        $body  = "--{$boundary}\r\n";
+        $body .= "Content-Type: text/plain; charset=UTF-8\r\n\r\n";
+        $body .= $plainBody . "\r\n\r\n";
+        $body .= "--{$boundary}\r\n";
+        $body .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
+        $body .= $htmlBody . "\r\n\r\n";
+        $body .= "--{$boundary}--";
 
         mail($toEmail, $subject, $body, $headers);
         Logger::info("[WelcomeEmail] Sent to {$toEmail}");

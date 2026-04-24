@@ -3,8 +3,16 @@ import { motion } from "framer-motion";
 import {
     Users, TrendingUp, Wallet, CheckCircle2, Clock, XCircle,
     MoreHorizontal, Copy, ExternalLink, UserPlus, Search,
-    ChevronRight, BarChart3, ArrowUpRight, ChevronLeft, Loader2
+    ChevronRight, BarChart3, ArrowUpRight, ChevronLeft, Loader2,
+    Tag, Plus, X
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+} from "@/components/ui/dialog";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +37,7 @@ interface Distributor {
     phone?: string;
     status: DistributorStatus;
     referralCode: string;
+    promoCode?: string;
     tier: string;
     commissionPct: number;
     totalCustomers: number;
@@ -82,6 +91,161 @@ function StatCard({ label, value, sub, icon, colorClass }: {
                 {sub && <p className="text-xs text-muted-foreground/70 mt-0.5">{sub}</p>}
             </div>
         </div>
+    );
+}
+
+// ── Promo Code Assignment Dialog ──────────────────────────────────────────────
+function PromoCodeDialog({ dist, open, onClose, onAssigned }: {
+    dist: Distributor;
+    open: boolean;
+    onClose: () => void;
+    onAssigned: (code: string) => void;
+}) {
+    const [availableCodes, setAvailableCodes] = useState<any[]>([]);
+    const [history, setHistory] = useState<any[]>([]);
+    const [selectedId, setSelectedId] = useState<string>("");
+    const [isFestive, setIsFestive] = useState(false);
+    const [note, setNote] = useState("");
+    const [assigning, setAssigning] = useState(false);
+    const [revoking, setRevoking] = useState<number | null>(null);
+    const [loadingData, setLoadingData] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        setLoadingData(true);
+        Promise.all([
+            api.get("/admin/promo-codes"),
+            api.get(`/admin/distributors/${dist.id}/promo-codes`),
+        ])
+            .then(([codes, hist]) => {
+                setAvailableCodes(Array.isArray(codes) ? codes : []);
+                setHistory(Array.isArray(hist) ? hist : []);
+            })
+            .catch(() => toast.error("Failed to load promo code data"))
+            .finally(() => setLoadingData(false));
+    }, [open, dist.id]);
+
+    const handleAssign = async () => {
+        if (!selectedId) { toast.error("Select a promo code first"); return; }
+        setAssigning(true);
+        try {
+            await api.post(`/admin/distributors/${dist.id}/promo-code`, {
+                promoCodeId: parseInt(selectedId),
+                isFestive,
+                note,
+            });
+            const code = availableCodes.find(c => String(c.id) === selectedId)?.code ?? "";
+            toast.success(`Promo code ${code} assigned to ${dist.name}`);
+            onAssigned(code);
+            // Refresh history
+            const hist = await api.get(`/admin/distributors/${dist.id}/promo-codes`);
+            setHistory(Array.isArray(hist) ? hist : []);
+            setSelectedId(""); setNote(""); setIsFestive(false);
+        } catch {
+            toast.error("Failed to assign promo code");
+        } finally {
+            setAssigning(false);
+        }
+    };
+
+    const handleRevoke = async (dpcId: number) => {
+        setRevoking(dpcId);
+        try {
+            await api.delete(`/admin/distributors/${dist.id}/promo-code/${dpcId}`);
+            toast.success("Promo code revoked");
+            setHistory(prev => prev.map(h => h.id === dpcId ? { ...h, isActive: 0, revokedAt: new Date().toISOString() } : h));
+        } catch {
+            toast.error("Failed to revoke");
+        } finally {
+            setRevoking(null);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Tag className="w-5 h-5 text-primary" /> Manage Promo Code
+                    </DialogTitle>
+                    <DialogDescription>
+                        Assign or replace the promo code for <strong>{dist.name}</strong>.
+                        Only one code is active at a time.
+                    </DialogDescription>
+                </DialogHeader>
+
+                {loadingData ? (
+                    <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+                ) : (
+                    <div className="space-y-5">
+                        {/* Assign form */}
+                        <div className="space-y-3 p-4 rounded-lg bg-muted/40 border border-border">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assign New Code</p>
+                            <Select value={selectedId} onValueChange={setSelectedId}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select promo code…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableCodes.map((c: any) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>
+                                            {c.code}{c.name ? ` — ${c.name}` : ""}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <input
+                                className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                                placeholder="Note (optional)"
+                                value={note}
+                                onChange={e => setNote(e.target.value)}
+                            />
+                            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                                <input type="checkbox" checked={isFestive} onChange={e => setIsFestive(e.target.checked)}
+                                    className="rounded border-border" />
+                                Mark as festive / temporary assignment
+                            </label>
+                            <Button className="w-full" onClick={handleAssign} disabled={assigning || !selectedId}>
+                                {assigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                                Assign Code
+                            </Button>
+                        </div>
+
+                        {/* History */}
+                        {history.length > 0 && (
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Code History</p>
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                    {history.map((h: any) => (
+                                        <div key={h.id}
+                                            className={cn(
+                                                "flex items-center justify-between px-3 py-2 rounded-lg border text-sm",
+                                                h.isActive ? "bg-primary/5 border-primary/20" : "bg-muted/30 border-border text-muted-foreground"
+                                            )}>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono font-bold">{h.code}</span>
+                                                {h.isActive ? <Badge className="text-[10px] h-4">Active</Badge>
+                                                    : <span className="text-[11px]">revoked</span>}
+                                                {h.isFestive ? <Badge variant="secondary" className="text-[10px] h-4">Festive</Badge> : null}
+                                            </div>
+                                            {h.isActive && (
+                                                <button
+                                                    onClick={() => handleRevoke(h.id)}
+                                                    disabled={revoking === h.id}
+                                                    className="text-danger hover:text-danger/80 ml-2">
+                                                    {revoking === h.id
+                                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        : <X className="w-3.5 h-3.5" />}
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -149,6 +313,8 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
     onUpdate: (id: string, patch: Partial<Distributor>) => void;
 }) {
     const sc = statusCfg[dist.status];
+    const [showPromoDialog, setShowPromoDialog] = useState(false);
+    const [currentPromoCode, setCurrentPromoCode] = useState<string | undefined>(dist.promoCode);
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -194,7 +360,7 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
 
                 {/* Referral code */}
                 <div className="p-6 border-b border-border">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Referral Code</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Referral Link Code</p>
                     <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
                         <span className="font-mono text-primary font-bold flex-1">{dist.referralCode}</span>
                         <button onClick={() => { copyToClipboard(`https://webmydrive.com/?ref=${dist.referralCode}`).then(() => toast.success("Link copied!")); }}
@@ -202,6 +368,42 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                             <Copy className="w-4 h-4" />
                         </button>
                     </div>
+                </div>
+
+                {/* Promo Code */}
+                <div className="p-6 border-b border-border">
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Promo Code</p>
+                        <button onClick={() => setShowPromoDialog(true)}
+                            className="text-xs text-primary hover:underline flex items-center gap-1">
+                            <Tag className="w-3 h-3" /> Manage
+                        </button>
+                    </div>
+                    {currentPromoCode ? (
+                        <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
+                            <span className="font-mono text-primary font-bold flex-1 text-lg tracking-widest">{currentPromoCode}</span>
+                            <button onClick={() => copyToClipboard(currentPromoCode).then(() => toast.success("Promo code copied!"))}
+                                className="text-primary hover:text-primary/80 transition-colors">
+                                <Copy className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <button onClick={() => setShowPromoDialog(true)}
+                            className="w-full text-sm text-muted-foreground border border-dashed border-border rounded-lg py-3 hover:bg-muted/30 transition-colors flex items-center justify-center gap-2">
+                            <Plus className="w-4 h-4" /> Assign promo code
+                        </button>
+                    )}
+                    {showPromoDialog && (
+                        <PromoCodeDialog
+                            dist={dist}
+                            open={showPromoDialog}
+                            onClose={() => setShowPromoDialog(false)}
+                            onAssigned={(code) => {
+                                setCurrentPromoCode(code);
+                                onUpdate(dist.id, { promoCode: code });
+                            }}
+                        />
+                    )}
                 </div>
 
                 {/* Tier & Revenue target */}
@@ -294,6 +496,7 @@ export default function DistributorsPage() {
                     phone: d.phone ?? "",
                     status: (d.status?.toLowerCase() as DistributorStatus) || "pending",
                     referralCode: d.referralCode ?? "",
+                    promoCode: d.promoCode ?? undefined,
                     tier: d.tier ?? "Starter",
                     commissionPct: d.commissionPct ?? 10,
                     totalCustomers: d.totalCustomers ?? 0,

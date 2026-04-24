@@ -81,14 +81,14 @@ class AuthController
             'INSERT INTO "User"
              (name, email, passwordHash, role, referralCode, walletBalance,
               passwordResetRequired, first_login, distributorId, createdAt, updatedAt)
-             VALUES (:name, :email, :hash, \'USER\', :code, 0, 1, 1, :dist, :now, :now)',
+             VALUES (:name, :email, :hash, \'USER\', :code, 0, 1, 1, :dist, :now1, :now2)',
             [
                 ':name' => $displayName,
                 ':email' => $email,
                 ':hash' => $passwordHash,
                 ':code' => $referralCode,
                 ':dist' => $distributorId ? (int) $distributorId : null,
-                ':now' => $now,
+                ':now1' => $now, ':now2' => $now,
             ]
         );
 
@@ -129,8 +129,13 @@ class AuthController
             }
             AuditService::log('LOGIN', null, $req->ip, ['email' => $email, 'role' => 'DISTRIBUTOR']);
             $token = JwtHelper::generateToken(-(int) $distributor['id'], 'DISTRIBUTOR');
+            $userToken = null;
+            if (!empty($distributor['linkedUserId'])) {
+                $userToken = JwtHelper::generateToken((int)$distributor['linkedUserId'], 'USER');
+            }
             Response::json([
                 'token' => $token,
+                'userToken' => $userToken,
                 'requiresPasswordChange' => (bool) $distributor['passwordResetRequired'],
                 'user' => [
                     'id' => (int) $distributor['id'],
@@ -275,14 +280,14 @@ class AuthController
                     'INSERT INTO "User"
                      (name, email, passwordHash, role, referralCode, walletBalance,
                       passwordResetRequired, first_login, distributorId, createdAt, updatedAt)
-                     VALUES (:name, :email, :hash, \'USER\', :code, 0, 0, 0, :dist, :now, :now)',
+                     VALUES (:name, :email, :hash, \'USER\', :code, 0, 0, 0, :dist, :now1, :now2)',
                     [
                         ':name' => $name,
                         ':email' => $email,
                         ':hash' => $tempHash,
                         ':code' => $referralCode,
                         ':dist' => $distributorId ? (int) $distributorId : null,
-                        ':now' => $now,
+                        ':now1' => $now, ':now2' => $now,
                     ]
                 );
                 $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $id]);
@@ -333,14 +338,14 @@ class AuthController
             $id = Database::insert(
                 'INSERT INTO "User"
                  (name, email, passwordHash, role, referralCode, walletBalance, first_login, distributorId, createdAt, updatedAt)
-                 VALUES (:name, :email, :hash, \'USER\', :code, 0, 1, :dist, :now, :now)',
+                 VALUES (:name, :email, :hash, \'USER\', :code, 0, 1, :dist, :now1, :now2)',
                 [
                     ':name' => $name,
                     ':email' => $email,
                     ':hash' => $passwordHash,
                     ':code' => $referralCode,
                     ':dist' => $distributorId ? (int) $distributorId : null,
-                    ':now' => $now,
+                    ':now1' => $now, ':now2' => $now,
                 ]
             );
             $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $id]);

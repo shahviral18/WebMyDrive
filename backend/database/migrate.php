@@ -200,6 +200,38 @@ CREATE TABLE IF NOT EXISTS "DistributorWalletTx" (
   FOREIGN KEY (distributorId) REFERENCES "Distributor"(id)
 );
 
+CREATE TABLE IF NOT EXISTS "PromoCode" (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  code             TEXT    NOT NULL UNIQUE,
+  name             TEXT,
+  discountPercent  REAL    NOT NULL,
+  applicablePlans  TEXT,
+  status           TEXT    NOT NULL DEFAULT 'ACTIVE',
+  usesLimit        INTEGER,
+  usesCount        INTEGER NOT NULL DEFAULT 0,
+  expiresAt        TEXT,
+  createdAt        TEXT    NOT NULL DEFAULT (datetime('now')),
+  updatedAt        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_promocode_code   ON "PromoCode"(code);
+CREATE INDEX IF NOT EXISTS idx_promocode_status ON "PromoCode"(status);
+
+CREATE TABLE IF NOT EXISTS "DistributorPromoCode" (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  distributorId  INTEGER NOT NULL,
+  promoCodeId    INTEGER NOT NULL,
+  isFestive      INTEGER NOT NULL DEFAULT 0,
+  isActive       INTEGER NOT NULL DEFAULT 1,
+  assignedAt     TEXT    NOT NULL DEFAULT (datetime('now')),
+  revokedAt      TEXT,
+  assignedBy     INTEGER,
+  note           TEXT,
+  FOREIGN KEY (distributorId) REFERENCES "Distributor"(id),
+  FOREIGN KEY (promoCodeId)   REFERENCES "PromoCode"(id)
+);
+CREATE INDEX IF NOT EXISTS idx_dpc_distributor ON "DistributorPromoCode"(distributorId);
+CREATE INDEX IF NOT EXISTS idx_dpc_active      ON "DistributorPromoCode"(distributorId, isActive);
+
 CREATE TABLE IF NOT EXISTS "SecurityLink" (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   token     TEXT NOT NULL UNIQUE,

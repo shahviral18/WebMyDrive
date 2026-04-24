@@ -54,6 +54,13 @@ class ConfigService
             'allowNewSignups' => true,
             'disableProgramFromDate' => null,
             'existingOnDisable' => 'CONTINUE',
+            'promoDiscounts' => [
+                'Basic'           => 10,
+                'Professional'    => 20,
+                'Premium'         => 40,
+                'Enterprise'      => 40,
+                'Enterprise Plus' => 0,
+            ],
         ];
     }
 

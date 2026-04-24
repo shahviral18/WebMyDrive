@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { PanelSwitcher } from "@/components/PanelSwitcher";
 
 interface UserLayoutProps {
     children: React.ReactNode;
@@ -198,6 +199,8 @@ export default function UserLayout({ children }: UserLayoutProps) {
 
                 {/* Desktop Top Bar — SINGLE theme toggle lives here */}
                 <header className="hidden lg:flex items-center justify-end h-14 px-6 border-b border-border bg-card sticky top-0 z-20 gap-3">
+
+                    <PanelSwitcher currentPanel="user" />
 
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                         <Bell className="w-5 h-5" />

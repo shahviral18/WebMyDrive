@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -36,16 +35,17 @@ export default function SubscribePage() {
   const { data: plans, isLoading } = usePlans();
   const { isDark, toggleTheme } = useTheme();
 
+  const [billToCompany, setBillToCompany] = useState<boolean>(restored?.billToCompany ?? false);
   const [formData, setFormData] = useState(() =>
     restored ?? {
       firstName: "",
       lastName: "",
       recoveryEmail: "",
       whatsapp: "",
-      email: "",
       companyName: "",
-      mobile: "",
       gstNumber: "",
+      accountantPhone: "",
+      accountantEmail: "",
       billing: {
         country: "India",
         state: "Gujarat",
@@ -82,42 +82,29 @@ export default function SubscribePage() {
     return null;
   }, [plans, planSlug]);
 
-  const applyCoupon = async (e: React.MouseEvent) => {
+  const applyCoupon = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!couponInput.trim() || !selectedPlan) return;
-    try {
-      const data = await api.post("/referral/validate-code", {
-        promoCode: couponInput.trim(),
-        planName: selectedPlan.name,
-      });
-      if (data.success) {
-        const pct = data.discountPct ?? 0;
-        setDiscountPercent(pct);
-        if (pct > 0) {
-          toast.success(`Code applied — ${pct}% off!`);
-        } else {
-          toast.success("Referral code applied! Your referrer will earn commission.");
-        }
-      } else {
-        setDiscountPercent(0);
-        toast.error(data.error || "Invalid code");
-      }
-    } catch (err: any) {
+    if (!couponInput || !selectedPlan) return;
+    if (selectedPlan.coupon && couponInput.trim().toLowerCase() === selectedPlan.coupon.toLowerCase()) {
+      setDiscountPercent(parseInt(selectedPlan.discount || "5"));
+      toast.success("Coupon applied successfully!");
+    } else {
       setDiscountPercent(0);
-      toast.error(err.message || "Invalid code");
+      toast.error("Invalid coupon code");
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPlan) return;
-    if (!formData.email || !formData.mobile || !formData.billing.city || !formData.billing.address || !formData.billing.zipCode) {
-      toast.error("Please fill in all required fields.");
+    if (!formData.firstName || !formData.lastName) {
+      toast.error("Please enter your first and last name.");
       return;
     }
     navigate(`/subscribe/${planSlug}/username`, {
       state: {
         ...formData,
+        billToCompany,
         couponInput,
         planId: selectedPlan.id,
         planName: selectedPlan.name,
@@ -272,47 +259,78 @@ export default function SubscribePage() {
 
           {/* Billing Address */}
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
-            <h2 className="text-lg font-bold text-slate-800 mb-6">Billing Address</h2>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  placeholder="Company Name"
-                  value={formData.companyName}
-                  onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                  className="h-11 border-slate-200 rounded"
-                />
-                <Input
-                  placeholder="GST Number"
-                  value={formData.gstNumber}
-                  onChange={e => setFormData({ ...formData, gstNumber: e.target.value })}
-                  className="h-11 border-slate-200 rounded"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex gap-2">
-                  <div className="w-24 shrink-0">
-                    <select className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option>+91</option>
-                    </select>
-                  </div>
-                  <Input
-                    placeholder="Account Phone*"
-                    value={formData.mobile}
-                    onChange={e => setFormData({ ...formData, mobile: e.target.value })}
-                    className="h-11 border-slate-200 rounded w-full"
-                    required
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-slate-800">Billing Address</h2>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-sm text-slate-500">Bill to Company?</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={billToCompany}
+                  onClick={() => setBillToCompany(v => !v)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+                    billToCompany ? "bg-blue-500" : "bg-slate-200"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                      billToCompany ? "translate-x-6" : "translate-x-1"
+                    )}
                   />
-                </div>
-                <Input
-                  type="email"
-                  placeholder="Account Email*"
-                  value={formData.email}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
-                  className="h-11 border-slate-200 rounded"
-                  required
-                />
-              </div>
+                </button>
+              </label>
+            </div>
+
+            <div className="space-y-6">
+              {billToCompany && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Input
+                      placeholder="Company Name"
+                      value={formData.companyName}
+                      onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+                      className="h-11 border-slate-200 rounded"
+                    />
+                    <Input
+                      placeholder="GST Number"
+                      value={formData.gstNumber}
+                      onChange={e => setFormData({ ...formData, gstNumber: e.target.value })}
+                      className="h-11 border-slate-200 rounded"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex gap-2">
+                      <div className="w-24 shrink-0">
+                        <select className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option>+91</option>
+                        </select>
+                      </div>
+                      <Input
+                        placeholder="Accountant Phone"
+                        value={formData.accountantPhone}
+                        onChange={e => setFormData({ ...formData, accountantPhone: e.target.value })}
+                        className="h-11 border-slate-200 rounded w-full"
+                      />
+                    </div>
+                    <Input
+                      type="email"
+                      placeholder="Accountant Email"
+                      value={formData.accountantEmail}
+                      onChange={e => setFormData({ ...formData, accountantEmail: e.target.value })}
+                      className="h-11 border-slate-200 rounded"
+                    />
+                  </div>
+                </>
+              )}
+
+              {!billToCompany && (
+                <p className="text-sm text-slate-400 italic">
+                  Billing to: {formData.firstName || "First Name"} {formData.lastName || "Last Name"}
+                </p>
+              )}
 
               <select
                 className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -336,28 +354,25 @@ export default function SubscribePage() {
                   <option>Others</option>
                 </select>
                 <Input
-                  placeholder="City*"
+                  placeholder="City"
                   value={formData.billing.city}
                   onChange={e => setFormData({ ...formData, billing: { ...formData.billing, city: e.target.value } })}
                   className="h-11 border-slate-200 rounded"
-                  required
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input
-                  placeholder="Address*"
+                  placeholder="Address"
                   value={formData.billing.address}
                   onChange={e => setFormData({ ...formData, billing: { ...formData.billing, address: e.target.value } })}
                   className="h-11 border-slate-200 rounded"
-                  required
                 />
                 <Input
-                  placeholder="ZIP Code*"
+                  placeholder="ZIP Code"
                   value={formData.billing.zipCode}
                   onChange={e => setFormData({ ...formData, billing: { ...formData.billing, zipCode: e.target.value } })}
                   className="h-11 border-slate-200 rounded"
-                  required
                 />
               </div>
             </div>

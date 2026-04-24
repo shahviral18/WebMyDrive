@@ -235,6 +235,49 @@ class DistributorApplicationController
             'UPDATE "DistributorApplication" SET status = :s, reviewNotes = :n WHERE id = :id',
             [':s' => $status, ':n' => $notes, ':id' => $id]
         );
+
+        if ($status === 'APPROVED') {
+            // Load the application details
+            $app = Database::queryOne('SELECT * FROM "DistributorApplication" WHERE id = :id', [':id' => $id]);
+            $linkedUserId = (int) ($app['linkedUserId'] ?? 0);
+
+            if ($linkedUserId) {
+                $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $linkedUserId]);
+                if ($user) {
+                    // Check if Distributor record already exists for this email or linkedUserId
+                    $existing = Database::queryOne('SELECT id FROM "Distributor" WHERE email = :e OR linkedUserId = :uid',
+                        [':e' => $app['accountEmail'], ':uid' => $linkedUserId]);
+
+                    if (!$existing) {
+                        $name = trim(($app['firstName'] ?? '') . ' ' . ($app['lastName'] ?? '')) ?: $user['name'];
+                        $refCode = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', strtoupper($name)), 0, 6)) . rand(10, 99);
+                        $now = date('Y-m-d H:i:s');
+
+                        Database::insert(
+                            'INSERT INTO "Distributor" (name, email, displayEmail, passwordHash, referralCode, walletBalance, status, passwordResetRequired, linkedUserId, createdAt, updatedAt)
+                             VALUES (:name, :email, :display, :hash, :ref, 0, \'ACTIVE\', 0, :uid, :now1, :now2)',
+                            [
+                                ':name'    => $name,
+                                ':email'   => $app['accountEmail'],
+                                ':display' => $app['accountEmail'],
+                                ':hash'    => $user['passwordHash'],
+                                ':ref'     => $refCode,
+                                ':uid'     => $linkedUserId,
+                                ':now1'    => $now,
+                                ':now2'    => $now,
+                            ]
+                        );
+
+                        // Create ReferralLink for the new distributor
+                        $newDistId = Database::scalar('SELECT id FROM "Distributor" WHERE linkedUserId = :uid', [':uid' => $linkedUserId]);
+                        if ($newDistId) {
+                            ReferralLinkService::getActiveLink((int) $newDistId, 'DISTRIBUTOR');
+                        }
+                    }
+                }
+            }
+        }
+
         Logger::info("[DistributorApp] id=$id status -> $status by user=" . ($req->user['userId'] ?? '?'));
         Response::json(['success' => true]);
     }

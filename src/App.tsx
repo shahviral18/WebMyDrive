@@ -18,6 +18,7 @@ import Settings from "./pages/admin/Settings";
 import PricingPage from "./pages/PricingPage";
 import Subscribe from "./pages/Subscribe";
 import SubscribeUsername from "./pages/SubscribeUsername";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import Resell from "./pages/Resell";
 import DistributorApplications from "./pages/admin/DistributorApplications";
 import ChangePlan from "./pages/admin/ChangePlan";
@@ -78,6 +79,7 @@ const App = () => (
                 <Route path="/contact" element={<Navigate to="/" replace />} />
                 <Route path="/subscribe/:planSlug" element={<Subscribe />} />
                 <Route path="/subscribe/:planSlug/username" element={<SubscribeUsername />} />
+                <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/resell" element={<Resell />} />
                 <Route path="/activate" element={<AccountActivate />} />
                 <Route path="/plans" element={<UserPlans />} />

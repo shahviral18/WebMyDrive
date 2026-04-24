@@ -64,7 +64,7 @@ export default function Login() {
         return u.includes("@") ? u : u + "@webmydrive.com";
     };
 
-    const finishLoginProcessing = (token: string, user: any, role: string) => {
+    const finishLoginProcessing = (token: string, user: any, role: string, userToken?: string | null) => {
         if (role === "ADMIN" || role === "SUPERADMIN") {
             sessionStorage.setItem("token", token);
             sessionStorage.setItem("wmd_admin_auth", "true");
@@ -76,6 +76,13 @@ export default function Login() {
         sessionStorage.setItem("wmd_user_auth", "true");
         sessionStorage.setItem("wmd_user_email", user?.email);
         sessionStorage.setItem("wmd_user_role", role.toLowerCase());
+        if (role === "DISTRIBUTOR") {
+            // Store distributor token explicitly so PanelSwitcher can swap between panels
+            localStorage.setItem("wmd_dist_token", token);
+            if (userToken) {
+                localStorage.setItem("wmd_user_token", userToken);
+            }
+        }
         loginAs({
             id: user?.id,
             name: user?.name,
@@ -112,7 +119,7 @@ export default function Login() {
                 setConfirmPassword("");
                 return;
             }
-            finishLoginProcessing(data.token, data.user, data.user.role || "");
+            finishLoginProcessing(data.token, data.user, data.user.role || "", data.userToken);
         } catch (err: any) {
             setError(err.message || "Invalid credentials");
             triggerShake();
@@ -183,8 +190,8 @@ export default function Login() {
                 newPassword,
             });
             toast.success(isFirstLogin ? "Welcome! Password set. Logging you in…" : "Password updated successfully!");
-            const { token, user } = pendingLoginData;
-            finishLoginProcessing(token, user, user.role);
+            const { token, user, userToken: pendingUserToken } = pendingLoginData;
+            finishLoginProcessing(token, user, user.role, pendingUserToken);
         } catch (err: any) {
             setError(err.message || "Failed to update password.");
             triggerShake();

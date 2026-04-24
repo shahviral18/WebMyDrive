@@ -225,6 +225,7 @@ $router->get('/api/distributor/promo-codes', [DistributorController::class, 'get
 
 // ── Zoho Payments ─────────────────────────────────────────────────────────────
 $router->post('/api/payment/create-session', [PaymentController::class, 'createSession']);
+$router->get('/api/payment/status',          [PaymentController::class, 'getStatus']);
 $router->post('/api/webhook/zoho-payment',   [PaymentController::class, 'zohoWebhook']);
 
 // ── Payment webhooks ──────────────────────────────────────────────────────────
