@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Plus, Trash2, Package, X, Save,
-    Globe, IndianRupee, Loader2, Download, CheckSquare, Square
+    Globe, IndianRupee, Loader2, Download, CheckSquare, Square,
+    Tag, Pencil, CheckCircle2, XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,12 +28,25 @@ interface Plan {
     price: number;
     features: string | null;
     isActive?: boolean;
-    hasOverride?: boolean;
     sortOrder?: number;
+    googleOrgUnit?: string;
     priceINR?: number;
     priceMonthlyINR?: number;
     priceYearlyINR?: number;
     storageGB?: number;
+}
+
+interface PromoCode {
+    id: number;
+    code: string;
+    name: string | null;
+    discountPercent: number;
+    applicablePlans: number[] | null;
+    status: "ACTIVE" | "INACTIVE";
+    usesLimit: number | null;
+    usesCount: number;
+    expiresAt: string | null;
+    createdAt: string;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -44,12 +58,11 @@ const DEFAULT_GLOBAL_FEATURES: GlobalFeature[] = [
     { label: "Remote Support", enabled: true },
 ];
 
-// Exact prices from the website (images supplied 2026-02-24)
 const WEBSITE_DEFAULTS: Omit<Plan, "id" | "sortOrder">[] = [
-    { name: "Cloud Storage - Basic", price: 237.5, priceINR: 237.5, priceMonthlyINR: 237.5, storageGB: 500, isActive: true, hasOverride: true, features: null },
-    { name: "Cloud Storage - Professional", price: 399, priceINR: 399, priceMonthlyINR: 399, storageGB: 5120, isActive: true, hasOverride: true, features: null },
-    { name: "Cloud Storage - Premium", price: 712.5, priceINR: 712.5, priceMonthlyINR: 712.5, storageGB: 51200, isActive: true, hasOverride: true, features: null },
-    { name: "Cloud Storage - Enterprise", price: 1187.5, priceINR: 1187.5, priceMonthlyINR: 1187.5, storageGB: 102400, isActive: true, hasOverride: true, features: null },
+    { name: "Cloud Storage - Basic", price: 237.5, priceINR: 237.5, priceMonthlyINR: 237.5, storageGB: 500, isActive: true, features: null },
+    { name: "Cloud Storage - Professional", price: 399, priceINR: 399, priceMonthlyINR: 399, storageGB: 5120, isActive: true, features: null },
+    { name: "Cloud Storage - Premium", price: 712.5, priceINR: 712.5, priceMonthlyINR: 712.5, storageGB: 51200, isActive: true, features: null },
+    { name: "Cloud Storage - Enterprise", price: 1187.5, priceINR: 1187.5, priceMonthlyINR: 1187.5, storageGB: 102400, isActive: true, features: null },
 ];
 
 // ─── Global Features Card ──────────────────────────────────────────────────────
@@ -133,7 +146,6 @@ function GlobalFeaturesCard({
                     </div>
                 ))}
 
-                {/* Add feature button */}
                 <button
                     type="button"
                     onClick={addFeature}
@@ -144,7 +156,6 @@ function GlobalFeaturesCard({
                 </button>
             </div>
 
-            {/* Legend */}
             <p className="text-[11px] text-muted-foreground/60 mt-3">
                 ✓ Checked features are shown on all plan cards. Uncheck to hide a feature globally.
             </p>
@@ -152,7 +163,7 @@ function GlobalFeaturesCard({
     );
 }
 
-// ─── Inline Plan Card (simplified — no feature rows) ───────────────────────────
+// ─── Inline Plan Card ──────────────────────────────────────────────────────────
 function InlinePlanCard({
     plan, onSaved, onDelete,
 }: {
@@ -165,7 +176,10 @@ function InlinePlanCard({
     const [monthlyPrice, setMonthlyPrice] = useState(plan.priceMonthlyINR ?? 0);
     const [storageGB, setStorageGB] = useState(plan.storageGB ?? 0);
     const [isActive, setIsActive] = useState(plan.isActive ?? true);
-    const [hasOverride, setHasOverride] = useState(plan.hasOverride ?? true);
+    const [sortOrder, setSortOrder] = useState(plan.sortOrder ?? 0);
+    const [googleOrgUnit, setGoogleOrgUnit] = useState(plan.googleOrgUnit ?? "");
+    const [ouValidating, setOuValidating] = useState(false);
+    const [ouValid, setOuValid] = useState<boolean | null>(null);
     const [saving, setSaving] = useState(false);
     const [features, setFeatures] = useState<{ label: string, value: string }[]>([]);
     const originalFeaturesRef = useRef<string>("[]");
@@ -176,7 +190,9 @@ function InlinePlanCard({
         setMonthlyPrice(plan.priceMonthlyINR ?? 0);
         setStorageGB(plan.storageGB ?? 0);
         setIsActive(plan.isActive ?? true);
-        setHasOverride(plan.hasOverride ?? true);
+        setSortOrder(plan.sortOrder ?? 0);
+        setGoogleOrgUnit(plan.googleOrgUnit ?? "");
+        setOuValid(null);
 
         let parsedFeatures: { label: string, value: string }[] = [];
         if (plan.features) {
@@ -194,7 +210,21 @@ function InlinePlanCard({
         }
         setFeatures(parsedFeatures);
         originalFeaturesRef.current = JSON.stringify(parsedFeatures);
-    }, [plan.id, plan.name, plan.priceMonthlyINR, plan.storageGB, plan.isActive, plan.hasOverride, plan.features]);
+    }, [plan.id, plan.name, plan.priceMonthlyINR, plan.storageGB, plan.isActive, plan.features]);
+
+    const handleOuBlur = async () => {
+        const path = googleOrgUnit.trim();
+        if (!path) { setOuValid(null); return; }
+        setOuValidating(true);
+        try {
+            const res = await api.get(`/admin/validate-ou-path?path=${encodeURIComponent(path)}`);
+            setOuValid(res.valid === true);
+        } catch {
+            setOuValid(false);
+        } finally {
+            setOuValidating(false);
+        }
+    };
 
     const isDirty =
         name !== plan.name ||
@@ -202,13 +232,15 @@ function InlinePlanCard({
         monthlyPrice !== (plan.priceMonthlyINR ?? 0) ||
         storageGB !== (plan.storageGB ?? 0) ||
         isActive !== (plan.isActive ?? true) ||
-        hasOverride !== (plan.hasOverride ?? true) ||
+        sortOrder !== (plan.sortOrder ?? 0) ||
+        googleOrgUnit !== (plan.googleOrgUnit ?? "") ||
         JSON.stringify(features) !== originalFeaturesRef.current;
 
     const handleSave = async () => {
         if (!name.trim()) { toast.error("Plan name is required"); return; }
         if (yearlyPrice <= 0) { toast.error("Yearly price must be > 0"); return; }
         if (monthlyPrice <= 0) { toast.error("Monthly price must be > 0"); return; }
+        if (ouValid === false) { toast.error("Fix the Google OU path before saving"); return; }
         setSaving(true);
         try {
             const payload = {
@@ -220,7 +252,8 @@ function InlinePlanCard({
                 storageGB,
                 features: features.length > 0 ? JSON.stringify(features) : null,
                 isActive,
-                hasOverride,
+                sortOrder,
+                googleOrgUnit: googleOrgUnit.trim() || null,
             };
             const updated = await api.post("/admin/plans", payload);
             onSaved({ ...plan, ...updated });
@@ -231,6 +264,12 @@ function InlinePlanCard({
             setSaving(false);
         }
     };
+
+    const ouBorderClass = ouValid === true
+        ? "border-emerald-500 ring-1 ring-emerald-500/20"
+        : ouValid === false
+            ? "border-red-500 ring-1 ring-red-500/20"
+            : "border-border/60";
 
     return (
         <motion.div
@@ -280,7 +319,7 @@ function InlinePlanCard({
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Yearly (₹/mo)</label>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Annual Total (₹/yr)</label>
                     <div className="relative">
                         <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
@@ -288,7 +327,7 @@ function InlinePlanCard({
                             value={yearlyPrice}
                             onChange={e => setYearlyPrice(Number(e.target.value))}
                             className="pl-7 bg-surface-2 border-border/60 text-sm h-9"
-                            placeholder="Per month, billed annually"
+                            placeholder="e.g. 3000"
                         />
                     </div>
                 </div>
@@ -301,6 +340,40 @@ function InlinePlanCard({
                         className="bg-surface-2 border-border/60 text-sm h-9"
                         placeholder="e.g. 500, 5120"
                     />
+                </div>
+            </div>
+
+            {/* Sort Order + Google OU */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Sort Order</label>
+                    <Input
+                        type="number"
+                        value={sortOrder}
+                        onChange={e => setSortOrder(Number(e.target.value))}
+                        className="bg-surface-2 border-border/60 text-sm h-9"
+                        placeholder="0"
+                        min={0}
+                        title="Lower number = appears first on the user Plans page"
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Google OU Path
+                        {ouValidating && <Loader2 className="inline w-3 h-3 ml-1 animate-spin text-muted-foreground" />}
+                        {ouValid === true && <CheckCircle2 className="inline w-3 h-3 ml-1 text-emerald-500" />}
+                        {ouValid === false && <XCircle className="inline w-3 h-3 ml-1 text-red-500" />}
+                    </label>
+                    <Input
+                        value={googleOrgUnit}
+                        onChange={e => { setGoogleOrgUnit(e.target.value); setOuValid(null); }}
+                        onBlur={handleOuBlur}
+                        className={`bg-surface-2 text-sm h-9 ${ouBorderClass}`}
+                        placeholder="/WebMyDrive/Professional"
+                    />
+                    {ouValid === false && (
+                        <p className="text-[11px] text-red-500">OU path not found in Google Workspace</p>
+                    )}
                 </div>
             </div>
 
@@ -361,16 +434,6 @@ function InlinePlanCard({
                         {isActive ? <span className="text-emerald-500 font-medium">Visible</span> : "Hidden"}
                     </span>
                 </div>
-                <div className="flex items-center gap-2 flex-1">
-                    <Switch
-                        checked={hasOverride}
-                        onCheckedChange={setHasOverride}
-                        className="data-[state=checked]:bg-primary shrink-0"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                        {hasOverride ? <span className="text-primary font-medium">Price override</span> : "Global price"}
-                    </span>
-                </div>
             </div>
 
             {/* Footer: dirty indicator + save */}
@@ -382,14 +445,14 @@ function InlinePlanCard({
                 <Button
                     size="sm"
                     onClick={handleSave}
-                    disabled={saving || !isDirty}
+                    disabled={saving || !isDirty || ouValid === false}
                     className="h-8 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs"
                 >
                     {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     Save
                 </Button>
             </div>
-        </motion.div >
+        </motion.div>
     );
 }
 
@@ -400,17 +463,35 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
     const [yearlyPrice, setYearlyPrice] = useState(0);
     const [storageGB, setStorageGB] = useState(0);
     const [isActive, setIsActive] = useState(true);
-    const [hasOverride, setHasOverride] = useState(true);
+    const [sortOrder, setSortOrder] = useState(0);
+    const [googleOrgUnit, setGoogleOrgUnit] = useState("");
+    const [ouValidating, setOuValidating] = useState(false);
+    const [ouValid, setOuValid] = useState<boolean | null>(null);
     const [saving, setSaving] = useState(false);
     const [features, setFeatures] = useState<{ label: string, value: string }[]>([]);
+
+    const handleOuBlur = async () => {
+        const path = googleOrgUnit.trim();
+        if (!path) { setOuValid(null); return; }
+        setOuValidating(true);
+        try {
+            const res = await api.get(`/admin/validate-ou-path?path=${encodeURIComponent(path)}`);
+            setOuValid(res.valid === true);
+        } catch {
+            setOuValid(false);
+        } finally {
+            setOuValidating(false);
+        }
+    };
 
     const handleCreate = async () => {
         if (!name.trim()) { toast.error("Plan name is required"); return; }
         if (yearlyPrice <= 0) { toast.error("Yearly price must be > 0"); return; }
         if (monthlyPrice <= 0) { toast.error("Monthly price must be > 0"); return; }
+        if (ouValid === false) { toast.error("Fix the Google OU path before saving"); return; }
         setSaving(true);
         try {
-            await onCreate({ name: name.trim(), price: yearlyPrice, priceINR: yearlyPrice, priceMonthlyINR: monthlyPrice, storageGB, isActive, hasOverride, features: features.length > 0 ? JSON.stringify(features) : null });
+            await onCreate({ name: name.trim(), price: yearlyPrice, priceINR: yearlyPrice, priceMonthlyINR: monthlyPrice, storageGB, isActive, sortOrder, googleOrgUnit: googleOrgUnit.trim() || null, features: features.length > 0 ? JSON.stringify(features) : null });
         } finally {
             setSaving(false);
         }
@@ -454,7 +535,7 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Yearly (₹/mo)</label>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Annual Total (₹/yr)</label>
                     <div className="relative">
                         <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                         <Input
@@ -462,7 +543,7 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
                             value={yearlyPrice || ""}
                             onChange={e => setYearlyPrice(Number(e.target.value))}
                             className="pl-7 bg-surface-1 border-border/60 text-sm h-9"
-                            placeholder="Per month, billed annually"
+                            placeholder="e.g. 3000"
                         />
                     </div>
                 </div>
@@ -475,6 +556,40 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
                         className="bg-surface-1 border-border/60 text-sm h-9"
                         placeholder="e.g. 500, 5120"
                     />
+                </div>
+            </div>
+
+            {/* Sort Order + Google OU */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Sort Order</label>
+                    <Input
+                        type="number"
+                        value={sortOrder || ""}
+                        onChange={e => setSortOrder(Number(e.target.value))}
+                        className="bg-surface-1 border-border/60 text-sm h-9"
+                        placeholder="0"
+                        min={0}
+                        title="Lower number = appears first on the user Plans page"
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Google OU Path
+                        {ouValidating && <Loader2 className="inline w-3 h-3 ml-1 animate-spin text-muted-foreground" />}
+                        {ouValid === true && <CheckCircle2 className="inline w-3 h-3 ml-1 text-emerald-500" />}
+                        {ouValid === false && <XCircle className="inline w-3 h-3 ml-1 text-red-500" />}
+                    </label>
+                    <Input
+                        value={googleOrgUnit}
+                        onChange={e => { setGoogleOrgUnit(e.target.value); setOuValid(null); }}
+                        onBlur={handleOuBlur}
+                        className={`bg-surface-1 text-sm h-9 ${ouValid === true ? "border-emerald-500 ring-1 ring-emerald-500/20" : ouValid === false ? "border-red-500 ring-1 ring-red-500/20" : "border-border/60"}`}
+                        placeholder="/WebMyDrive/Basic"
+                    />
+                    {ouValid === false && (
+                        <p className="text-[11px] text-red-500">OU path not found in Google Workspace</p>
+                    )}
                 </div>
             </div>
 
@@ -528,15 +643,11 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
                     <Switch checked={isActive} onCheckedChange={setIsActive} className="data-[state=checked]:bg-emerald-500 shrink-0" />
                     <span className="text-xs text-muted-foreground">{isActive ? <span className="text-emerald-500 font-medium">Visible</span> : "Hidden"}</span>
                 </div>
-                <div className="flex items-center gap-2 flex-1">
-                    <Switch checked={hasOverride} onCheckedChange={setHasOverride} className="data-[state=checked]:bg-primary shrink-0" />
-                    <span className="text-xs text-muted-foreground">{hasOverride ? <span className="text-primary font-medium">Price override</span> : "Global price"}</span>
-                </div>
             </div>
 
             <div className="flex items-center justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={onCancel} className="h-8 border-border/50 text-xs">Cancel</Button>
-                <Button size="sm" onClick={handleCreate} disabled={saving} className="h-8 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs">
+                <Button size="sm" onClick={handleCreate} disabled={saving || ouValid === false} className="h-8 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs">
                     {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                     Create Plan
                 </Button>
@@ -545,8 +656,341 @@ function NewPlanCard({ onCreate, onCancel }: { onCreate: (data: any) => Promise<
     );
 }
 
+// ─── Promo Code Modal ──────────────────────────────────────────────────────────
+function PromoCodeModal({
+    promo,
+    plans,
+    onSave,
+    onClose,
+}: {
+    promo: Partial<PromoCode> | null;
+    plans: Plan[];
+    onSave: (data: any) => Promise<void>;
+    onClose: () => void;
+}) {
+    const [code, setCode] = useState(promo?.code ?? "");
+    const [name, setName] = useState(promo?.name ?? "");
+    const [discountPercent, setDiscountPercent] = useState(promo?.discountPercent ?? 10);
+    const [allPlans, setAllPlans] = useState(promo?.applicablePlans === null || promo?.applicablePlans === undefined);
+    const [selectedPlans, setSelectedPlans] = useState<number[]>(promo?.applicablePlans ?? []);
+    const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">(promo?.status ?? "ACTIVE");
+    const [expiresAt, setExpiresAt] = useState(promo?.expiresAt ? promo.expiresAt.slice(0, 10) : "");
+    const [usesLimit, setUsesLimit] = useState<string>(promo?.usesLimit != null ? String(promo.usesLimit) : "");
+    const [saving, setSaving] = useState(false);
+
+    const togglePlan = (id: number) => {
+        setSelectedPlans(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
+
+    const handleSubmit = async () => {
+        if (!code.trim()) { toast.error("Code is required"); return; }
+        if (!/^[A-Z0-9_\-]{2,50}$/.test(code)) { toast.error("Code must be uppercase letters, numbers, _ or - (2–50 chars)"); return; }
+        if (discountPercent < 1 || discountPercent > 100) { toast.error("Discount must be 1–100%"); return; }
+        if (!allPlans && selectedPlans.length === 0) { toast.error("Select at least one plan or choose All Plans"); return; }
+        setSaving(true);
+        try {
+            await onSave({
+                id: promo?.id,
+                code: code.trim(),
+                name: name.trim() || null,
+                discountPercent,
+                applicablePlans: allPlans ? null : selectedPlans,
+                status,
+                expiresAt: expiresAt || null,
+                usesLimit: usesLimit ? Number(usesLimit) : null,
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-surface-1 border border-border rounded-xl shadow-xl w-full max-w-md p-6 flex flex-col gap-4"
+            >
+                <div className="flex items-center justify-between">
+                    <h2 className="text-base font-semibold text-foreground">{promo?.id ? "Edit Promo Code" : "New Promo Code"}</h2>
+                    <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-surface-2">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Code *</label>
+                            <Input
+                                value={code}
+                                onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_\-]/g, ""))}
+                                placeholder="PROMO10"
+                                className="bg-surface-2 border-border/60 text-sm h-9 font-mono"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Discount % *</label>
+                            <Input
+                                type="number"
+                                value={discountPercent}
+                                onChange={e => setDiscountPercent(Number(e.target.value))}
+                                min={1} max={100}
+                                className="bg-surface-2 border-border/60 text-sm h-9"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Name / Description</label>
+                        <Input
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder="e.g. Basic Plan Discount"
+                            className="bg-surface-2 border-border/60 text-sm h-9"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Applicable Plans</label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={allPlans}
+                                onChange={e => { setAllPlans(e.target.checked); if (e.target.checked) setSelectedPlans([]); }}
+                                className="rounded border-border/60"
+                            />
+                            <span className="text-xs text-foreground font-medium">All Plans</span>
+                        </label>
+                        {!allPlans && (
+                            <div className="grid grid-cols-1 gap-1 pl-1">
+                                {plans.map(p => (
+                                    <label key={p.id} className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedPlans.includes(Number(p.id))}
+                                            onChange={() => togglePlan(Number(p.id))}
+                                            className="rounded border-border/60"
+                                        />
+                                        <span className="text-xs text-muted-foreground">{p.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Expiry Date</label>
+                            <Input
+                                type="date"
+                                value={expiresAt}
+                                onChange={e => setExpiresAt(e.target.value)}
+                                className="bg-surface-2 border-border/60 text-sm h-9"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Uses Limit</label>
+                            <Input
+                                type="number"
+                                value={usesLimit}
+                                onChange={e => setUsesLimit(e.target.value)}
+                                placeholder="Unlimited"
+                                min={1}
+                                className="bg-surface-2 border-border/60 text-sm h-9"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Switch
+                            checked={status === "ACTIVE"}
+                            onCheckedChange={v => setStatus(v ? "ACTIVE" : "INACTIVE")}
+                            className="data-[state=checked]:bg-emerald-500"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                            {status === "ACTIVE" ? <span className="text-emerald-500 font-medium">Active</span> : "Inactive"}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/30">
+                    <Button variant="outline" size="sm" onClick={onClose} className="h-8 border-border/50 text-xs">Cancel</Button>
+                    <Button size="sm" onClick={handleSubmit} disabled={saving} className="h-8 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 text-xs">
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {promo?.id ? "Save Changes" : "Create Code"}
+                    </Button>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
+// ─── Promo Codes Tab ───────────────────────────────────────────────────────────
+function PromoCodesTab({ plans }: { plans: Plan[] }) {
+    const [promos, setPromos] = useState<PromoCode[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [editTarget, setEditTarget] = useState<Partial<PromoCode> | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
+
+    useEffect(() => {
+        api.get("/admin/promo-codes")
+            .then(data => setPromos(Array.isArray(data) ? data : (data.promoCodes ?? [])))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
+
+    const handleSave = async (data: any) => {
+        const result = await api.post("/admin/promo-codes", data);
+        if (data.id) {
+            setPromos(p => p.map(x => x.id === data.id ? { ...x, ...result } : x));
+            toast.success("Promo code updated");
+        } else {
+            setPromos(p => [result, ...p]);
+            toast.success(`Promo code "${result.code}" created`);
+        }
+        setEditTarget(null);
+    };
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+        try {
+            await api.delete(`/admin/promo-codes/${deleteTarget.id}`);
+            setPromos(p => p.filter(x => x.id !== deleteTarget.id));
+            toast.success(`"${deleteTarget.code}" deleted`);
+        } catch (e: any) {
+            toast.error(e.message || "Failed to delete");
+        } finally {
+            setDeleteTarget(null);
+        }
+    };
+
+    const planName = (id: number) => plans.find(p => Number(p.id) === id)?.name ?? `Plan #${id}`;
+
+    if (loading) {
+        return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">{promos.length} promo code{promos.length !== 1 ? "s" : ""}</p>
+                <Button
+                    size="sm"
+                    onClick={() => setEditTarget({})}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-8 text-xs"
+                >
+                    <Plus className="w-3.5 h-3.5" /> Add Promo Code
+                </Button>
+            </div>
+
+            {promos.length === 0 ? (
+                <div className="flex flex-col items-center gap-4 py-24 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                        <Tag className="w-8 h-8 text-muted-foreground/30" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">No promo codes yet</p>
+                    <Button onClick={() => setEditTarget({})} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
+                        <Plus className="w-3.5 h-3.5" /> Add Promo Code
+                    </Button>
+                </div>
+            ) : (
+                <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-border bg-surface-2/50">
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Code</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Name</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Discount</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Plans</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Expiry</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Uses</th>
+                                <th className="px-4 py-2.5" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {promos.map((promo, i) => (
+                                <tr key={promo.id} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${i === promos.length - 1 ? "border-b-0" : ""}`}>
+                                    <td className="px-4 py-3 font-mono font-semibold text-primary text-xs">{promo.code}</td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{promo.name ?? "—"}</td>
+                                    <td className="px-4 py-3 text-xs font-semibold text-foreground">{promo.discountPercent}%</td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px]">
+                                        {promo.applicablePlans === null
+                                            ? <span className="text-emerald-500 font-medium">All Plans</span>
+                                            : promo.applicablePlans.map(id => planName(id)).join(", ") || "—"
+                                        }
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${promo.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
+                                            {promo.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{promo.expiresAt ? promo.expiresAt.slice(0, 10) : "—"}</td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                                        {promo.usesCount}{promo.usesLimit != null ? ` / ${promo.usesLimit}` : ""}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => setEditTarget(promo)}
+                                                className="p-1.5 text-muted-foreground hover:text-primary rounded hover:bg-primary/10 transition-colors"
+                                                title="Edit"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => setDeleteTarget(promo)}
+                                                className="p-1.5 text-muted-foreground hover:text-red-500 rounded hover:bg-red-500/10 transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            <AnimatePresence>
+                {editTarget !== null && (
+                    <PromoCodeModal
+                        key="promo-modal"
+                        promo={editTarget}
+                        plans={plans}
+                        onSave={handleSave}
+                        onClose={() => setEditTarget(null)}
+                    />
+                )}
+            </AnimatePresence>
+
+            <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+                <AlertDialogContent className="bg-surface-1 border-border">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Promo Code</AlertDialogTitle>
+                        <AlertDialogDescription className="text-muted-foreground">
+                            Delete "{deleteTarget?.code}"? This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="bg-surface-2 border-border">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90">
+                            Yes, Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </div>
+    );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function Plans() {
+    const [activeTab, setActiveTab] = useState<"plans" | "promo">("plans");
     const [plans, setPlans] = useState<Plan[]>([]);
     const [globalFeatures, setGlobalFeatures] = useState<GlobalFeature[]>(DEFAULT_GLOBAL_FEATURES);
     const [loading, setLoading] = useState(true);
@@ -648,7 +1092,7 @@ export default function Plans() {
                         {plans.length} plan{plans.length !== 1 ? "s" : ""} · Global features apply to all plans
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                {activeTab === "plans" && (
                     <Button
                         onClick={() => setCreating(true)}
                         disabled={creating}
@@ -656,72 +1100,96 @@ export default function Plans() {
                     >
                         <Plus className="w-4 h-4" /> New Plan
                     </Button>
-                </div>
+                )}
             </div>
 
-            {/* Global Features Section */}
-            <GlobalFeaturesCard
-                features={globalFeatures}
-                onChange={setGlobalFeatures}
-                onSave={saveGlobalFeatures}
-                saving={savingFeatures}
-            />
+            {/* Tabs */}
+            <div className="flex gap-1 bg-surface-2/50 border border-border/40 rounded-lg p-1 w-fit">
+                <button
+                    onClick={() => setActiveTab("plans")}
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "plans" ? "bg-surface-1 text-foreground shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                    <Package className="w-3.5 h-3.5" /> Plans
+                </button>
+                <button
+                    onClick={() => setActiveTab("promo")}
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "promo" ? "bg-surface-1 text-foreground shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                    <Tag className="w-3.5 h-3.5" /> Promo Codes
+                </button>
+            </div>
 
-            {/* New plan card (when creating) */}
-            <AnimatePresence>
-                {creating && (
-                    <NewPlanCard key="new-plan" onCreate={handleCreate} onCancel={() => setCreating(false)} />
-                )}
-            </AnimatePresence>
+            {activeTab === "plans" && (
+                <>
+                    {/* Global Features Section */}
+                    <GlobalFeaturesCard
+                        features={globalFeatures}
+                        onChange={setGlobalFeatures}
+                        onSave={saveGlobalFeatures}
+                        saving={savingFeatures}
+                    />
 
-            {/* Plan cards grid */}
-            {plans.length === 0 && !creating ? (
-                <div className="flex flex-col items-center gap-4 py-24 text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                        <Package className="w-8 h-8 text-muted-foreground/30" />
-                    </div>
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">No plans yet</p>
-                        <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">Click <strong>+ New Plan</strong> or load from the website.</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <Button onClick={() => setCreating(true)} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
-                            <Plus className="w-3.5 h-3.5" /> New Plan
-                        </Button>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
+                    {/* New plan card (when creating) */}
                     <AnimatePresence>
-                        {plans.map(plan => (
-                            <InlinePlanCard
-                                key={plan.id}
-                                plan={plan}
-                                onSaved={handleSaved}
-                                onDelete={setDeleteTarget}
-                            />
-                        ))}
+                        {creating && (
+                            <NewPlanCard key="new-plan" onCreate={handleCreate} onCancel={() => setCreating(false)} />
+                        )}
                     </AnimatePresence>
-                </div>
+
+                    {/* Plan cards grid */}
+                    {plans.length === 0 && !creating ? (
+                        <div className="flex flex-col items-center gap-4 py-24 text-center">
+                            <div className="w-16 h-16 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                <Package className="w-8 h-8 text-muted-foreground/30" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">No plans yet</p>
+                                <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">Click <strong>+ New Plan</strong> or load from the website.</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={() => setCreating(true)} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
+                                    <Plus className="w-3.5 h-3.5" /> New Plan
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3 gap-5">
+                            <AnimatePresence>
+                                {plans.map(plan => (
+                                    <InlinePlanCard
+                                        key={plan.id}
+                                        plan={plan}
+                                        onSaved={handleSaved}
+                                        onDelete={setDeleteTarget}
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
+                    {/* Delete confirm */}
+                    <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+                        <AlertDialogContent className="bg-surface-1 border-border">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Plan</AlertDialogTitle>
+                                <AlertDialogDescription className="text-muted-foreground">
+                                    Delete "{deleteTarget?.name}"? Existing subscriptions will be unaffected, but it will no longer be available for new purchases.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="bg-surface-2 border-border">Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90">
+                                    Yes, Delete
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </>
             )}
 
-            {/* Delete confirm */}
-            <AlertDialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
-                <AlertDialogContent className="bg-surface-1 border-border">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Plan</AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
-                            Delete "{deleteTarget?.name}"? Existing subscriptions will be unaffected, but it will no longer be available for new purchases.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-surface-2 border-border">Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90">
-                            Yes, Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {activeTab === "promo" && (
+                <PromoCodesTab plans={plans} />
+            )}
         </div>
     );
 }

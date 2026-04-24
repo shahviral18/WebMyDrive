@@ -746,7 +746,7 @@ class AdminController
 
     public function getPlans(Request $req): void
     {
-        $plans = Database::query('SELECT * FROM "Plan" ORDER BY price ASC');
+        $plans = Database::query('SELECT * FROM "Plan" ORDER BY sortOrder ASC, price ASC');
         Response::json($plans);
     }
 
@@ -764,6 +764,8 @@ class AdminController
         $maxUsers = $req->body['maxUsers'] ?? 0;
         $googleSKU = $req->body['googleSKU'] ?? null;
         $hasOverride = $req->body['hasOverride'] ?? null;
+        $sortOrder = $req->body['sortOrder'] ?? null;
+        $googleOrgUnit = isset($req->body['googleOrgUnit']) ? trim((string)$req->body['googleOrgUnit']) : null;
 
         if (!$name)
             Response::error('Plan name is required', 400);
@@ -783,8 +785,10 @@ class AdminController
                 'UPDATE "Plan" SET name=:name, price=:price, priceINR=:pINR,
                  priceMonthlyINR=:pM, priceYearlyINR=:pY, features=:feats,
                  storageGB=:storage, maxUsers=:maxu, googleSKU=:sku,
-                 isActive=CASE WHEN :ia IS NOT NULL THEN :ia ELSE isActive END,
-                 hasOverride=CASE WHEN :ho IS NOT NULL THEN :ho ELSE hasOverride END,
+                 isActive=CASE WHEN :ia1 IS NOT NULL THEN :ia2 ELSE isActive END,
+                 hasOverride=CASE WHEN :ho1 IS NOT NULL THEN :ho2 ELSE hasOverride END,
+                 sortOrder=CASE WHEN :so1 IS NOT NULL THEN :so2 ELSE sortOrder END,
+                 googleOrgUnit=CASE WHEN :gou1 IS NOT NULL THEN :gou2 ELSE googleOrgUnit END,
                  updatedAt=:now
                  WHERE id=:id',
                 [
@@ -797,8 +801,14 @@ class AdminController
                     ':storage' => (int) $storageGB,
                     ':maxu' => (int) $maxUsers,
                     ':sku' => $googleSKU,
-                    ':ia' => $isActive !== null ? (int) (bool) $isActive : null,
-                    ':ho' => $hasOverride !== null ? (int) (bool) $hasOverride : null,
+                    ':ia1' => $isActive !== null ? (int) (bool) $isActive : null,
+                    ':ia2' => $isActive !== null ? (int) (bool) $isActive : null,
+                    ':ho1' => $hasOverride !== null ? (int) (bool) $hasOverride : null,
+                    ':ho2' => $hasOverride !== null ? (int) (bool) $hasOverride : null,
+                    ':so1' => $sortOrder !== null ? (int) $sortOrder : null,
+                    ':so2' => $sortOrder !== null ? (int) $sortOrder : null,
+                    ':gou1' => $googleOrgUnit !== null ? ($googleOrgUnit ?: null) : null,
+                    ':gou2' => $googleOrgUnit !== null ? ($googleOrgUnit ?: null) : null,
                     ':now' => $now,
                     ':id' => (int) $id,
                 ]
@@ -806,8 +816,8 @@ class AdminController
             $plan = Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => (int) $id]);
         } else {
             $newId = Database::insert(
-                'INSERT INTO "Plan" (name, price, priceINR, priceMonthlyINR, priceYearlyINR, features, isActive, storageGB, maxUsers, googleSKU, hasOverride, createdAt, updatedAt)
-                 VALUES (:name, :price, :pINR, :pM, :pY, :feats, :ia, :storage, :maxu, :sku, :ho, :now, :now)',
+                'INSERT INTO "Plan" (name, price, priceINR, priceMonthlyINR, priceYearlyINR, features, isActive, storageGB, maxUsers, googleSKU, hasOverride, sortOrder, googleOrgUnit, createdAt, updatedAt)
+                 VALUES (:name, :price, :pINR, :pM, :pY, :feats, :ia, :storage, :maxu, :sku, :ho, :so, :gou, :now1, :now2)',
                 [
                     ':name' => $name,
                     ':price' => (float) $price,
@@ -820,7 +830,10 @@ class AdminController
                     ':maxu' => (int) $maxUsers,
                     ':sku' => $googleSKU,
                     ':ho' => $hasOverride !== null ? (int) (bool) $hasOverride : 0,
-                    ':now' => $now,
+                    ':so' => $sortOrder !== null ? (int) $sortOrder : 0,
+                    ':gou' => $googleOrgUnit ?: null,
+                    ':now1' => $now,
+                    ':now2' => $now,
                 ]
             );
             $plan = Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => $newId]);
@@ -863,5 +876,106 @@ class AdminController
         );
 
         Response::json(Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => $id]));
+    }
+
+    // ── Promo Codes ───────────────────────────────────────────────────────────
+
+    public function getPromoCodes(Request $req): void
+    {
+        $codes = Database::query('SELECT * FROM "PromoCode" ORDER BY createdAt DESC');
+        Response::json($codes);
+    }
+
+    public function upsertPromoCode(Request $req): void
+    {
+        $id = $req->body['id'] ?? null;
+        $code = strtoupper(trim((string)($req->body['code'] ?? '')));
+        $name = trim((string)($req->body['name'] ?? ''));
+        $discountPercent = $req->body['discountPercent'] ?? null;
+        $applicablePlans = $req->body['applicablePlans'] ?? null; // null = all, array of ints = specific
+        $status = $req->body['status'] ?? 'ACTIVE';
+        $usesLimit = isset($req->body['usesLimit']) && $req->body['usesLimit'] !== '' ? (int)$req->body['usesLimit'] : null;
+        $expiresAt = $req->body['expiresAt'] ?? null;
+
+        if (!$code) Response::error('Code is required', 400);
+        if (!preg_match('/^[A-Z0-9_\-]{2,50}$/', $code)) Response::error('Code must be alphanumeric (A-Z, 0-9, _, -), 2-50 chars', 400);
+        if ($discountPercent === null || $discountPercent === '') Response::error('Discount percent is required', 400);
+        $discountFloat = (float)$discountPercent;
+        if ($discountFloat <= 0 || $discountFloat > 100) Response::error('Discount must be between 1 and 100', 400);
+
+        $applicablePlansJson = null;
+        if (is_array($applicablePlans) && count($applicablePlans) > 0) {
+            $applicablePlansJson = json_encode(array_values(array_map('intval', $applicablePlans)));
+        }
+
+        $expiresAtVal = null;
+        if ($expiresAt && trim($expiresAt) !== '') {
+            $ts = strtotime($expiresAt);
+            if ($ts) $expiresAtVal = date('Y-m-d H:i:s', $ts);
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        if ($id) {
+            $existing = Database::queryOne('SELECT id FROM "PromoCode" WHERE id = :id', [':id' => (int)$id]);
+            if (!$existing) Response::error('Promo code not found', 404);
+
+            $conflict = Database::queryOne(
+                'SELECT id FROM "PromoCode" WHERE code = :c AND id != :id',
+                [':c' => $code, ':id' => (int)$id]
+            );
+            if ($conflict) Response::error('A promo code with this code already exists', 409);
+
+            Database::execute(
+                'UPDATE "PromoCode" SET code=:c, name=:n, discountPercent=:dp, applicablePlans=:ap,
+                 status=:s, usesLimit=:ul, expiresAt=:ea, updatedAt=:now WHERE id=:id',
+                [
+                    ':c' => $code, ':n' => $name ?: null, ':dp' => $discountFloat,
+                    ':ap' => $applicablePlansJson, ':s' => $status,
+                    ':ul' => $usesLimit, ':ea' => $expiresAtVal,
+                    ':now' => $now, ':id' => (int)$id,
+                ]
+            );
+            $row = Database::queryOne('SELECT * FROM "PromoCode" WHERE id = :id', [':id' => (int)$id]);
+        } else {
+            $conflict = Database::queryOne('SELECT id FROM "PromoCode" WHERE code = :c', [':c' => $code]);
+            if ($conflict) Response::error('A promo code with this code already exists', 409);
+
+            $newId = Database::insert(
+                'INSERT INTO "PromoCode" (code, name, discountPercent, applicablePlans, status, usesLimit, usesCount, expiresAt, createdAt, updatedAt)
+                 VALUES (:c, :n, :dp, :ap, :s, :ul, 0, :ea, :now, :now)',
+                [
+                    ':c' => $code, ':n' => $name ?: null, ':dp' => $discountFloat,
+                    ':ap' => $applicablePlansJson, ':s' => $status,
+                    ':ul' => $usesLimit, ':ea' => $expiresAtVal, ':now' => $now,
+                ]
+            );
+            $row = Database::queryOne('SELECT * FROM "PromoCode" WHERE id = :id', [':id' => $newId]);
+        }
+
+        Response::json($row);
+    }
+
+    public function deletePromoCode(Request $req): void
+    {
+        $id = (int)($req->params['id'] ?? 0);
+        if (!$id) Response::error('Promo code ID required', 400);
+
+        $existing = Database::queryOne('SELECT id FROM "PromoCode" WHERE id = :id', [':id' => $id]);
+        if (!$existing) Response::error('Promo code not found', 404);
+
+        Database::execute('DELETE FROM "PromoCode" WHERE id = :id', [':id' => $id]);
+        Response::json(['success' => true]);
+    }
+
+    // ── OU Validation ─────────────────────────────────────────────────────────
+
+    public function validateOuPath(Request $req): void
+    {
+        $path = trim((string)($req->query['path'] ?? ''));
+        if (!$path) Response::error('path required', 400);
+
+        $valid = GoogleWorkspaceService::validateOrgUnit($path);
+        Response::json(['valid' => $valid, 'path' => $path]);
     }
 }

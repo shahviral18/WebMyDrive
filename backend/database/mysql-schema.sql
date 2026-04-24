@@ -266,3 +266,13 @@ CREATE TABLE IF NOT EXISTS "ExistingUser" (
   INDEX idx_existinguser_status (status),
   INDEX idx_existinguser_activeplan (activePlanId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ── v2 migration: user profile extension ──────────────────────────────────────
+ALTER TABLE `User`
+  ADD COLUMN IF NOT EXISTS `phone`         VARCHAR(50)  NULL AFTER `distributorId`,
+  ADD COLUMN IF NOT EXISTS `country`       VARCHAR(100) NULL AFTER `phone`,
+  ADD COLUMN IF NOT EXISTS `timezone`      VARCHAR(100) NULL AFTER `country`,
+  ADD COLUMN IF NOT EXISTS `recoveryEmail` VARCHAR(255) NULL AFTER `timezone`,
+  ADD COLUMN IF NOT EXISTS `recoveryPhone` VARCHAR(50)  NULL AFTER `recoveryEmail`,
+  ADD COLUMN IF NOT EXISTS `storageUsed`   BIGINT NOT NULL DEFAULT 0 AFTER `recoveryPhone`,
+  ADD COLUMN IF NOT EXISTS `storageLimit`  BIGINT NOT NULL DEFAULT 0 AFTER `storageUsed`;

@@ -50,7 +50,7 @@ export default function UserReferrals() {
     // ← IMPORTANT: link goes to /login so unauthenticated buyers
     //   sign in first; the ref param is preserved & auto-applied after login
     const referralLink = referralCode
-        ? `${window.location.origin}/ref/${referralCode}`
+        ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/ref/${referralCode}`
         : "";
 
     const markCopied = () => {

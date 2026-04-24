@@ -175,6 +175,15 @@ class AuthController
         AuditService::log('LOGIN', (int) $user['id'], $req->ip, ['email' => $email]);
         $token = JwtHelper::generateToken((int) $user['id'], $user['role']);
 
+        // Track session for real active-sessions view
+        try {
+            $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+            Database::insert(
+                'INSERT INTO "UserSession" (userId, ipAddress, userAgent, createdAt) VALUES (:uid, :ip, :ua, NOW())',
+                [':uid' => (int) $user['id'], ':ip' => $req->ip, ':ua' => $ua ?: null]
+            );
+        } catch (Throwable $ignored) {}
+
         Response::json([
             'token' => $token,
             'requiresPasswordChange' => $requiresPasswordChange,
@@ -415,6 +424,11 @@ class AuthController
                 'walletBalance' => (float) $user['walletBalance'],
                 'isDisabled' => (bool) $user['isDisabled'],
                 'workspace' => $workspace,
+                'phone' => $user['phone'] ?? null,
+                'country' => $user['country'] ?? null,
+                'timezone' => $user['timezone'] ?? null,
+                'recoveryEmail' => $user['recoveryEmail'] ?? null,
+                'recoveryPhone' => $user['recoveryPhone'] ?? null,
             ],
         ]);
     }
@@ -493,27 +507,53 @@ class AuthController
     {
         $reqUser = $req->user;
         $currentPassword = (string) ($req->body['currentPassword'] ?? '');
-        $newPassword = (string) ($req->body['newPassword'] ?? '');
+        $newPassword     = (string) ($req->body['newPassword']     ?? '');
+        $target          = (string) ($req->body['target']          ?? 'portal');
 
-        if (!$reqUser)
-            Response::error('Unauthorized', 401);
+        if (!$reqUser) Response::error('Unauthorized', 401);
+        if (!in_array($target, ['portal', 'google', 'both'], true)) $target = 'portal';
+        if (strlen($newPassword) < 8) Response::error('Password must be at least 8 characters', 400);
 
         $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $reqUser['userId']]);
-        if (!$user || !$user['passwordHash'])
-            Response::error('User not found', 404);
+        if (!$user || !$user['passwordHash']) Response::error('User not found', 404);
 
         if (!password_verify($currentPassword, $user['passwordHash'])) {
             Response::error('Current password is incorrect', 400);
         }
 
-        $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
-        $now = date('Y-m-d H:i:s');
-        Database::execute(
-            'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
-            [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
-        );
+        $portalUpdated = false;
+        $googleUpdated = false;
 
-        Response::json(['success' => true]);
+        if ($target === 'portal' || $target === 'both') {
+            $now = date('Y-m-d H:i:s');
+            Database::execute(
+                'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
+                [':h' => password_hash($newPassword, PASSWORD_BCRYPT), ':now' => $now, ':id' => $user['id']]
+            );
+            $portalUpdated = true;
+        }
+
+        if ($target === 'google' || $target === 'both') {
+            $ws = Database::queryOne(
+                'SELECT googleCustomerId, metadata FROM "Workspace"
+                 WHERE userId = :uid AND status = \'ACTIVE\'
+                 ORDER BY createdAt DESC LIMIT 1',
+                [':uid' => $user['id']]
+            );
+            if ($ws) {
+                $meta    = @json_decode($ws['metadata'] ?? '', true) ?: [];
+                $wsEmail = $meta['email'] ?? $ws['googleCustomerId'] ?? null;
+                if ($wsEmail && GoogleWorkspaceService::isProvisioned($wsEmail)) {
+                    $googleUpdated = GoogleWorkspaceService::updatePassword($wsEmail, $newPassword);
+                }
+            }
+        }
+
+        Response::json([
+            'success'       => true,
+            'portalUpdated' => $portalUpdated,
+            'googleUpdated' => $googleUpdated,
+        ]);
     }
 
     public function setupWorkspacePassword(Request $req): void
@@ -720,7 +760,134 @@ class AuthController
         }
     }
 
+    // ── OTP-based forgot password ─────────────────────────────────────────────
+
+    public function forgotOtpRequest(Request $req): void
+    {
+        $wmdId = strtolower(trim((string)($req->body['wmdId'] ?? '')));
+        if (!$wmdId) Response::error('WebMyDrive ID required', 400);
+
+        $email = str_contains($wmdId, '@') ? $wmdId : $wmdId . '@webmydrive.com';
+
+        $user = Database::queryOne(
+            'SELECT * FROM "User" WHERE email = :e1 OR displayEmail = :e2',
+            [':e1' => $email, ':e2' => $email]
+        );
+        if (!$user) Response::error('Account not found', 404);
+
+        $recoveryEmail = $user['recoveryEmail'] ?? null;
+        if (!$recoveryEmail) {
+            Response::json(['noRecovery' => true]);
+            return;
+        }
+
+        // Invalidate any previous OTPs for this user
+        Database::execute(
+            "UPDATE \"SecurityLink\" SET status = 'USED' WHERE userId = :uid AND status = 'ACTIVE' AND role = 'OTP_RESET'",
+            [':uid' => $user['id']]
+        );
+
+        // Generate 6-digit OTP, store in SecurityLink table
+        $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $expiresAt = date('Y-m-d H:i:s', time() + 600);
+
+        Database::insert(
+            "INSERT INTO \"SecurityLink\" (userId, token, role, status, expiresAt)
+             VALUES (:uid, :otp, 'OTP_RESET', 'ACTIVE', :exp)",
+            [':uid' => $user['id'], ':otp' => $otp, ':exp' => $expiresAt]
+        );
+
+        // Send OTP via email
+        $name = $user['name'] ?: 'User';
+        $subject = 'WebMyDrive — Your Password Reset OTP';
+        $body  = "Hi {$name},\r\n\r\n";
+        $body .= "Your password reset OTP is: {$otp}\r\n\r\n";
+        $body .= "This code is valid for 10 minutes. Do not share it with anyone.\r\n\r\n";
+        $body .= "If you did not request this, please ignore this email.\r\n\r\n";
+        $body .= "— WebMyDrive Team";
+        $headers = implode("\r\n", [
+            'From: WebMyDrive <noreply@webmydrive.com>',
+            'Reply-To: support@webmydrive.com',
+            'X-Mailer: PHP/' . phpversion(),
+            'Content-Type: text/plain; charset=UTF-8',
+        ]);
+        @mail($recoveryEmail, $subject, $body, $headers);
+
+        AuditService::log('FORGOT_OTP_REQUESTED', (int) $user['id'], $req->ip, ['email' => $email]);
+        Response::json(['maskedEmail' => self::maskEmail($recoveryEmail)]);
+    }
+
+    public function forgotOtpVerify(Request $req): void
+    {
+        $wmdId       = strtolower(trim((string)($req->body['wmdId'] ?? '')));
+        $otp         = trim((string)($req->body['otp'] ?? ''));
+        $newPassword = (string)($req->body['newPassword'] ?? '');
+
+        if (!$wmdId || !$otp || !$newPassword) Response::error('All fields are required', 400);
+        if (strlen($newPassword) < 8) Response::error('Password must be at least 8 characters', 400);
+
+        $email = str_contains($wmdId, '@') ? $wmdId : $wmdId . '@webmydrive.com';
+
+        $user = Database::queryOne(
+            'SELECT * FROM "User" WHERE email = :e1 OR displayEmail = :e2',
+            [':e1' => $email, ':e2' => $email]
+        );
+        if (!$user) Response::error('Account not found', 404);
+
+        $link = Database::queryOne(
+            "SELECT * FROM \"SecurityLink\" WHERE userId = :uid AND token = :otp AND role = 'OTP_RESET' AND status = 'ACTIVE' ORDER BY id DESC LIMIT 1",
+            [':uid' => $user['id'], ':otp' => $otp]
+        );
+
+        if (!$link || strtotime($link['expiresAt']) < time()) {
+            Response::error('Invalid or expired OTP. Please request a new one.', 400);
+        }
+
+        $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
+        $now = date('Y-m-d H:i:s');
+
+        Database::execute(
+            'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
+            [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
+        );
+
+        Database::execute(
+            "UPDATE \"SecurityLink\" SET status = 'USED', usedAt = :now WHERE id = :id",
+            [':now' => $now, ':id' => $link['id']]
+        );
+
+        AuditService::log('FORGOT_OTP_VERIFIED', (int) $user['id'], $req->ip, ['email' => $email]);
+        Response::json(['success' => true, 'message' => 'Password reset successfully']);
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private static function maskEmail(string $email): string
+    {
+        if (!str_contains($email, '@')) return $email;
+        [$local, $domain] = explode('@', $email, 2);
+        $localLen = strlen($local);
+        if ($localLen <= 3) {
+            $maskedLocal = $local[0] . str_repeat('*', max(1, $localLen - 1));
+        } elseif ($localLen <= 6) {
+            $maskedLocal = substr($local, 0, 2) . str_repeat('*', $localLen - 3) . substr($local, -1);
+        } else {
+            $show    = min(3, max(1, (int) floor($localLen * 0.3)));
+            $endShow = min(2, max(1, (int) floor($localLen * 0.2)));
+            $maskedLocal = substr($local, 0, $show)
+                         . str_repeat('*', $localLen - $show - $endShow)
+                         . substr($local, -$endShow);
+        }
+        $dotPos  = strrpos($domain, '.');
+        if ($dotPos === false) return $maskedLocal . '@' . $domain;
+        $tld     = substr($domain, $dotPos);
+        $domName = substr($domain, 0, $dotPos);
+        $domLen  = strlen($domName);
+        $maskedDom = $domName[0] . str_repeat('*', max(1, $domLen - 1)) . $tld;
+        return $maskedLocal . '@' . $maskedDom;
+    }
+
+
 
     /**
      * Verify a Google ID token via Google's tokeninfo endpoint (no SDK).

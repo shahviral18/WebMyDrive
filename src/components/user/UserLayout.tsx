@@ -202,9 +202,7 @@ export default function UserLayout({ children }: UserLayoutProps) {
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                         <Bell className="w-5 h-5" />
                     </Button>
-                    <Button className="bg-primary hover:bg-primary/90 text-white rounded-full px-5 h-9 text-xs font-semibold shadow-md">
-                        Upload New File
-                    </Button>
+
                 </header>
 
                 {/* Mobile Top Bar — SINGLE theme toggle lives here */}

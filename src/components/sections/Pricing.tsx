@@ -1,10 +1,23 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { usePlans } from "@/hooks/use-plans";
 import { Skeleton } from "@/components/ui/skeleton";
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isDesktop;
+}
 
 const sharedFeatures = [
   "Google Drive",
@@ -41,6 +54,7 @@ export function Pricing() {
   const { data: plans, isLoading, error } = usePlans();
   const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = React.useState<'monthly' | 'yearly'>('yearly');
+  const isDesktop = useIsDesktop();
 
   const themeColors = [
     {
@@ -129,7 +143,10 @@ export function Pricing() {
           </div>
         ) : (
           <div className="rounded-3xl border border-gray-200 bg-white/50 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 h-full">
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200 h-full"
+              style={isDesktop ? { gridTemplateColumns: `repeat(${plans?.length ?? 4}, minmax(0, 1fr))` } : undefined}
+            >
               {isLoading
                 ? Array(4)
                   .fill(0)
@@ -152,10 +169,15 @@ export function Pricing() {
                   ))
                 : plans?.map((plan, index) => {
                   const isYearly = billingPeriod === 'yearly';
-                  const displayAmount = isYearly ? Math.round((plan.yearlyPrice || 0) / 12) : plan.monthlyPrice || 0;
-                  const discountVal = plan.discount ? parseInt(plan.discount) : 0;
-                  const storageValue = getStorageValue(plan.storage);
+                  const displayAmount = isYearly ? plan.yearlyPerMonth : plan.monthlyPrice;
                   const theme = themeColors[index % themeColors.length];
+
+                  // Plan features + global features (deduplicated)
+                  const customFeatures = plan.planFeatures ?? [];
+                  const globalToAdd = sharedFeatures.filter(g => !customFeatures.some(c => c.toLowerCase().includes(g.toLowerCase())));
+                  const featureList: string[] = customFeatures.length > 0
+                    ? [...customFeatures, ...globalToAdd]
+                    : [getStorageValue(plan.storage), ...sharedFeatures];
 
                   return (
                     <motion.div
@@ -195,7 +217,7 @@ export function Pricing() {
                       </div>
 
                       <ul className="space-y-4 flex-grow">
-                        {[storageValue, ...sharedFeatures].map((feature) => (
+                        {featureList.map((feature) => (
                           <li key={`${plan.id}-${feature}`} className="flex items-center gap-3 text-slate-700">
                             <Check className={`h-4 w-4 ${theme.check}`} />
                             <span className="text-lg leading-none">{feature}</span>

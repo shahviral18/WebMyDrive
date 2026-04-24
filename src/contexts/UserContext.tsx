@@ -23,6 +23,11 @@ export interface UserProfile {
     referralCode?: string;
     walletBalance?: number;
     workspace?: { status: string; planId?: number; plan?: { name: string } } | null;
+    phone?: string;
+    country?: string;
+    timezone?: string;
+    recoveryEmail?: string;
+    recoveryPhone?: string;
 }
 
 interface UserContextType {
@@ -68,6 +73,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
             referralCode: data?.user?.referralCode,
             walletBalance: data?.user?.walletBalance,
             workspace: data?.user?.workspace ?? prev.workspace,
+            phone: data?.user?.phone ?? prev.phone,
+            country: data?.user?.country ?? prev.country,
+            timezone: data?.user?.timezone ?? prev.timezone,
+            recoveryEmail: data?.user?.recoveryEmail ?? prev.recoveryEmail,
+            recoveryPhone: data?.user?.recoveryPhone ?? prev.recoveryPhone,
         }));
     };
 

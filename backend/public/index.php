@@ -54,6 +54,7 @@ require BASE_PATH . '/services/DistributorService.php';
 require BASE_PATH . '/services/RazorpayService.php';
 require BASE_PATH . '/services/SubscriptionService.php';
 require BASE_PATH . '/services/PaymentHandler.php';
+require BASE_PATH . '/services/GoogleWorkspaceService.php';
 
 // Middleware
 require BASE_PATH . '/middleware/AuthMiddleware.php';
@@ -106,6 +107,8 @@ $router->post('/api/auth/google-login', [AuthController::class, 'googleLogin']);
 $router->post('/api/auth/temp-login', [AuthController::class, 'tempLogin']);
 $router->get('/api/auth/me', [AuthController::class, 'me'], $auth);
 $router->post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword'], [RateLimiter::limit('FORGOT_PASSWORD', 3, 900)]);
+$router->post('/api/auth/forgot-otp-request', [AuthController::class, 'forgotOtpRequest'], [RateLimiter::limit('FORGOT_OTP', 5, 900)]);
+$router->post('/api/auth/forgot-otp-verify', [AuthController::class, 'forgotOtpVerify'], [RateLimiter::limit('FORGOT_OTP_VERIFY', 10, 900)]);
 $router->post('/api/auth/change-password', [AuthController::class, 'changePassword'], $auth);
 $router->post('/api/auth/setup-workspace-password', [AuthController::class, 'setupWorkspacePassword'], $auth);
 $router->post('/api/auth/setup-credentials', [AuthController::class, 'setupCredentials']);
@@ -136,6 +139,10 @@ $router->get('/api/admin/plans', [AdminController::class, 'getPlans'], $adminOnl
 $router->post('/api/admin/plans', [AdminController::class, 'upsertPlan'], $adminOnly);
 $router->delete('/api/admin/plans/:id', [AdminController::class, 'deletePlan'], $adminOnly);
 $router->patch('/api/admin/plans/:id/toggle', [AdminController::class, 'togglePlan'], $adminOnly);
+$router->get('/api/admin/promo-codes', [AdminController::class, 'getPromoCodes'], $adminOnly);
+$router->post('/api/admin/promo-codes', [AdminController::class, 'upsertPromoCode'], $adminOnly);
+$router->delete('/api/admin/promo-codes/:id', [AdminController::class, 'deletePromoCode'], $adminOnly);
+$router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
 
 // ── User ──────────────────────────────────────────────────────────────────────
 $router->get('/api/user/workspace', [UserController::class, 'getWorkspace'], $auth);
@@ -144,6 +151,22 @@ $router->get('/api/user/plans', [UserController::class, 'getPlans']);
 $router->post('/api/user/plans/:id/purchase', [UserController::class, 'purchasePlan'], $auth);
 $router->get('/api/user/orders', [UserController::class, 'getOrders'], $auth);
 $router->put('/api/user/profile', [UserController::class, 'updateProfile'], $auth);
+$router->put('/api/user/profile/name', [UserController::class, 'updateName'], $auth);
+$router->put('/api/user/profile/contact', [UserController::class, 'updateContact'], $auth);
+$router->put('/api/user/profile/recovery', [UserController::class, 'updateRecovery'], $auth);
+$router->get('/api/user/storage', [UserController::class, 'getStorage'], $auth);
+$router->get('/api/user/login-history', [UserController::class, 'getLoginHistory'], $auth);
+$router->get('/api/user/sessions', [UserController::class, 'getSessions'], $auth);
+$router->delete('/api/user/sessions/:id', [UserController::class, 'revokeSession'], $auth);
+$router->get('/api/user/shared-drives', [UserController::class, 'getSharedDrives'], $auth);
+$router->post('/api/user/refresh-workspace-data', [UserController::class, 'refreshWorkspaceData'], $auth);
+$router->get('/api/user/workspace-security', [UserController::class, 'getWorkspaceSecurity'], $auth);
+$router->get('/api/user/current-plan',     [UserController::class, 'getCurrentPlan'],    $auth);
+$router->get('/api/user/upgrade-preview',  [UserController::class, 'getUpgradePreview'], $auth);
+$router->post('/api/user/initiate-upgrade',   [UserController::class, 'initiateUpgrade'],   $auth);
+$router->post('/api/user/confirm-upgrade',    [UserController::class, 'confirmUpgrade'],    $auth);
+$router->post('/api/user/schedule-downgrade', [UserController::class, 'scheduleDowngrade'], $auth);
+$router->delete('/api/user/cancel-downgrade', [UserController::class, 'cancelDowngrade'],   $auth);
 
 // ── Referral ──────────────────────────────────────────────────────────────────
 $router->get('/api/referral/dashboard', [ReferralController::class, 'getDashboard'], $auth);

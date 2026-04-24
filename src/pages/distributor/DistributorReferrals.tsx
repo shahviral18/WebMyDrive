@@ -49,7 +49,7 @@ export default function DistributorReferrals() {
 
     // Build the referral link from the live referral code
     const refCode: string | null = dashData?.referralCode || (dashData?.distributor ? (dashData.distributor as any).referralCode : null);
-    const referralLink = refCode ? `${window.location.origin}/ref/${refCode}` : "";
+    const referralLink = refCode ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/ref/${refCode}` : "";
 
     const filtered = referrals.filter(r =>
         filter === "all" || r.status?.toLowerCase() === filter

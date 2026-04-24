@@ -71,7 +71,7 @@ export default function DistributorDashboard() {
     const availablePayout = Math.max(0, dist.walletBalance - 2000);
     // Use actual referral code from API, not a constructed string
     const refCode: string = data.referralCode || (dist as any).referralCode || `DIST${dist.id}`;
-    const refLink = `${window.location.origin}/ref/${refCode}`;
+    const refLink = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/ref/${refCode}`;
 
     const progressValue = nextTier ? (dist.revenueThisYear / nextTier.threshold) * 100 : 100;
 
