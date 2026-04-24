@@ -172,25 +172,6 @@ export default function AdminLogin() {
             </Button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 pt-4 border-t border-border/50">
-            <p className="text-xs text-muted-foreground text-center mb-3 uppercase tracking-wider font-semibold">Demo Credentials</p>
-            <div className="grid gap-2">
-              <button
-                type="button"
-                onClick={() => { setEmail("admin@webmydrive.com"); setPassword("admin123"); }}
-                className="flex items-center gap-3 w-full px-3 py-2 rounded-lg bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/40 text-left transition-all group"
-              >
-                <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">SA</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">Super Admin</p>
-                  <p className="text-[11px] text-muted-foreground font-mono truncate">admin@webmydrive.com · admin123</p>
-                </div>
-                <span className="ml-auto text-[10px] text-muted-foreground group-hover:text-primary transition-colors shrink-0">Click to fill</span>
-              </button>
-            </div>
-          </div>
-
           <div className="text-center mt-4">
             <a href="/login" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />

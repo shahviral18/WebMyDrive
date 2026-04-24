@@ -30,6 +30,9 @@ interface User {
   referralCode: string | null;
   createdAt: string;
   source?: string;
+  plan?: string;
+  planMismatch?: boolean;
+  distributorId?: number | null;
 }
 
 type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete";
@@ -209,12 +212,9 @@ export default function UsersPage() {
 
 
   useEffect(() => {
-    api.get("/admin/users?limit=200")
-      .then(data => {
-        console.log("Fetched users:", data.users);
-        setUsers(data.users || []);
-      })
-      .catch(console.error)
+    api.get("/admin/users?limit=500&skip=0")
+      .then(data => setUsers(data.users || []))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -345,7 +345,7 @@ export default function UsersPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-2">
-                {["Account", "Source", "Wallet", "Referral Code", "Joined", "Actions"].map(h => (
+                {["Account", "Plan", "Source", "Wallet", "Referral Code", "Joined", "Actions"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -368,6 +368,15 @@ export default function UsersPage() {
                           <p className="text-sm font-semibold text-foreground truncate max-w-[160px]">{user.name ?? "—"}</p>
                           <p className="text-xs text-muted-foreground truncate max-w-[160px]">{user.email}</p>
                         </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{user.plan ?? "None"}</span>
+                        {user.planMismatch && (
+                          <span title="Plan mismatch: latest order plan differs from workspace plan" className="flex-shrink-0 w-4 h-4 rounded-full bg-amber-100 border border-amber-400 flex items-center justify-center text-amber-600 text-[9px] font-bold cursor-help">!</span>
+                        )}
                       </div>
                     </td>
 

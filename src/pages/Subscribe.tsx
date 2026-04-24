@@ -60,25 +60,11 @@ export default function SubscribePage() {
   const [discountPercent, setDiscountPercent] = useState(0);
 
   const selectedPlan = useMemo(() => {
-    if (!plans || plans.length === 0) {
-      console.warn("No plans available for matching");
-      return null;
-    }
-
-    // Try to find by ID first (most reliable), then fallback to slug matching
+    if (!plans || plans.length === 0) return null;
     const byId = plans.find(p => String(p.id) === planSlug);
-    if (byId) {
-      console.log("Plan matched by ID:", byId);
-      return byId;
-    }
-
+    if (byId) return byId;
     const bySlug = plans.find(p => planToSlug(p.name) === planSlug);
-    if (bySlug) {
-      console.log("Plan matched by slug:", bySlug);
-      return bySlug;
-    }
-
-    console.warn(`No plan found for planSlug="${planSlug}". Available plans:`, plans.map(p => ({ id: p.id, name: p.name, slug: planToSlug(p.name) })));
+    if (bySlug) return bySlug;
     return null;
   }, [plans, planSlug]);
 
@@ -123,11 +109,9 @@ export default function SubscribePage() {
 
   if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading plans...</div>;
   if (!selectedPlan) {
-    console.error("Subscribe page error: selectedPlan is null. planSlug:", planSlug, "plans:", plans);
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col gap-4">
-      <div>Plan not found</div>
-      <div className="text-sm text-slate-500">planSlug: {planSlug}</div>
-      {plans && <div className="text-xs text-slate-400">Available plans: {plans.map(p => p.id).join(", ")}</div>}
+      <div className="text-lg font-semibold text-slate-700">Plan not found</div>
+      <a href={`${import.meta.env.BASE_URL}`} className="text-sm text-blue-500 hover:underline">Back to home</a>
     </div>;
   }
 
@@ -189,6 +173,7 @@ export default function SubscribePage() {
                         className="h-10 border-slate-200 focus-visible:ring-blue-500 rounded"
                       />
                       <button
+                        type="button"
                         onClick={applyCoupon}
                         className="text-blue-500 hover:text-blue-600 text-sm font-semibold transition-colors"
                       >

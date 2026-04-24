@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Mail, HardDrive, Image, ExternalLink, Lock, Loader2 } from "lucide-react";
+import { CheckCircle2, Mail, HardDrive, Image, ExternalLink, Lock, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
@@ -23,7 +23,7 @@ export default function PaymentSuccess() {
   const wsEmail = params.get("ws")     || stored.wsEmail  || "";
 
   useEffect(() => {
-    if (!ref) { setReady(true); return; }
+    if (!ref) return; // stays as loading=false, will show error below
     sessionStorage.removeItem("wmd_pending_payment");
     let attempts = 0;
     const interval = setInterval(async () => {
@@ -45,6 +45,15 @@ export default function PaymentSuccess() {
     { label: "Google Drive",  href: "https://drive.google.com",   icon: HardDrive, color: "text-blue-500" },
     { label: "Google Photos", href: "https://photos.google.com",  icon: Image,     color: "text-green-500" },
   ];
+
+  if (!ref) return (
+    <div className={cn("min-h-screen bg-[#f8fbff] flex flex-col items-center justify-center gap-4 px-4", isDark && "bg-slate-950")}>
+      <AlertCircle className="w-12 h-12 text-amber-500" />
+      <p className="text-slate-700 font-semibold text-lg">Payment reference not found</p>
+      <p className="text-slate-500 text-sm text-center max-w-sm">If you completed a payment, please check your email for confirmation. Contact support if you need help.</p>
+      <a href={`${import.meta.env.BASE_URL}`} className="mt-2 px-5 py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">Back to Home</a>
+    </div>
+  );
 
   if (!ready) return (
     <div className={cn("min-h-screen bg-[#f8fbff] flex flex-col items-center justify-center gap-4", isDark && "bg-slate-950")}>
@@ -124,7 +133,7 @@ export default function PaymentSuccess() {
 
         {/* CTA */}
         <Button
-          onClick={() => window.location.href = "/demo1/user/dashboard"}
+          onClick={() => window.location.href = `${import.meta.env.BASE_URL}user/dashboard`}
           className="w-full h-12 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl shadow-md shadow-blue-500/10"
         >
           Go to Dashboard

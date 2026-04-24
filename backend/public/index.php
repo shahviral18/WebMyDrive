@@ -149,6 +149,8 @@ $router->get('/api/admin/distributors/:id/promo-codes', [AdminController::class,
 $router->post('/api/admin/distributors/:id/promo-code', [AdminController::class, 'assignDistributorPromoCode'], $adminOnly);
 $router->delete('/api/admin/distributors/:id/promo-code/:dpcId', [AdminController::class, 'revokeDistributorPromoCode'], $adminOnly);
 $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
+$router->post('/api/admin/users/:id/assign-distributor', [AdminController::class, 'assignUserToDistributor'], $adminOnly);
+$router->post('/api/admin/users/:id/promote-distributor', [AdminController::class, 'promoteUserToDistributor'], $adminOnly);
 
 // ── Super-admin only ──────────────────────────────────────────────────────────
 $superAdminOnly = [

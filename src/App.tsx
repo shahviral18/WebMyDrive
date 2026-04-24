@@ -22,6 +22,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import Resell from "./pages/Resell";
 import DistributorApplications from "./pages/admin/DistributorApplications";
 import ChangePlan from "./pages/admin/ChangePlan";
+import AssignDistributor from "./pages/admin/AssignDistributor";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
 import UserFiles from "./pages/user/UserFiles";
@@ -41,6 +42,8 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import ReferralRedirect from "./pages/ref/ReferralRedirect";
 import AccountActivate from "./pages/AccountActivate";
+import NotFound from "./pages/NotFound";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
 const queryClient = new QueryClient({
@@ -63,6 +66,7 @@ function ComingSoon({ label }: { label: string }) {
 }
 
 const App = () => (
+  <ErrorBoundary>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -188,6 +192,7 @@ const App = () => (
                   <Route path="distributors" element={<Distributors />} />
                   <Route path="distributor-applications" element={<DistributorApplications />} />
                   <Route path="change-plan" element={<ChangePlan />} />
+                  <Route path="assign-distributor" element={<AssignDistributor />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="alerts" element={<Alerts />} />
                   <Route path="settings" element={<Settings />} />
@@ -199,7 +204,7 @@ const App = () => (
                 </Route>
 
                 {/* Global catch-all */}
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </UserProvider>
           </ThemeProvider>
@@ -207,6 +212,7 @@ const App = () => (
       </GoogleOAuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

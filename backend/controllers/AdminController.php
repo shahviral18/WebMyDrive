@@ -111,7 +111,8 @@ class AdminController
 
     public function getUsers(Request $req): void
     {
-        $limit = min(200, max(1, (int) ($req->query['limit'] ?? 20)));
+        $limit  = min(500, max(1, (int) ($req->query['limit'] ?? 100)));
+        $skip   = max(0, (int) ($req->query['skip'] ?? 0));
         $search = (string) ($req->query['search'] ?? '');
 
         $userWhere = 'u.role != \'SUPERADMIN\'';
@@ -122,16 +123,22 @@ class AdminController
             $params[':s'] = "%$search%";
         }
 
+        // Get total count for pagination
+        $totalUsers = (int) Database::scalar(
+            "SELECT COUNT(*) FROM `User` u WHERE $userWhere",
+            $params
+        );
+
         $users = Database::query(
             "SELECT u.*, w.status AS wsStatus, w.planId AS wsPlanId, p.name AS planName,
-                    (SELECT COUNT(*) FROM \"ReferralLog\" rl WHERE rl.refereeId = u.id LIMIT 1) AS wasReferred
-             FROM \"User\" u
-             LEFT JOIN \"Workspace\" w ON w.id = (SELECT id FROM \"Workspace\" WHERE userId = u.id ORDER BY createdAt DESC LIMIT 1)
-             LEFT JOIN \"Plan\" p ON p.id = w.planId
+                    (SELECT COUNT(*) FROM `ReferralLog` rl WHERE rl.refereeId = u.id LIMIT 1) AS wasReferred
+             FROM `User` u
+             LEFT JOIN `Workspace` w ON w.id = (SELECT id FROM `Workspace` WHERE userId = u.id ORDER BY createdAt DESC LIMIT 1)
+             LEFT JOIN `Plan` p ON p.id = w.planId
              WHERE $userWhere
              ORDER BY u.createdAt DESC
-             LIMIT :lim",
-            array_merge($params, [':lim' => $limit])
+             LIMIT :lim OFFSET :skip",
+            array_merge($params, [':lim' => $limit, ':skip' => $skip])
         );
 
         $distParams = [];
@@ -142,52 +149,61 @@ class AdminController
         }
 
         $distributors = Database::query(
-            "SELECT * FROM \"Distributor\" WHERE $distWhere ORDER BY createdAt DESC LIMIT :lim",
-            array_merge($distParams, [':lim' => $limit])
+            "SELECT * FROM `Distributor` WHERE $distWhere ORDER BY createdAt DESC LIMIT 500",
+            $distParams
         );
 
         $combined = [];
         foreach ($users as $u) {
+            // Plan mismatch: wsPlanId in Workspace vs latest Order planId
+            $latestOrder = Database::queryOne(
+                'SELECT planId FROM `Order` WHERE userId = :uid AND status = \'PAID\' ORDER BY createdAt DESC LIMIT 1',
+                [':uid' => $u['id']]
+            );
+            $planMismatch = $latestOrder && $latestOrder['planId'] && (int)$latestOrder['planId'] !== (int)($u['wsPlanId'] ?? 0);
+
             $combined[] = [
-                'id' => (int) $u['id'],
-                'name' => $u['name'],
-                'email' => $u['email'],
-                'role' => $u['role'],
-                'walletBalance' => (float) $u['walletBalance'],
+                'id'           => (int) $u['id'],
+                'name'         => $u['name'],
+                'email'        => $u['email'],
+                'role'         => $u['role'],
+                'walletBalance'=> (float) $u['walletBalance'],
                 'referralCode' => $u['referralCode'],
-                'plan' => $u['planName'] ?? 'None',
-                'status' => $u['wsStatus'] ?? 'NO_WORKSPACE',
-                'createdAt' => $u['createdAt'],
-                'distributorId' => $u['distributorId'],
-                'source' => $u['distributorId'] ? 'Distributor'
+                'plan'         => $u['planName'] ?? 'None',
+                'wsPlanId'     => (int) ($u['wsPlanId'] ?? 0),
+                'orderPlanId'  => $latestOrder ? (int)$latestOrder['planId'] : null,
+                'planMismatch' => $planMismatch,
+                'status'       => $u['wsStatus'] ?? 'NO_WORKSPACE',
+                'createdAt'    => $u['createdAt'],
+                'distributorId'=> $u['distributorId'] ?? null,
+                'source'       => ($u['distributorId'] ?? null) ? 'Distributor'
                     : ($u['wasReferred'] ? 'User Referral' : 'Direct'),
             ];
         }
         foreach ($distributors as $d) {
             $combined[] = [
-                'id' => (int) $d['id'] + 1000000,
-                'name' => $d['name'],
-                'email' => $d['email'],
-                'role' => 'DISTRIBUTOR',
-                'walletBalance' => (float) $d['walletBalance'],
+                'id'           => (int) $d['id'] + 1000000,
+                'name'         => $d['name'],
+                'email'        => $d['email'],
+                'role'         => 'DISTRIBUTOR',
+                'walletBalance'=> (float) $d['walletBalance'],
                 'referralCode' => $d['referralCode'],
-                'plan' => $d['tier'],
-                'status' => $d['status'],
-                'createdAt' => $d['createdAt'],
-                'distributorId' => (int) $d['id'],
-                'source' => 'Distributor',
+                'plan'         => $d['tier'],
+                'planMismatch' => false,
+                'status'       => $d['status'],
+                'createdAt'    => $d['createdAt'],
+                'distributorId'=> (int) $d['id'],
+                'source'       => 'Distributor',
             ];
         }
 
-        // Sort by createdAt desc
         usort($combined, fn($a, $b) => strtotime($b['createdAt']) <=> strtotime($a['createdAt']));
-        $sliced = array_slice($combined, 0, $limit);
 
         Response::json([
-            'users' => $sliced,
-            'total' => count($sliced),
-            'page' => 1,
-            'totalPages' => 1,
+            'users'      => $combined,
+            'total'      => $totalUsers + count($distributors),
+            'page'       => (int) floor($skip / $limit) + 1,
+            'totalPages' => (int) ceil(($totalUsers) / $limit),
         ]);
     }
 
@@ -299,11 +315,19 @@ class AdminController
         if ($user['role'] === 'SUPERADMIN')
             Response::error('Cannot delete a SUPERADMIN account', 403);
 
-        Database::execute('DELETE FROM "DistributorSale" WHERE purchasingUserId = :id', [':id' => $id]);
-        Database::execute('DELETE FROM "Workspace" WHERE userId = :id', [':id' => $id]);
-        Database::execute('DELETE FROM "ReferralLog" WHERE referrerId = :id OR refereeId = :id', [':id' => $id]);
-        Database::execute('DELETE FROM "Order" WHERE userId = :id', [':id' => $id]);
-        Database::execute('DELETE FROM "User" WHERE id = :id', [':id' => $id]);
+        Database::beginTransaction();
+        try {
+            Database::execute('DELETE FROM `DistributorSale` WHERE purchasingUserId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `Workspace` WHERE userId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `ReferralLog` WHERE referrerId = :id OR refereeId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `Order` WHERE userId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `User` WHERE id = :id', [':id' => $id]);
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollback();
+            Logger::error('[Admin] deleteUser failed: ' . $e->getMessage());
+            Response::error('Failed to delete user', 500);
+        }
 
         AuditService::log('[Admin] DELETE_USER', $req->user['userId'] ?? null, $req->ip, [
             'deletedUserId' => $id,
@@ -1252,5 +1276,108 @@ class AdminController
             $bodySupport,
             "From: noreply@webmydrive.com\r\nContent-Type: text/plain; charset=UTF-8"
         );
+    }
+
+    // ── Assign user to distributor ─────────────────────────────────────────────
+
+    public function assignUserToDistributor(Request $req): void
+    {
+        $userId = (int) ($req->params['id'] ?? 0);
+        $distributorId = $req->body['distributorId'] ?? null;
+
+        $user = Database::queryOne('SELECT id, email FROM "User" WHERE id = :id', [':id' => $userId]);
+        if (!$user)
+            Response::error('User not found', 404);
+
+        if ($distributorId === null || $distributorId === '') {
+            // Remove distributor assignment
+            Database::execute(
+                'UPDATE "User" SET distributorId = NULL, updatedAt = :now WHERE id = :id',
+                [':now' => date('Y-m-d H:i:s'), ':id' => $userId]
+            );
+            AuditService::log('admin', 'UNASSIGN_DISTRIBUTOR', "Removed distributor from user #{$userId} ({$user['email']})");
+            Response::json(['success' => true, 'message' => 'Distributor assignment removed.']);
+        }
+
+        $distributorId = (int) $distributorId;
+        $dist = Database::queryOne('SELECT id, name FROM "Distributor" WHERE id = :id', [':id' => $distributorId]);
+        if (!$dist)
+            Response::error('Distributor not found', 404);
+
+        Database::execute(
+            'UPDATE "User" SET distributorId = :did, updatedAt = :now WHERE id = :id',
+            [':did' => $distributorId, ':now' => date('Y-m-d H:i:s'), ':id' => $userId]
+        );
+
+        AuditService::log('admin', 'ASSIGN_DISTRIBUTOR', "Assigned user #{$userId} ({$user['email']}) to distributor #{$distributorId} ({$dist['name']})");
+        Response::json(['success' => true, 'message' => "User assigned to distributor {$dist['name']}."]);
+    }
+
+    // ── Promote user to distributor ────────────────────────────────────────────
+
+    public function promoteUserToDistributor(Request $req): void
+    {
+        $userId = (int) ($req->params['id'] ?? 0);
+        $commissionPct = (float) ($req->body['commissionPct'] ?? 10);
+        $tier = (string) ($req->body['tier'] ?? 'Starter');
+
+        $user = Database::queryOne(
+            'SELECT id, name, email FROM "User" WHERE id = :id',
+            [':id' => $userId]
+        );
+        if (!$user)
+            Response::error('User not found', 404);
+
+        $existing = Database::queryOne(
+            'SELECT id FROM "Distributor" WHERE email = :e',
+            [':e' => $user['email']]
+        );
+        if ($existing)
+            Response::error('A distributor account already exists for this email.', 409);
+
+        $nameParts = explode(' ', trim($user['name'] ?? $user['email']));
+        $baseCode = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $nameParts[0] ?: $user['email']), 0, 6));
+        $baseCode = str_pad($baseCode, 4, 'X');
+        $referralCode = $baseCode . '001';
+
+        for ($attempt = 1; $attempt <= 10; $attempt++) {
+            $conflict = Database::queryOne(
+                'SELECT id FROM "Distributor" WHERE referralCode = :code',
+                [':code' => $referralCode]
+            );
+            if (!$conflict)
+                break;
+            $referralCode = $baseCode . strtoupper(substr(bin2hex(random_bytes(2)), 0, 3));
+            if ($attempt === 10)
+                throw new RuntimeException('Could not generate unique referral code.');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $plainPassword = 'Dist@' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        $passwordHash = password_hash($plainPassword, PASSWORD_BCRYPT);
+
+        $distId = Database::insert(
+            'INSERT INTO "Distributor" (name, email, passwordHash, tier, status, commissionPct, walletBalance, revenueThisYear, referralCode, createdAt, updatedAt)
+             VALUES (:name, :email, :hash, :tier, \'ACTIVE\', :pct, 0, 0, :code, :now, :now)',
+            [
+                ':name' => $user['name'] ?? $user['email'],
+                ':email' => $user['email'],
+                ':hash' => $passwordHash,
+                ':tier' => $tier,
+                ':pct' => $commissionPct,
+                ':code' => $referralCode,
+                ':now' => $now,
+            ]
+        );
+
+        AuditService::log('admin', 'PROMOTE_TO_DISTRIBUTOR', "Promoted user #{$userId} ({$user['email']}) to distributor #{$distId}");
+
+        $dist = Database::queryOne('SELECT * FROM "Distributor" WHERE id = :id', [':id' => $distId]);
+        Response::json([
+            'success' => true,
+            'distributor' => $dist,
+            'plainPassword' => $plainPassword,
+            'message' => 'Distributor account created. Share the password — it will not be shown again.',
+        ]);
     }
 }

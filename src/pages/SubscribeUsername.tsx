@@ -63,7 +63,7 @@ export default function SubscribeUsernamePage() {
     if (pending) {
       try {
         const { ref, email, firstName, wsEmail } = JSON.parse(pending);
-        window.location.href = `/demo1/payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(firstName)}&ws=${encodeURIComponent(wsEmail)}`;
+        window.location.href = `${import.meta.env.BASE_URL}payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(firstName)}&ws=${encodeURIComponent(wsEmail)}`;
       } catch {
         sessionStorage.removeItem("wmd_pending_payment");
       }
@@ -162,7 +162,7 @@ export default function SubscribeUsernamePage() {
 
           const wsEmail = availability.status === "available" ? availability.email : "";
           const ref = sessionData.referenceNumber;
-          const successUrl = `/demo1/payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(state?.email || "")}&name=${encodeURIComponent(state?.firstName || "")}&ws=${encodeURIComponent(wsEmail)}`;
+          const successUrl = `${import.meta.env.BASE_URL}payment/success?ref=${encodeURIComponent(ref)}&email=${encodeURIComponent(state?.email || "")}&name=${encodeURIComponent(state?.firstName || "")}&ws=${encodeURIComponent(wsEmail)}`;
 
           // Poll backend every 2s while widget is open — redirect as soon as COMPLETED
           let pollStopped = false;
@@ -324,6 +324,7 @@ export default function SubscribeUsernamePage() {
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
+                aria-label={showPw ? "Hide password" : "Show password"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

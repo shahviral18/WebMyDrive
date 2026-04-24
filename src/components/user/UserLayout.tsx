@@ -46,7 +46,6 @@ export default function UserLayout({ children }: UserLayoutProps) {
 
     // Declarative auth guard
     const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-    console.log("Auth Check Token:", token);
 
     if (!token || token === "undefined" || token === "null") {
         return <Navigate to="/login" replace />;

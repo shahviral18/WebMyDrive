@@ -370,7 +370,8 @@ class PaymentController
 
                 // Set recovery email and phone on Google account
                 $recoveryEmail = $meta['recoveryEmail'] ?? '';
-                $recoveryPhone = !empty($checkout['customerPhone']) ? '+91' . preg_replace('/\D/', '', $checkout['customerPhone']) : null;
+                $rawPhone = preg_replace('/\D/', '', $checkout['customerPhone'] ?? '');
+                $recoveryPhone = $rawPhone ? (str_starts_with($rawPhone, '91') && strlen($rawPhone) > 10 ? '+' . $rawPhone : '+91' . $rawPhone) : null;
                 if ($recoveryEmail || $recoveryPhone) {
                     GoogleWorkspaceService::updateRecovery($username, $recoveryEmail ?: null, $recoveryPhone);
                 }

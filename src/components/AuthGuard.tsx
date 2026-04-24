@@ -32,7 +32,6 @@ export function AuthGuard({ children, requiredRole, redirectTo = "/login" }: Aut
         }
         const token = sessionStorage.getItem("token") || localStorage.getItem("token");
         const adminAuth = sessionStorage.getItem("wmd_admin_auth") === "true";
-        console.log("[AuthGuard] admin check — token:", !!token, "adminAuth:", adminAuth);
         if (!token || !adminAuth) return <Navigate to={redirectTo} replace />;
         return <>{children}</>;
     }
@@ -43,8 +42,6 @@ export function AuthGuard({ children, requiredRole, redirectTo = "/login" }: Aut
     const userAuth = sessionStorage.getItem("wmd_user_auth") === "true";
     const storedRole = (sessionStorage.getItem("wmd_user_role") || "").toLowerCase();
     const token = sessionStorage.getItem("token") || localStorage.getItem("token");
-
-    console.log("Auth Check Token:", token);
 
     if (!token || token === "undefined" || token === "null") {
         return <Navigate to={redirectTo} replace />;
