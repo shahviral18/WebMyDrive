@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { usePlans } from "@/hooks/use-plans";
+import { usePlans, Plan } from "@/hooks/use-plans";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CheckoutSheet } from "./CheckoutSheet";
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -24,7 +24,6 @@ const sharedFeatures = [
   "Google Photos",
   "Google Mails Login",
   "Self Help Portal Access",
-  "Remote Support",
 ];
 
 function parseAmount(price: string): number {
@@ -52,8 +51,8 @@ function getStorageValue(storage: string): string {
 
 export function Pricing() {
   const { data: plans, isLoading, error } = usePlans();
-  const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = React.useState<'monthly' | 'yearly'>('yearly');
+  const [checkoutPlan, setCheckoutPlan] = React.useState<Plan | null>(null);
   const isDesktop = useIsDesktop();
 
   const themeColors = [
@@ -192,7 +191,9 @@ export function Pricing() {
                         {getPlanTitle(plan.name)}
                       </h4>
 
-                      <p className="text-center text-slate-600 mb-10">{plan.storage}</p>
+                      <p className="text-center text-slate-600 mb-10">
+                        {getStorageValue(plan.storage)}<br />Combined Storage
+                      </p>
 
                       <div className="text-center mb-7 relative">
                         {plan.discount && (
@@ -229,7 +230,7 @@ export function Pricing() {
 
                       <Button
                         className={`w-full h-11 rounded-md text-sm font-semibold tracking-wide uppercase text-slate-950 bg-gradient-to-r ${theme.button} shadow-lg shadow-black/25 mt-2`}
-                        onClick={() => navigate(`/subscribe/${plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`)}
+                        onClick={() => setCheckoutPlan(plan)}
                       >
                         Subscribe
                       </Button>
@@ -240,6 +241,14 @@ export function Pricing() {
           </div>
         )}
       </div>
+
+      <CheckoutSheet
+        open={!!checkoutPlan}
+        onClose={() => setCheckoutPlan(null)}
+        plan={checkoutPlan}
+        billingPeriod={billingPeriod}
+        onBillingPeriodChange={setBillingPeriod}
+      />
     </section>
   );
 }

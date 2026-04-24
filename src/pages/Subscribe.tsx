@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 function parseAmount(price: string): number {
   const value = Number(price.replace(/[^\d.]/g, ""));
@@ -81,15 +82,29 @@ export default function SubscribePage() {
     return null;
   }, [plans, planSlug]);
 
-  const applyCoupon = (e: React.MouseEvent) => {
+  const applyCoupon = async (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!couponInput || !selectedPlan) return;
-    if (selectedPlan.coupon && couponInput.trim().toLowerCase() === selectedPlan.coupon.toLowerCase()) {
-      setDiscountPercent(parseInt(selectedPlan.discount || "5"));
-      toast.success("Coupon applied successfully!");
-    } else {
+    if (!couponInput.trim() || !selectedPlan) return;
+    try {
+      const data = await api.post("/referral/validate-code", {
+        promoCode: couponInput.trim(),
+        planName: selectedPlan.name,
+      });
+      if (data.success) {
+        const pct = data.discountPct ?? 0;
+        setDiscountPercent(pct);
+        if (pct > 0) {
+          toast.success(`Code applied — ${pct}% off!`);
+        } else {
+          toast.success("Referral code applied! Your referrer will earn commission.");
+        }
+      } else {
+        setDiscountPercent(0);
+        toast.error(data.error || "Invalid code");
+      }
+    } catch (err: any) {
       setDiscountPercent(0);
-      toast.error("Invalid coupon code");
+      toast.error(err.message || "Invalid code");
     }
   };
 

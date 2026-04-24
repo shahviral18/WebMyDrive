@@ -21,19 +21,30 @@ export default function DistributorCustomers() {
 
     useEffect(() => {
         api.get('/distributor/customers')
-            .then(data => setCustomers(data))
+            .then(data => {
+                const rows = (data?.customers ?? []).map((c: any) => ({
+                    ...c,
+                    plan: c.planName ?? "—",
+                    joined: c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-IN") : "—",
+                    status: (c.wsStatus ?? "active").toLowerCase(),
+                    level: "Direct",
+                    commission: "—",
+                    phone: "—",
+                }));
+                setCustomers(rows);
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
 
     const filtered = customers.filter(c =>
-        (filter === "all" || c.status === filter || c.level.toLowerCase() === filter) &&
-        (c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()))
+        (filter === "all" || c.status === filter || (c.level ?? "").toLowerCase() === filter) &&
+        ((c.name ?? "").toLowerCase().includes(search.toLowerCase()) || (c.email ?? "").toLowerCase().includes(search.toLowerCase()))
     );
 
     const active = customers.filter(c => c.status === "active").length;
-    const direct = customers.filter(c => c.level === "Direct").length;
-    const l2 = customers.filter(c => c.level === "L2 Chain").length;
+    const direct = customers.length;
+    const l2 = 0;
 
     return (
         <DistributorLayout>

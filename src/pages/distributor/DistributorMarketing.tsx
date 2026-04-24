@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Megaphone, Copy, QrCode, Link, FileText, Share2, CheckCheck, Palette, Loader2 } from "lucide-react";
+import { Megaphone, Copy, QrCode, Link, FileText, Share2, CheckCheck, Palette, Loader2, Tag } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ function QRPlaceholder({ code }: { code: string }) {
 export default function DistributorMarketing() {
     const [copied, setCopied] = useState<string | null>(null);
     const [refCode, setRefCode] = useState<string | null>(null);
+    const [promoCode, setPromoCode] = useState<string | null>(null);
+    const [promoDiscounts, setPromoDiscounts] = useState<Record<string, number>>({});
     const [distName, setDistName] = useState("Distributor");
     const [loading, setLoading] = useState(true);
 
@@ -53,9 +55,11 @@ export default function DistributorMarketing() {
                     (data?.distributor as any)?.referralCode ||
                     null;
                 setRefCode(code);
+                setPromoCode(data?.promoCode ?? null);
+                setPromoDiscounts(data?.promoDiscounts ?? {});
                 setDistName(data?.distributor?.name || "Distributor");
             })
-            .catch(() => toast.error("Failed to load referral code"))
+            .catch(() => toast.error("Failed to load marketing data"))
             .finally(() => setLoading(false));
     }, []);
 
@@ -92,15 +96,70 @@ export default function DistributorMarketing() {
                     </p>
                 </div>
 
+                {/* Promo Code Card */}
+                <Card className="border-border shadow-sm">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                            <Tag className="w-5 h-5 text-primary" />
+                            <CardTitle className="text-base">Promo Code</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Customers enter this code at checkout to get a plan discount.
+                            Different from your referral link — this is a typed code, not a URL.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {loading ? (
+                            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                        ) : promoCode ? (
+                            <>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 bg-muted rounded-lg px-5 py-3 font-mono text-2xl font-bold tracking-widest text-foreground border border-border select-all">
+                                        {promoCode}
+                                    </div>
+                                    <Button variant="outline" size="icon" className="h-12 w-12 shrink-0"
+                                        onClick={() => copyLink(promoCode, "Promo code")}
+                                        title="Copy promo code">
+                                        {copied === "Promo code" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                    </Button>
+                                </div>
+                                {Object.keys(promoDiscounts).length > 0 && (
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                                            Customer discounts by plan:
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {Object.entries(promoDiscounts).map(([plan, pct]) => (
+                                                <span key={plan}
+                                                    className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs font-medium bg-muted">
+                                                    <span className="text-foreground">{plan}</span>
+                                                    <span className="text-primary font-bold">{pct}% off</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                                <Tag className="w-5 h-5 text-amber-600 shrink-0" />
+                                <p className="text-sm text-amber-700 dark:text-amber-400">
+                                    No promo code assigned yet. Contact your account manager to get one set up.
+                                </p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
                 {/* My Referral Hub Card */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* QR + Code */}
                     <Card className="border-border bg-gradient-to-br from-primary/5 to-indigo-500/5">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <QrCode className="w-5 h-5 text-primary" /> My Referral Code
+                                <QrCode className="w-5 h-5 text-primary" /> Referral Link
                             </CardTitle>
-                            <CardDescription>Share your unique code to earn commissions on every sale.</CardDescription>
+                            <CardDescription>Share this URL — customers who click it are tracked as your referrals and you earn commission.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-5">
                             {loading ? (

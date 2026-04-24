@@ -77,6 +77,48 @@ class GoogleWorkspaceService
             && str_ends_with($email, '@webmydrive.com');
     }
 
+    // ── Temp password generator ───────────────────────────────────────────────
+
+    public static function generateTempPassword(): string
+    {
+        return 'Welcome@' . rand(1000, 9999);
+    }
+
+    // ── Create new Workspace user ─────────────────────────────────────────────
+
+    /**
+     * Creates a new Google Workspace user with a temporary password.
+     * Places them in the OU corresponding to their plan (googleOrgUnit).
+     * Returns the temp password so it can be emailed to the customer.
+     */
+    public static function createUser(
+        string $email,
+        string $firstName,
+        string $lastName,
+        string $orgUnitPath = '/'
+    ): string {
+        self::boot();
+        $service = self::getService();
+
+        $tempPassword = self::generateTempPassword();
+
+        $user = new Google_Service_Directory_User();
+        $user->setPrimaryEmail($email);
+        $user->setPassword($tempPassword);
+        $user->setChangePasswordAtNextLogin(false);
+        $user->setOrgUnitPath($orgUnitPath ?: '/');
+
+        $name = new Google_Service_Directory_UserName();
+        $name->setGivenName($firstName ?: explode('@', $email)[0]);
+        $name->setFamilyName($lastName ?: '.');
+        $user->setName($name);
+
+        $service->users->insert($user);
+        Logger::info("[GWS] createUser OK → $email (OU: $orgUnitPath)");
+
+        return $tempPassword;
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**

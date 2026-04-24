@@ -38,7 +38,11 @@ export default function DistributorEarnings() {
         );
     }
 
-    const { totalLifetime = 0, thisMonth = 0, pendingPayout = 0, tier = "Standard", transactions = [] } = stats || {};
+    const totalLifetime: number = stats?.totalCommission ?? 0;
+    const pendingPayout: number = stats?.pendingPayout ?? 0;
+    const tier: string = stats?.tier ?? "Standard";
+    const transactions: any[] = stats?.salesByYear ?? [];
+    const thisMonth = 0;
 
     const breakdown = [
         { type: "Total Lifetime Commission", amount: `₹${totalLifetime.toLocaleString()}`, count: transactions.length, share: "100%" },

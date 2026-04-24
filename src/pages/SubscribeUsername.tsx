@@ -15,6 +15,7 @@ const DOMAIN = "@webmydrive.com";
 type CheckoutState = {
   planId: number | string;
   planName: string;
+  billingPeriod?: "monthly" | "yearly";
   amount: number;
   couponInput?: string;
   firstName: string;
@@ -107,19 +108,21 @@ export default function SubscribeUsernamePage() {
     if (!canProceed || !state || availability.status !== "available") return;
     setIsProcessing(true);
     try {
-      const sessionData = await api.post("/referral/create-checkout", {
+      const sessionData = await api.post("/payment/create-session", {
         planId: state.planId,
-        promoCode: state.couponInput || undefined,
-        billingPeriod: "monthly",
+        planName: state.planName,
+        amount: state.amount,
+        billingPeriod: state.billingPeriod ?? "yearly",
+        username: availability.email,
+        password,
+        firstName: state.firstName,
+        lastName: state.lastName,
         customerEmail: state.email,
-        customerName: `${state.firstName} ${state.lastName}`,
         customerPhone: state.mobile,
         recoveryEmail: state.recoveryEmail || undefined,
         whatsapp: state.whatsapp || undefined,
         companyName: state.companyName || undefined,
         gstNumber: state.gstNumber || undefined,
-        username: availability.email,
-        password,
         billingAddress: {
           country: state.billing.country,
           state: state.billing.state,
@@ -135,43 +138,48 @@ export default function SubscribeUsernamePage() {
         return;
       }
 
+      // Load Zoho Payments widget SDK
       const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.src = "https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js";
       script.async = true;
-      script.onload = () => {
-        const rzp = new (window as any).Razorpay({
-          key: sessionData.razorpayKeyId,
-          amount: sessionData.amount * 100,
-          currency: "INR",
-          name: "WebMyDrive",
-          description: state.planName,
-          order_id: sessionData.rzpOrderId,
-          theme: { color: "#1fb6ff" },
-          handler: async (response: any) => {
-            try {
-              toast.loading("Verifying payment…", { id: "pay-verify" });
-              const verifyData = await api.post("/referral/verify-payment", {
-                orderId: sessionData.orderId,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-              });
-              toast.dismiss("pay-verify");
-              if (verifyData.success) {
-                toast.success("🎉 Payment successful!");
-                setShowSuccess(true);
-              } else {
-                toast.error(verifyData.error || "Payment verification failed");
-              }
-            } catch (err: any) {
-              toast.error(err.message || "Payment verification failed");
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-          modal: { ondismiss: () => setIsProcessing(false) },
-        });
-        rzp.open();
+      script.onload = async () => {
+        try {
+          const zpay = new (window as any).ZPayments({
+            account_id: sessionData.account_id,
+            domain: "IN",
+            otherOptions: { api_key: sessionData.api_key },
+          });
+
+          const result = await zpay.requestPaymentMethod({
+            payments_session_id: sessionData.payments_session_id,
+            amount: sessionData.amount,
+            currency_code: "INR",
+            business: "WebMyDrive",
+            description: state.planName,
+            address: {
+              name: `${state.firstName} ${state.lastName}`.trim() || state.email,
+              email: state.email,
+              phone: state.mobile,
+            },
+          });
+
+          if (result?.status === "success") {
+            setShowSuccess(true);
+          } else if (result?.status === "widget_closed") {
+            // user closed without paying
+            setIsProcessing(false);
+          } else {
+            toast.error(result?.message || "Payment was not completed");
+            setIsProcessing(false);
+          }
+        } catch (err: any) {
+          toast.error(err.message || "Payment failed");
+          setIsProcessing(false);
+        }
+      };
+      script.onerror = () => {
+        toast.error("Failed to load payment widget. Please try again.");
+        setIsProcessing(false);
       };
       document.body.appendChild(script);
     } catch (err: any) {
@@ -372,9 +380,9 @@ export default function SubscribeUsernamePage() {
               <div className="w-16 h-16 bg-blue-500/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Check className="w-10 h-10" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Almost there!</h3>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h3>
               <p className="text-slate-600 mb-8">
-                We are redirecting you to our secure payment gateway to complete the transaction.
+                Your account is being set up. You will receive an email at {state?.email} once it's ready — this usually takes less than a minute.
               </p>
               <Button
                 onClick={() => (window.location.href = "/user/dashboard")}

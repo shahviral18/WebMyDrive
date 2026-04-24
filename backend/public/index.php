@@ -52,6 +52,8 @@ require BASE_PATH . '/services/ReferralLinkService.php';
 require BASE_PATH . '/services/ReferralService.php';
 require BASE_PATH . '/services/DistributorService.php';
 require BASE_PATH . '/services/RazorpayService.php';
+require BASE_PATH . '/services/ZohoPaymentService.php';
+require BASE_PATH . '/services/ZohoBooksService.php';
 require BASE_PATH . '/services/SubscriptionService.php';
 require BASE_PATH . '/services/PaymentHandler.php';
 require BASE_PATH . '/services/GoogleWorkspaceService.php';
@@ -70,6 +72,7 @@ require BASE_PATH . '/controllers/DistributorController.php';
 require BASE_PATH . '/controllers/SubscriptionController.php';
 require BASE_PATH . '/controllers/CheckoutController.php';
 require BASE_PATH . '/controllers/DistributorApplicationController.php';
+require BASE_PATH . '/controllers/PaymentController.php';
 
 // ── Global error handler ──────────────────────────────────────────────────────
 set_exception_handler(function (Throwable $e) {
@@ -142,6 +145,9 @@ $router->patch('/api/admin/plans/:id/toggle', [AdminController::class, 'togglePl
 $router->get('/api/admin/promo-codes', [AdminController::class, 'getPromoCodes'], $adminOnly);
 $router->post('/api/admin/promo-codes', [AdminController::class, 'upsertPromoCode'], $adminOnly);
 $router->delete('/api/admin/promo-codes/:id', [AdminController::class, 'deletePromoCode'], $adminOnly);
+$router->get('/api/admin/distributors/:id/promo-codes', [AdminController::class, 'getDistributorPromoCodes'], $adminOnly);
+$router->post('/api/admin/distributors/:id/promo-code', [AdminController::class, 'assignDistributorPromoCode'], $adminOnly);
+$router->delete('/api/admin/distributors/:id/promo-code/:dpcId', [AdminController::class, 'revokeDistributorPromoCode'], $adminOnly);
 $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
 
 // ── Super-admin only ──────────────────────────────────────────────────────────
@@ -215,6 +221,11 @@ $router->get('/api/distributor/payouts', [DistributorController::class, 'getPayo
 $router->get('/api/distributor/wallet', [DistributorController::class, 'getWallet'], $auth);
 $router->get('/api/distributor/customers', [DistributorController::class, 'getCustomers'], $auth);
 $router->get('/api/distributor/earnings', [DistributorController::class, 'getEarningsStats'], $auth);
+$router->get('/api/distributor/promo-codes', [DistributorController::class, 'getPromoCodeHistory'], $auth);
+
+// ── Zoho Payments ─────────────────────────────────────────────────────────────
+$router->post('/api/payment/create-session', [PaymentController::class, 'createSession']);
+$router->post('/api/webhook/zoho-payment',   [PaymentController::class, 'zohoWebhook']);
 
 // ── Payment webhooks ──────────────────────────────────────────────────────────
 // Raw body available via $request->rawBody

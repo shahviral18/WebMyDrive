@@ -81,11 +81,49 @@ class ReferralController
     public function validatePromoCode(Request $req): void
     {
         $promoCode = trim((string) ($req->body['promoCode'] ?? ''));
+        $planName  = trim((string) ($req->body['planName'] ?? ''));
         if (!$promoCode)
             Response::error('Promo code required', 400);
 
         if (strtoupper($promoCode) === 'DEMO123') {
             Response::json(['success' => true, 'discountPct' => 0]);
+        }
+
+        // Check distributor promo code (PromoCode linked via DistributorPromoCode)
+        $promoRow = Database::queryOne(
+            'SELECT pc.*, dpc.distributorId FROM `PromoCode` pc
+             JOIN `DistributorPromoCode` dpc ON dpc.promoCodeId = pc.id
+             WHERE pc.code = :code AND pc.status = \'ACTIVE\' AND dpc.isActive = 1
+               AND (pc.expiresAt IS NULL OR pc.expiresAt > NOW())
+             LIMIT 1',
+            [':code' => strtoupper($promoCode)]
+        );
+        if ($promoRow) {
+            $config = ConfigService::getDistributorConfig();
+            $discountPct = (float)($config['promoDiscounts'][$planName] ?? 0);
+            Response::json([
+                'success' => true,
+                'discountPct' => $discountPct,
+                'type' => 'DISTRIBUTOR_PROMO',
+                'distributorId' => (int)$promoRow['distributorId'],
+            ]);
+        }
+
+        // Check standalone promo code (not linked to a distributor)
+        $standalonePromo = Database::queryOne(
+            'SELECT * FROM `PromoCode`
+             WHERE code = :code AND status = \'ACTIVE\'
+               AND (expiresAt IS NULL OR expiresAt > NOW())
+               AND (usesLimit IS NULL OR usesCount < usesLimit)
+             LIMIT 1',
+            [':code' => strtoupper($promoCode)]
+        );
+        if ($standalonePromo) {
+            Response::json([
+                'success'     => true,
+                'discountPct' => (float) $standalonePromo['discountPercent'],
+                'type'        => 'PROMO_CODE',
+            ]);
         }
 
         $validLink = ReferralLinkService::validateCode($promoCode);
@@ -138,6 +176,7 @@ class ReferralController
         $discountedAmount = $amountINR;
         $discountPct = 0;
         $finalReferralKey = null;
+        $now = date('Y-m-d H:i:s');
 
         // ── 1. Referral context (URL referral — no discount) ──────────────────
         if (!empty($referralContext['id']) && !empty($referralContext['role'])) {
@@ -160,39 +199,64 @@ class ReferralController
                 }
             }
         }
-        // ── 2. Promo code (no buyer discount per design) ─────────────────────
+        // ── 2. Promo code ─────────────────────────────────────────────────────
         elseif ($promoCode) {
-            $cleanCode = trim($promoCode);
+            $cleanCode = strtoupper(trim($promoCode));
 
-            if (strtoupper($cleanCode) !== 'DEMO123') {
-                $validLink = ReferralLinkService::validateCode($cleanCode);
-                if (!$validLink) {
-                    $expired = Database::queryOne(
-                        'SELECT id FROM "ReferralLink" WHERE code = :code AND status IN (\'USED\', \'EXPIRED\')',
-                        [':code' => $cleanCode]
-                    );
-                    if ($expired)
-                        Response::error('This referral link has expired.', 400);
-                    Response::error("Referral code \"$cleanCode\" is not valid.", 400);
-                }
+            if ($cleanCode !== 'DEMO123') {
+                // Check distributor promo code first
+                $distPromoRow = Database::queryOne(
+                    'SELECT pc.*, dpc.distributorId FROM "PromoCode" pc
+                     JOIN "DistributorPromoCode" dpc ON dpc.promoCodeId = pc.id
+                     WHERE pc.code = :code AND pc.status = \'ACTIVE\' AND dpc.isActive = 1
+                       AND (pc.expiresAt IS NULL OR pc.expiresAt > NOW())
+                     LIMIT 1',
+                    [':code' => $cleanCode]
+                );
 
-                if ($validLink['role'] === 'DISTRIBUTOR') {
-                    $finalReferralKey = "DIST_{$validLink['referrerId']}:{$validLink['code']}";
-                } else {
-                    if ((int) $validLink['referrerId'] === $userId) {
-                        Response::error('You cannot use your own referral code.', 400);
+                if ($distPromoRow) {
+                    $distConfig = ConfigService::getDistributorConfig();
+                    $discountPct = (float)($distConfig['promoDiscounts'][$plan['name']] ?? 0);
+                    if ($discountPct > 0) {
+                        $discountedAmount = round($amountINR * (1 - $discountPct / 100), 2);
                     }
-                    $finalReferralKey = $validLink['code'];
+                    $finalReferralKey = "DIST_{$distPromoRow['distributorId']}:{$cleanCode}";
+
+                    if ($distPromoRow['usesLimit'] !== null) {
+                        Database::execute(
+                            'UPDATE "PromoCode" SET usesCount = usesCount + 1, updatedAt = :now WHERE id = :id',
+                            [':now' => $now ?? date('Y-m-d H:i:s'), ':id' => $distPromoRow['id']]
+                        );
+                    }
+                } else {
+                    $validLink = ReferralLinkService::validateCode($cleanCode);
+                    if (!$validLink) {
+                        $expired = Database::queryOne(
+                            'SELECT id FROM "ReferralLink" WHERE code = :code AND status IN (\'USED\', \'EXPIRED\')',
+                            [':code' => $cleanCode]
+                        );
+                        if ($expired)
+                            Response::error('This referral link has expired.', 400);
+                        Response::error("Referral code \"$cleanCode\" is not valid.", 400);
+                    }
+
+                    if ($validLink['role'] === 'DISTRIBUTOR') {
+                        $finalReferralKey = "DIST_{$validLink['referrerId']}:{$validLink['code']}";
+                    } else {
+                        if ((int) $validLink['referrerId'] === $userId) {
+                            Response::error('You cannot use your own referral code.', 400);
+                        }
+                        $finalReferralKey = $validLink['code'];
+                    }
                 }
             }
         }
 
         // ── Create pending order ──────────────────────────────────────────────
-        $now = date('Y-m-d H:i:s');
         $orderId = Database::insert(
             'INSERT INTO "Order" (userId, planId, amount, currency, status, createdAt, updatedAt)
-             VALUES (:uid, :pid, :amt, \'INR\', \'PENDING\', :now, :now)',
-            [':uid' => $userId, ':pid' => (int) $planId, ':amt' => $discountedAmount, ':now' => $now]
+             VALUES (:uid, :pid, :amt, \'INR\', \'PENDING\', :now1, :now2)',
+            [':uid' => $userId, ':pid' => (int) $planId, ':amt' => $discountedAmount, ':now1' => $now, ':now2' => $now]
         );
 
         // Store referral key in audit log (persistent, PHP-process-safe)
@@ -304,8 +368,8 @@ class ReferralController
                 if (!$existingWs) {
                     Database::insert(
                         'INSERT INTO "Workspace" (userId, planId, status, renewalDate, googleCustomerId, metadata, createdAt, updatedAt)
-                         VALUES (:uid, :pid, \'ACTIVE\', :rd, :email, :meta, :now, :now)',
-                        [':uid' => $userId, ':pid' => $order['planId'], ':rd' => $renewalDate, ':email' => $wsEmail, ':meta' => $metaJson, ':now' => $now]
+                         VALUES (:uid, :pid, \'ACTIVE\', :rd, :email, :meta, :now1, :now2)',
+                        [':uid' => $userId, ':pid' => $order['planId'], ':rd' => $renewalDate, ':email' => $wsEmail, ':meta' => $metaJson, ':now1' => $now, ':now2' => $now]
                     );
                 } elseif ($existingWs['status'] !== 'ACTIVE') {
                     Database::execute(

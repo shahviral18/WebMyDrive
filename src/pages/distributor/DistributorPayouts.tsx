@@ -34,7 +34,7 @@ export default function DistributorPayouts() {
                 if (dash?.distributor) {
                     setAvailableBalance(dash.distributor.walletBalance);
                 }
-                setPayouts(payData || []);
+                setPayouts(payData?.payouts ?? []);
             })
             .catch(console.error);
     }, []);

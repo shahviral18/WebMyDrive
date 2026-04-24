@@ -31,7 +31,7 @@ export default function DistributorReferrals() {
         ])
             .then(([dash, hist]) => {
                 setDashData(dash);
-                const sales: any[] = hist || [];
+                const sales: any[] = hist?.history ?? [];
                 setReferrals(sales);
 
                 // Build monthly chart from real sale dates

@@ -60,6 +60,19 @@ define('GOOGLE_CLIENT_ID',   env('GOOGLE_CLIENT_ID', ''));
 define('RAZORPAY_KEY_ID',    env('RAZORPAY_KEY_ID', ''));
 define('RAZORPAY_KEY_SECRET',env('RAZORPAY_KEY_SECRET', ''));
 
+// ── Zoho Payments ─────────────────────────────────────────────────────────────
+define('ZOHO_PAYMENTS_API_KEY',        env('ZOHO_PAYMENTS_API_KEY',        '1003.2d44007cbc28ce3285119f4ac758d854.702587377c1ecdb22019c757d7c668f0'));
+define('ZOHO_PAYMENTS_ACCOUNT_ID',     env('ZOHO_PAYMENTS_ACCOUNT_ID',     '60035396803'));
+define('ZOHO_PAYMENTS_SIGNING_KEY',    env('ZOHO_PAYMENTS_SIGNING_KEY',    'c6661699ecc6d8671b58c6c6ac5ebedf3c76ba3d3b53e050715a85d550a6cda86ac4e27d9527a04796eea9e7c4d7e1ebccb7a972e98ff7c6e421810fe4bb15d960ce747724e979588d9745e20d658331'));
+define('ZOHO_PAYMENTS_WEBHOOK_SECRET', env('ZOHO_PAYMENTS_WEBHOOK_SECRET', ''));  // fill after webhook setup
+
+// ── Zoho Books ────────────────────────────────────────────────────────────────
+define('ZOHO_BOOKS_ORG_ID',        env('ZOHO_BOOKS_ORG_ID',        '60034597554'));
+define('ZOHO_BOOKS_CLIENT_ID',     env('ZOHO_BOOKS_CLIENT_ID',     '1000.0XGGBEHRRV8OEQL6XOCX6GGQZFL1PW'));
+define('ZOHO_BOOKS_CLIENT_SECRET', env('ZOHO_BOOKS_CLIENT_SECRET', '5272e02f141e6f13d180e266ac4081216a47cdacc6'));
+define('ZOHO_BOOKS_REFRESH_TOKEN', env('ZOHO_BOOKS_REFRESH_TOKEN', '1000.961decb2db051bb99b629e3eb57edcca.a5fa83fcbc42129d9769d82a83686b5f'));
+define('ZOHO_BOOKS_INVOICE_PREFIX',env('ZOHO_BOOKS_INVOICE_PREFIX','WMD'));  // configurable prefix
+
 // ── Site URLs ─────────────────────────────────────────────────────────────────
 define('SITE_URL',           env('SITE_URL', 'https://webmydrive.com'));
 
