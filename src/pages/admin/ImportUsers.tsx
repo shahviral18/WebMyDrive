@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Download, CheckCircle2, Loader2, Copy,
-  Users, RefreshCw, ChevronDown, ChevronUp, X,
+  Users, RefreshCw, ChevronDown, ChevronUp, X, CloudDownload,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -286,6 +286,8 @@ export default function ImportUsersPage() {
   const [modalUser, setModalUser] = useState<ExistingUser | null>(null);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ created: number; updated: number; total: number } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -313,6 +315,21 @@ export default function ImportUsersPage() {
     u.username.toLowerCase().includes(search.toLowerCase()) ||
     u.fullName.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await api.post("/admin/existing-users/sync-google", {});
+      setSyncResult({ created: res.created, updated: res.updated, total: res.total });
+      toast.success(res.message);
+      load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleImportDone = (result: ImportResult) => {
     setResults(prev => [result, ...prev]);
@@ -347,11 +364,37 @@ export default function ImportUsersPage() {
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
-          <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSync}
+            disabled={syncing || loading}
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {syncing
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <CloudDownload className="w-4 h-4" />}
+            {syncing ? "Syncing…" : "Sync from Google"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
+            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+          </Button>
+        </div>
       </div>
+
+      {/* Sync result banner */}
+      {syncResult && (
+        <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl px-5 py-3">
+          <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+            <CheckCircle2 className="w-4 h-4" />
+            Sync complete — <strong>{syncResult.total}</strong> accounts fetched from Google.
+            <span className="text-blue-500">{syncResult.created} new</span> ·
+            <span className="text-blue-500">{syncResult.updated} updated</span>
+          </div>
+          <button onClick={() => setSyncResult(null)} className="text-blue-400 hover:text-blue-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Results accordion */}
       {results.length > 0 && (

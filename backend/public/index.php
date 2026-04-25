@@ -151,6 +151,7 @@ $router->delete('/api/admin/distributors/:id/promo-code/:dpcId', [AdminControlle
 $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
 $router->post('/api/admin/users/:id/assign-distributor', [AdminController::class, 'assignUserToDistributor'], $adminOnly);
 $router->post('/api/admin/users/:id/promote-distributor', [AdminController::class, 'promoteUserToDistributor'], $adminOnly);
+$router->post('/api/admin/existing-users/sync-google', [AdminController::class, 'syncFromGoogle'], $adminOnly);
 $router->get('/api/admin/existing-users', [AdminController::class, 'getExistingUsers'], $adminOnly);
 $router->post('/api/admin/existing-users/:id/import', [AdminController::class, 'importExistingUser'], $adminOnly);
 $router->post('/api/admin/existing-users/bulk-import', [AdminController::class, 'bulkImportExistingUsers'], $adminOnly);

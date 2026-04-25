@@ -1278,6 +1278,112 @@ class AdminController
         );
     }
 
+    // ── Sync ExistingUser from Google Admin ───────────────────────────────────
+
+    public function syncFromGoogle(Request $req): void
+    {
+        $googleUsers = GoogleWorkspaceService::listAllDomainUsers();
+
+        $created = 0;
+        $updated = 0;
+        $now     = date('Y-m-d H:i:s');
+
+        foreach ($googleUsers as $gu) {
+            $email = strtolower(trim($gu['username']));
+            if (!$email) continue;
+
+            $existing = Database::queryOne(
+                'SELECT id, linkedUserId FROM `ExistingUser` WHERE username = :u',
+                [':u' => $email]
+            );
+
+            if ($existing) {
+                // Update fields that Google is authoritative for — never overwrite linkedUserId or billing fields
+                Database::execute(
+                    'UPDATE `ExistingUser`
+                     SET firstName = COALESCE(:fn, firstName),
+                         lastName  = COALESCE(:ln, lastName),
+                         status    = :status,
+                         twoStepStatus   = :twoStep,
+                         lastSignIn      = COALESCE(:lsi, lastSignIn),
+                         googleCreatedAt = COALESCE(:gca, googleCreatedAt),
+                         ou              = COALESCE(:ou, ou),
+                         recoveryEmail   = COALESCE(:re, recoveryEmail),
+                         recoveryPhone   = COALESCE(:rp, recoveryPhone),
+                         googleCustomerId = COALESCE(:gci, googleCustomerId),
+                         updatedAt       = :now
+                     WHERE id = :id',
+                    [
+                        ':fn'     => $gu['firstName'],
+                        ':ln'     => $gu['lastName'],
+                        ':status' => $gu['status'],
+                        ':twoStep'=> $gu['twoStepStatus'],
+                        ':lsi'    => $gu['lastSignIn'],
+                        ':gca'    => $gu['googleCreatedAt'],
+                        ':ou'     => $gu['ou'],
+                        ':re'     => $gu['recoveryEmail'],
+                        ':rp'     => $gu['recoveryPhone'],
+                        ':gci'    => $gu['googleCustomerId'],
+                        ':now'    => $now,
+                        ':id'     => $existing['id'],
+                    ]
+                );
+                $updated++;
+
+                // If already imported as User, also sync name/recovery on the User record
+                if ($existing['linkedUserId'] && ($gu['firstName'] || $gu['lastName'])) {
+                    $fullName = trim(($gu['firstName'] ?? '') . ' ' . ($gu['lastName'] ?? ''));
+                    Database::execute(
+                        'UPDATE `User`
+                         SET name = COALESCE(NULLIF(:name,""), name),
+                             recoveryEmail = COALESCE(:re, recoveryEmail),
+                             recoveryPhone = COALESCE(:rp, recoveryPhone),
+                             updatedAt = :now
+                         WHERE id = :uid',
+                        [
+                            ':name' => $fullName ?: null,
+                            ':re'   => $gu['recoveryEmail'],
+                            ':rp'   => $gu['recoveryPhone'],
+                            ':now'  => $now,
+                            ':uid'  => $existing['linkedUserId'],
+                        ]
+                    );
+                }
+            } else {
+                Database::insert(
+                    'INSERT INTO `ExistingUser`
+                     (username, firstName, lastName, status, twoStepStatus, lastSignIn, googleCreatedAt, ou, recoveryEmail, recoveryPhone, googleCustomerId, source, createdAt, updatedAt)
+                     VALUES (:u, :fn, :ln, :status, :twoStep, :lsi, :gca, :ou, :re, :rp, :gci, \'google_sync\', :now, :now)',
+                    [
+                        ':u'      => $email,
+                        ':fn'     => $gu['firstName'],
+                        ':ln'     => $gu['lastName'],
+                        ':status' => $gu['status'],
+                        ':twoStep'=> $gu['twoStepStatus'],
+                        ':lsi'    => $gu['lastSignIn'],
+                        ':gca'    => $gu['googleCreatedAt'],
+                        ':ou'     => $gu['ou'],
+                        ':re'     => $gu['recoveryEmail'],
+                        ':rp'     => $gu['recoveryPhone'],
+                        ':gci'    => $gu['googleCustomerId'],
+                        ':now'    => $now,
+                    ]
+                );
+                $created++;
+            }
+        }
+
+        AuditService::log('admin', 'GOOGLE_SYNC', "Synced Google users: {$created} new, {$updated} updated");
+
+        Response::json([
+            'success' => true,
+            'total'   => count($googleUsers),
+            'created' => $created,
+            'updated' => $updated,
+            'message' => "Sync complete: {$created} new accounts added, {$updated} existing records updated.",
+        ]);
+    }
+
     // ── Existing (legacy) user import ─────────────────────────────────────────
 
     public function getExistingUsers(Request $req): void

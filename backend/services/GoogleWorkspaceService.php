@@ -369,7 +369,6 @@ class GoogleWorkspaceService
         if (!$path) return false;
         try {
             $service    = self::getService();
-            // orgunits.get expects path without leading slash, e.g. "webmydrive.com/A - Basic - 500GB"
             $apiPath    = ltrim($path, '/');
             $service->orgunits->get('my_customer', $apiPath);
             Logger::info("[GWS] validateOrgUnit: '$path' is valid");
@@ -378,5 +377,75 @@ class GoogleWorkspaceService
             Logger::warn("[GWS] validateOrgUnit: '$path' not found — " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Fetch ALL users from webmydrive.com domain via Google Admin Directory API.
+     * Returns array of normalised user records ready to upsert into ExistingUser.
+     */
+    public static function listAllDomainUsers(): array
+    {
+        $service = self::getService();
+        $users   = [];
+        $pageToken = null;
+
+        do {
+            $params = [
+                'domain'     => 'webmydrive.com',
+                'maxResults' => 500,
+                'projection' => 'full',
+                'showDeleted' => 'false',
+            ];
+            if ($pageToken) $params['pageToken'] = $pageToken;
+
+            $result    = $service->users->listUsers($params);
+            $pageToken = $result->getNextPageToken();
+
+            foreach ($result->getUsers() as $u) {
+                $name      = $u->getName();
+                $phones    = $u->getPhones() ?? [];
+                $emails    = $u->getEmails() ?? [];
+
+                // Recovery phone: first mobile or first entry
+                $recoveryPhone = null;
+                foreach ($phones as $ph) {
+                    $phArr = is_array($ph) ? $ph : (array) $ph;
+                    if (($phArr['type'] ?? '') === 'mobile' || $recoveryPhone === null) {
+                        $recoveryPhone = $phArr['value'] ?? null;
+                    }
+                }
+
+                // Recovery email: non-webmydrive.com address
+                $recoveryEmail = null;
+                foreach ($emails as $em) {
+                    $emArr = is_array($em) ? $em : (array) $em;
+                    $addr  = $emArr['address'] ?? '';
+                    if ($addr && !str_ends_with($addr, '@webmydrive.com')) {
+                        $recoveryEmail = $addr;
+                        break;
+                    }
+                }
+
+                $lastLogin = $u->getLastLoginTime();
+                $createdAt = $u->getCreationTime();
+
+                $users[] = [
+                    'username'        => strtolower($u->getPrimaryEmail()),
+                    'firstName'       => $name ? $name->getGivenName() : null,
+                    'lastName'        => $name ? $name->getFamilyName() : null,
+                    'status'          => $u->getSuspended() ? 'SUSPENDED' : 'ACTIVE',
+                    'twoStepStatus'   => $u->getIsEnrolledIn2Sv() ? 'ENABLED' : 'DISABLED',
+                    'lastSignIn'      => $lastLogin ? date('Y-m-d H:i:s', strtotime($lastLogin)) : null,
+                    'googleCreatedAt' => $createdAt ? date('Y-m-d H:i:s', strtotime($createdAt)) : null,
+                    'ou'              => $u->getOrgUnitPath() ?? null,
+                    'recoveryEmail'   => $recoveryEmail,
+                    'recoveryPhone'   => $recoveryPhone,
+                    'googleCustomerId'=> $u->getCustomerId() ?? null,
+                ];
+            }
+        } while ($pageToken);
+
+        Logger::info('[GWS] listAllDomainUsers: fetched ' . count($users) . ' users from webmydrive.com');
+        return $users;
     }
 }
