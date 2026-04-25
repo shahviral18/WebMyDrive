@@ -42,6 +42,7 @@ const navGroups = [
   {
     label: "OPERATIONS",
     items: [
+      { label: "Import Users", href: "/admin/import-users", icon: Users },
       { label: "Distributors", href: "/admin/distributors", icon: Handshake },
       { label: "Assign Distributor", href: "/admin/assign-distributor", icon: Users },
       { label: "Distributor Applications", href: "/admin/distributor-applications", icon: Briefcase },

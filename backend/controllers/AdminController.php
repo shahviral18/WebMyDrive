@@ -1278,6 +1278,235 @@ class AdminController
         );
     }
 
+    // ── Existing (legacy) user import ─────────────────────────────────────────
+
+    public function getExistingUsers(Request $req): void
+    {
+        $rows = Database::query(
+            'SELECT eu.*, p.name AS planName
+             FROM `ExistingUser` eu
+             LEFT JOIN `Plan` p ON p.id = eu.activePlanId
+             ORDER BY eu.status ASC, eu.firstName ASC'
+        );
+
+        $pending = [];
+        $imported = [];
+
+        foreach ($rows as $r) {
+            $item = [
+                'id'              => (int) $r['id'],
+                'username'        => $r['username'],
+                'firstName'       => $r['firstName'],
+                'lastName'        => $r['lastName'],
+                'fullName'        => trim(($r['firstName'] ?? '') . ' ' . ($r['lastName'] ?? '')),
+                'status'          => $r['status'] ?? 'ACTIVE',
+                'activePlanId'    => $r['activePlanId'] ? (int)$r['activePlanId'] : null,
+                'planName'        => $r['planName'] ?? null,
+                'ou'              => $r['ou'] ?? null,
+                'recoveryEmail'   => $r['recoveryEmail'] ?? null,
+                'recoveryPhone'   => $r['recoveryPhone'] ?? null,
+                'lastSignIn'      => $r['lastSignIn'] ?? null,
+                'googleCreatedAt' => $r['googleCreatedAt'] ?? null,
+                'linkedUserId'    => $r['linkedUserId'] ? (int)$r['linkedUserId'] : null,
+                'notes'           => $r['notes'] ?? null,
+                'createdAt'       => $r['createdAt'],
+            ];
+
+            if ($r['linkedUserId']) {
+                $linkedUser = Database::queryOne(
+                    'SELECT email, createdAt FROM `User` WHERE id = :id',
+                    [':id' => $r['linkedUserId']]
+                );
+                $item['linkedUserEmail'] = $linkedUser['email'] ?? null;
+                $item['importedAt']      = $linkedUser['createdAt'] ?? null;
+                $imported[] = $item;
+            } else {
+                $pending[] = $item;
+            }
+        }
+
+        Response::json([
+            'pending'  => $pending,
+            'imported' => $imported,
+            'pendingCount' => count($pending),
+        ]);
+    }
+
+    public function importExistingUser(Request $req): void
+    {
+        $existingId = (int) ($req->params['id'] ?? 0);
+
+        $eu = Database::queryOne(
+            'SELECT * FROM `ExistingUser` WHERE id = :id',
+            [':id' => $existingId]
+        );
+        if (!$eu)
+            Response::error('ExistingUser record not found', 404);
+        if ($eu['linkedUserId'])
+            Response::error('This user has already been imported', 409);
+
+        $email = strtolower(trim($eu['username']));
+        $alreadyUser = Database::queryOne('SELECT id FROM `User` WHERE email = :e', [':e' => $email]);
+        if ($alreadyUser) {
+            // Link and return — user already exists
+            Database::execute(
+                'UPDATE `ExistingUser` SET linkedUserId = :uid, updatedAt = :now WHERE id = :id',
+                [':uid' => $alreadyUser['id'], ':now' => date('Y-m-d H:i:s'), ':id' => $existingId]
+            );
+            Response::json([
+                'success'       => true,
+                'userId'        => (int) $alreadyUser['id'],
+                'alreadyExists' => true,
+                'message'       => 'User already existed in portal — records linked.',
+            ]);
+        }
+
+        $firstName = $eu['firstName'] ?? '';
+        $lastName  = $eu['lastName'] ?? '';
+        $fullName  = trim("$firstName $lastName") ?: explode('@', $email)[0];
+
+        $basePass = preg_replace('/[^a-z0-9]/i', '', $firstName ?: explode('@', $email)[0]);
+        $plainPassword = ucfirst(strtolower($basePass)) . date('Y') . '!';
+        $passwordHash  = password_hash($plainPassword, PASSWORD_BCRYPT);
+
+        $baseRef     = strtoupper(preg_replace('/[^a-z0-9]/i', '', $basePass));
+        $referralCode = substr($baseRef, 0, 12) . date('Y');
+        // Ensure unique referral code
+        $suffix = 0;
+        while (Database::queryOne('SELECT id FROM `User` WHERE referralCode = :c', [':c' => $referralCode])) {
+            $suffix++;
+            $referralCode = substr($baseRef, 0, 10) . date('Y') . $suffix;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $userId = Database::insert(
+            'INSERT INTO `User` (name, email, recoveryEmail, recoveryPhone, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
+             VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :now, :now)',
+            [
+                ':name'     => $fullName,
+                ':email'    => $email,
+                ':recEmail' => $eu['recoveryEmail'] ?? null,
+                ':recPhone' => $eu['recoveryPhone'] ?? null,
+                ':hash'     => $passwordHash,
+                ':code'     => $referralCode,
+                ':now'      => $now,
+            ]
+        );
+
+        // Create Workspace
+        $wsStatus = (strtoupper($eu['status'] ?? 'ACTIVE') === 'SUSPENDED') ? 'SUSPENDED' : 'ACTIVE';
+        Database::insert(
+            'INSERT INTO `Workspace` (userId, planId, status, createdAt, updatedAt)
+             VALUES (:uid, :pid, :status, :now, :now)',
+            [
+                ':uid'    => $userId,
+                ':pid'    => $eu['activePlanId'] ?: null,
+                ':status' => $wsStatus,
+                ':now'    => $now,
+            ]
+        );
+
+        // Link ExistingUser → User
+        Database::execute(
+            'UPDATE `ExistingUser` SET linkedUserId = :uid, updatedAt = :now WHERE id = :id',
+            [':uid' => $userId, ':now' => $now, ':id' => $existingId]
+        );
+
+        AuditService::log('admin', 'IMPORT_EXISTING_USER', "Imported ExistingUser #{$existingId} ({$email}) → User #{$userId}");
+
+        Response::json([
+            'success'       => true,
+            'userId'        => (int) $userId,
+            'email'         => $email,
+            'plainPassword' => $plainPassword,
+            'alreadyExists' => false,
+            'message'       => 'User imported. Share the password — it will not be shown again.',
+        ]);
+    }
+
+    public function bulkImportExistingUsers(Request $req): void
+    {
+        $ids = $req->body['ids'] ?? [];
+        if (!is_array($ids) || count($ids) === 0)
+            Response::error('No IDs provided', 400);
+
+        $results = [];
+        foreach ($ids as $rawId) {
+            $id = (int) $rawId;
+            try {
+                // Re-use single import logic by faking a sub-request
+                $eu = Database::queryOne('SELECT * FROM `ExistingUser` WHERE id = :id', [':id' => $id]);
+                if (!$eu) {
+                    $results[] = ['id' => $id, 'success' => false, 'error' => 'Not found'];
+                    continue;
+                }
+                if ($eu['linkedUserId']) {
+                    $results[] = ['id' => $id, 'success' => false, 'error' => 'Already imported'];
+                    continue;
+                }
+
+                $email = strtolower(trim($eu['username']));
+                $alreadyUser = Database::queryOne('SELECT id FROM `User` WHERE email = :e', [':e' => $email]);
+                if ($alreadyUser) {
+                    Database::execute(
+                        'UPDATE `ExistingUser` SET linkedUserId = :uid, updatedAt = :now WHERE id = :id',
+                        [':uid' => $alreadyUser['id'], ':now' => date('Y-m-d H:i:s'), ':id' => $id]
+                    );
+                    $results[] = ['id' => $id, 'success' => true, 'email' => $email, 'alreadyExists' => true];
+                    continue;
+                }
+
+                $firstName    = $eu['firstName'] ?? '';
+                $fullName     = trim($firstName . ' ' . ($eu['lastName'] ?? '')) ?: explode('@', $email)[0];
+                $basePass     = preg_replace('/[^a-z0-9]/i', '', $firstName ?: explode('@', $email)[0]);
+                $plainPassword = ucfirst(strtolower($basePass)) . date('Y') . '!';
+                $passwordHash  = password_hash($plainPassword, PASSWORD_BCRYPT);
+                $baseRef       = strtoupper(preg_replace('/[^a-z0-9]/i', '', $basePass));
+                $referralCode  = substr($baseRef, 0, 12) . date('Y');
+                $suffix = 0;
+                while (Database::queryOne('SELECT id FROM `User` WHERE referralCode = :c', [':c' => $referralCode])) {
+                    $suffix++;
+                    $referralCode = substr($baseRef, 0, 10) . date('Y') . $suffix;
+                }
+
+                $now = date('Y-m-d H:i:s');
+                $userId = Database::insert(
+                    'INSERT INTO `User` (name, email, recoveryEmail, recoveryPhone, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
+                     VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :now, :now)',
+                    [
+                        ':name'     => $fullName,
+                        ':email'    => $email,
+                        ':recEmail' => $eu['recoveryEmail'] ?? null,
+                        ':recPhone' => $eu['recoveryPhone'] ?? null,
+                        ':hash'     => $passwordHash,
+                        ':code'     => $referralCode,
+                        ':now'      => $now,
+                    ]
+                );
+
+                $wsStatus = (strtoupper($eu['status'] ?? 'ACTIVE') === 'SUSPENDED') ? 'SUSPENDED' : 'ACTIVE';
+                Database::insert(
+                    'INSERT INTO `Workspace` (userId, planId, status, createdAt, updatedAt)
+                     VALUES (:uid, :pid, :status, :now, :now)',
+                    [':uid' => $userId, ':pid' => $eu['activePlanId'] ?: null, ':status' => $wsStatus, ':now' => $now]
+                );
+
+                Database::execute(
+                    'UPDATE `ExistingUser` SET linkedUserId = :uid, updatedAt = :now WHERE id = :id',
+                    [':uid' => $userId, ':now' => $now, ':id' => $id]
+                );
+
+                AuditService::log('admin', 'IMPORT_EXISTING_USER', "Bulk imported ExistingUser #{$id} ({$email}) → User #{$userId}");
+                $results[] = ['id' => $id, 'success' => true, 'email' => $email, 'plainPassword' => $plainPassword, 'alreadyExists' => false];
+
+            } catch (Throwable $e) {
+                $results[] = ['id' => $id, 'success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        Response::json(['results' => $results]);
+    }
+
     // ── Assign user to distributor ─────────────────────────────────────────────
 
     public function assignUserToDistributor(Request $req): void

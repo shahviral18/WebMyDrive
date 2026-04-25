@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Wallet, UserX, UserCheck, ShieldAlert,
   LogOut, Trash2, MoreHorizontal, UserCircle2, ChevronLeft,
-  ChevronRight, Filter, UserPlus, X, Loader2,
+  ChevronRight, Filter, UserPlus, X, Loader2, Download,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -201,6 +202,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function UsersPage() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -209,13 +211,17 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [passwordReveal, setPasswordReveal] = useState<{ email: string; password: string; label: string } | null>(null);
-
+  const [pendingImports, setPendingImports] = useState<number>(0);
 
   useEffect(() => {
     api.get("/admin/users?limit=500&skip=0")
       .then(data => setUsers(data.users || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Check for unimported legacy users
+    api.get("/admin/existing-users")
+      .then(data => setPendingImports(data.pendingCount ?? 0))
+      .catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
@@ -296,6 +302,21 @@ export default function UsersPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {/* Legacy import banner */}
+      {pendingImports > 0 && (
+        <button
+          onClick={() => navigate("/admin/import-users")}
+          className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-xl text-left hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <Download className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              {pendingImports} legacy Google Workspace {pendingImports === 1 ? "account has" : "accounts have"} not been imported to the portal yet.
+            </span>
+          </div>
+          <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold shrink-0 ml-4">Import now →</span>
+        </button>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
