@@ -1353,20 +1353,21 @@ class AdminController
                 Database::insert(
                     'INSERT INTO `ExistingUser`
                      (username, firstName, lastName, status, twoStepStatus, lastSignIn, googleCreatedAt, ou, recoveryEmail, recoveryPhone, googleCustomerId, source, createdAt, updatedAt)
-                     VALUES (:u, :fn, :ln, :status, :twoStep, :lsi, :gca, :ou, :re, :rp, :gci, \'google_sync\', :now, :now)',
+                     VALUES (:u, :fn, :ln, :status, :twoStep, :lsi, :gca, :ou, :re, :rp, :gci, \'google_sync\', :createdAt, :updatedAt)',
                     [
-                        ':u'      => $email,
-                        ':fn'     => $gu['firstName'],
-                        ':ln'     => $gu['lastName'],
-                        ':status' => $gu['status'],
-                        ':twoStep'=> $gu['twoStepStatus'],
-                        ':lsi'    => $gu['lastSignIn'],
-                        ':gca'    => $gu['googleCreatedAt'],
-                        ':ou'     => $gu['ou'],
-                        ':re'     => $gu['recoveryEmail'],
-                        ':rp'     => $gu['recoveryPhone'],
-                        ':gci'    => $gu['googleCustomerId'],
-                        ':now'    => $now,
+                        ':u'         => $email,
+                        ':fn'        => $gu['firstName'],
+                        ':ln'        => $gu['lastName'],
+                        ':status'    => $gu['status'],
+                        ':twoStep'   => $gu['twoStepStatus'],
+                        ':lsi'       => $gu['lastSignIn'],
+                        ':gca'       => $gu['googleCreatedAt'],
+                        ':ou'        => $gu['ou'],
+                        ':re'        => $gu['recoveryEmail'],
+                        ':rp'        => $gu['recoveryPhone'],
+                        ':gci'       => $gu['googleCustomerId'],
+                        ':createdAt' => $now,
+                        ':updatedAt' => $now,
                     ]
                 );
                 $created++;
