@@ -1378,10 +1378,19 @@ class AdminController
             $referralCode = substr($baseRef, 0, 10) . date('Y') . $suffix;
         }
 
+        // ── Billing details from request ──────────────────────────────────────
+        $planId          = $req->body['planId'] ?? $eu['activePlanId'] ?? null;
+        $planId          = $planId ? (int) $planId : null;
+        $activationDate  = (string) ($req->body['activationDate'] ?? date('Y-m-d'));
+        $lastPaymentDate = (string) ($req->body['lastPaymentDate'] ?? date('Y-m-d'));
+        $lastPaymentAmt  = (float)  ($req->body['lastPaymentAmount'] ?? 0);
+        $renewalDate     = (string) ($req->body['renewalDate'] ?? date('Y-m-d', strtotime($lastPaymentDate . ' +1 year')));
+        $notes           = (string) ($req->body['notes'] ?? '');
+
         $now = date('Y-m-d H:i:s');
         $userId = Database::insert(
             'INSERT INTO `User` (name, email, recoveryEmail, recoveryPhone, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
-             VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :now, :now)',
+             VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :actDate, :actDate)',
             [
                 ':name'     => $fullName,
                 ':email'    => $email,
@@ -1389,22 +1398,46 @@ class AdminController
                 ':recPhone' => $eu['recoveryPhone'] ?? null,
                 ':hash'     => $passwordHash,
                 ':code'     => $referralCode,
-                ':now'      => $now,
+                ':actDate'  => $activationDate . ' 00:00:00',
             ]
         );
 
-        // Create Workspace
+        // Create Workspace with renewal date
         $wsStatus = (strtoupper($eu['status'] ?? 'ACTIVE') === 'SUSPENDED') ? 'SUSPENDED' : 'ACTIVE';
         Database::insert(
-            'INSERT INTO `Workspace` (userId, planId, status, createdAt, updatedAt)
-             VALUES (:uid, :pid, :status, :now, :now)',
+            'INSERT INTO `Workspace` (userId, planId, status, renewalDate, createdAt, updatedAt)
+             VALUES (:uid, :pid, :status, :renewal, :now, :now)',
             [
-                ':uid'    => $userId,
-                ':pid'    => $eu['activePlanId'] ?: null,
-                ':status' => $wsStatus,
-                ':now'    => $now,
+                ':uid'     => $userId,
+                ':pid'     => $planId,
+                ':status'  => $wsStatus,
+                ':renewal' => $renewalDate . ' 00:00:00',
+                ':now'     => $now,
             ]
         );
+
+        // Create historical Order record for last payment
+        if ($lastPaymentAmt > 0) {
+            Database::insert(
+                'INSERT INTO `Order` (userId, planId, amount, currency, status, paymentId, gatewayTxId, createdAt, updatedAt)
+                 VALUES (:uid, :pid, :amt, \'INR\', \'PAID\', :payId, \'MANUAL_IMPORT\', :payDate, :payDate)',
+                [
+                    ':uid'     => $userId,
+                    ':pid'     => $planId,
+                    ':amt'     => $lastPaymentAmt,
+                    ':payId'   => 'IMPORT-' . $existingId . '-' . date('YmdHis'),
+                    ':payDate' => $lastPaymentDate . ' 00:00:00',
+                ]
+            );
+        }
+
+        // Update ExistingUser notes if provided
+        if ($notes) {
+            Database::execute(
+                'UPDATE `ExistingUser` SET notes = :notes WHERE id = :id',
+                [':notes' => $notes, ':id' => $existingId]
+            );
+        }
 
         // Link ExistingUser → User
         Database::execute(
@@ -1412,7 +1445,7 @@ class AdminController
             [':uid' => $userId, ':now' => $now, ':id' => $existingId]
         );
 
-        AuditService::log('admin', 'IMPORT_EXISTING_USER', "Imported ExistingUser #{$existingId} ({$email}) → User #{$userId}");
+        AuditService::log('admin', 'IMPORT_EXISTING_USER', "Imported ExistingUser #{$existingId} ({$email}) → User #{$userId}, last payment ₹{$lastPaymentAmt} on {$lastPaymentDate}, renewal {$renewalDate}");
 
         Response::json([
             'success'       => true,

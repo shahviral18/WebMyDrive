@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  Download, CheckCircle2, Loader2, Copy, AlertCircle,
-  Users, RefreshCw, ChevronDown, ChevronUp,
+  Download, CheckCircle2, Loader2, Copy,
+  Users, RefreshCw, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -33,6 +37,11 @@ interface ExistingUser {
   notes: string | null;
 }
 
+interface Plan {
+  id: number;
+  name: string;
+}
+
 interface ImportResult {
   id: number;
   success: boolean;
@@ -42,9 +51,30 @@ interface ImportResult {
   error?: string;
 }
 
+interface ImportFormData {
+  planId: string;
+  activationDate: string;
+  lastPaymentDate: string;
+  lastPaymentAmount: string;
+  renewalDate: string;
+  notes: string;
+}
+
 type Tab = "pending" | "imported";
 
-// ── Password reveal row ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addOneYear(date: string): string {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Password reveal row ───────────────────────────────────────────────────────
 
 function PasswordRow({ result }: { result: ImportResult }) {
   const [copied, setCopied] = useState(false);
@@ -70,28 +100,203 @@ function PasswordRow({ result }: { result: ImportResult }) {
   );
 }
 
+// ── Import Details Modal ──────────────────────────────────────────────────────
+
+function ImportModal({
+  user,
+  plans,
+  onClose,
+  onDone,
+}: {
+  user: ExistingUser;
+  plans: Plan[];
+  onClose: () => void;
+  onDone: (result: ImportResult) => void;
+}) {
+  const defaultPaymentDate = user.googleCreatedAt
+    ? user.googleCreatedAt.slice(0, 10)
+    : today();
+
+  const [form, setForm] = useState<ImportFormData>({
+    planId: user.activePlanId ? String(user.activePlanId) : "",
+    activationDate: user.googleCreatedAt ? user.googleCreatedAt.slice(0, 10) : today(),
+    lastPaymentDate: defaultPaymentDate,
+    lastPaymentAmount: "",
+    renewalDate: addOneYear(defaultPaymentDate),
+    notes: user.notes ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (k: keyof ImportFormData, v: string) => {
+    setForm(prev => {
+      const next = { ...prev, [k]: v };
+      // Auto-update renewal date when last payment date changes
+      if (k === "lastPaymentDate" && v) {
+        next.renewalDate = addOneYear(v);
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.activationDate || !form.lastPaymentDate || !form.renewalDate) {
+      toast.error("Please fill in all required dates.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.post(`/admin/existing-users/${user.id}/import`, {
+        planId: form.planId ? parseInt(form.planId) : null,
+        activationDate: form.activationDate,
+        lastPaymentDate: form.lastPaymentDate,
+        lastPaymentAmount: form.lastPaymentAmount ? parseFloat(form.lastPaymentAmount) : 0,
+        renewalDate: form.renewalDate,
+        notes: form.notes,
+      });
+      onDone({
+        id: user.id,
+        success: true,
+        email: res.email,
+        plainPassword: res.plainPassword,
+        alreadyExists: res.alreadyExists,
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Import failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Import: {user.username}</DialogTitle>
+          <DialogDescription>
+            Fill in the billing details for <strong>{user.fullName || user.username}</strong> before importing to the portal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {/* Plan */}
+          <div className="space-y-1.5">
+            <Label>Plan</Label>
+            <select
+              value={form.planId}
+              onChange={e => set("planId", e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">— No plan selected —</option>
+              {plans.map(p => (
+                <option key={p.id} value={String(p.id)}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dates row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Activation Date <span className="text-red-500">*</span></Label>
+              <Input
+                type="date"
+                value={form.activationDate}
+                onChange={e => set("activationDate", e.target.value)}
+                className="h-9 text-sm"
+                required
+              />
+              <p className="text-xs text-muted-foreground">When they first joined</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Renewal Date <span className="text-red-500">*</span></Label>
+              <Input
+                type="date"
+                value={form.renewalDate}
+                onChange={e => set("renewalDate", e.target.value)}
+                className="h-9 text-sm"
+                required
+              />
+              <p className="text-xs text-muted-foreground">Next billing due date</p>
+            </div>
+          </div>
+
+          {/* Last payment */}
+          <div className="bg-surface-2/50 rounded-lg p-3 space-y-3 border border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Payment Received</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Date <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={form.lastPaymentDate}
+                  onChange={e => set("lastPaymentDate", e.target.value)}
+                  className="h-9 text-sm"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Amount (₹)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="e.g. 1500"
+                  value={form.lastPaymentAmount}
+                  onChange={e => set("lastPaymentAmount", e.target.value)}
+                  className="h-9 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label>Notes (optional)</Label>
+            <textarea
+              value={form.notes}
+              onChange={e => set("notes", e.target.value)}
+              placeholder="Any additional info about this account…"
+              rows={2}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button type="submit" disabled={saving} className="gap-2 min-w-36">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Import User
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ImportUsersPage() {
   const [tab, setTab] = useState<Tab>("pending");
   const [pending, setPending] = useState<ExistingUser[]>([]);
   const [imported, setImported] = useState<ExistingUser[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [importing, setImporting] = useState<Set<number>>(new Set());
-  const [bulkImporting, setBulkImporting] = useState(false);
+  const [modalUser, setModalUser] = useState<ExistingUser | null>(null);
   const [results, setResults] = useState<ImportResult[]>([]);
   const [showResults, setShowResults] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.get("/admin/existing-users")
-      .then(res => {
-        setPending(res.pending ?? []);
-        setImported(res.imported ?? []);
-      })
-      .catch(() => toast.error("Failed to load existing users"))
+    Promise.all([
+      api.get("/admin/existing-users"),
+      api.get("/admin/plans"),
+    ]).then(([euRes, planRes]) => {
+      setPending(euRes.pending ?? []);
+      setImported(euRes.imported ?? []);
+      setPlans(planRes.plans ?? planRes ?? []);
+    }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -109,67 +314,26 @@ export default function ImportUsersPage() {
     u.fullName.toLowerCase().includes(search.toLowerCase())
   );
 
-  const toggleSelect = (id: number) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (selected.size === filteredPending.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filteredPending.map(u => u.id)));
-    }
-  };
-
-  const importOne = async (user: ExistingUser) => {
-    setImporting(prev => new Set(prev).add(user.id));
-    try {
-      const res = await api.post(`/admin/existing-users/${user.id}/import`, {});
-      const result: ImportResult = {
-        id: user.id,
-        success: true,
-        email: res.email,
-        plainPassword: res.plainPassword,
-        alreadyExists: res.alreadyExists,
-      };
-      setResults(prev => [result, ...prev]);
-      setShowResults(true);
-      setPending(prev => prev.filter(u => u.id !== user.id));
-      toast.success(`${user.username} imported`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Import failed");
-    } finally {
-      setImporting(prev => { const next = new Set(prev); next.delete(user.id); return next; });
-    }
-  };
-
-  const bulkImport = async () => {
-    if (selected.size === 0) return;
-    setBulkImporting(true);
-    try {
-      const res = await api.post("/admin/existing-users/bulk-import", { ids: Array.from(selected) });
-      const newResults: ImportResult[] = res.results ?? [];
-      setResults(prev => [...newResults, ...prev]);
-      setShowResults(true);
-      const successIds = new Set(newResults.filter(r => r.success).map(r => r.id));
-      setPending(prev => prev.filter(u => !successIds.has(u.id)));
-      setSelected(new Set());
-      const ok = newResults.filter(r => r.success).length;
-      const fail = newResults.filter(r => !r.success).length;
-      toast.success(`${ok} imported${fail > 0 ? `, ${fail} failed` : ""}`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Bulk import failed");
-    } finally {
-      setBulkImporting(false);
-    }
+  const handleImportDone = (result: ImportResult) => {
+    setResults(prev => [result, ...prev]);
+    setShowResults(true);
+    setPending(prev => prev.filter(u => u.id !== result.id));
+    setModalUser(null);
+    toast.success(`${result.email} imported successfully`);
   };
 
   return (
     <div className="p-6 space-y-6">
+      {/* Import details modal */}
+      {modalUser && (
+        <ImportModal
+          user={modalUser}
+          plans={plans}
+          onClose={() => setModalUser(null)}
+          onDone={handleImportDone}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -236,18 +400,6 @@ export default function ImportUsersPage() {
           onChange={e => setSearch(e.target.value)}
           className="h-9 text-sm sm:max-w-xs"
         />
-        {tab === "pending" && selected.size > 0 && (
-          <Button
-            onClick={bulkImport}
-            disabled={bulkImporting}
-            className="gap-2 ml-auto"
-          >
-            {bulkImporting
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : <Download className="w-4 h-4" />}
-            Import Selected ({selected.size})
-          </Button>
-        )}
       </div>
 
       {/* Table */}
@@ -268,14 +420,6 @@ export default function ImportUsersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-surface-2/50">
                 <tr>
-                  <th className="px-4 py-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selected.size === filteredPending.length && filteredPending.length > 0}
-                      onChange={toggleAll}
-                      className="rounded"
-                    />
-                  </th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Email</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
@@ -288,14 +432,6 @@ export default function ImportUsersPage() {
               <tbody className="divide-y divide-border">
                 {filteredPending.map(u => (
                   <tr key={u.id} className="hover:bg-surface-2/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(u.id)}
-                        onChange={() => toggleSelect(u.id)}
-                        className="rounded"
-                      />
-                    </td>
                     <td className="px-4 py-3 text-foreground font-medium truncate max-w-[200px]">
                       {u.username}
                     </td>
@@ -330,13 +466,10 @@ export default function ImportUsersPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={importing.has(u.id)}
-                        onClick={() => importOne(u)}
+                        onClick={() => setModalUser(u)}
                         className="gap-1.5 h-7 text-xs"
                       >
-                        {importing.has(u.id)
-                          ? <Loader2 className="w-3 h-3 animate-spin" />
-                          : <Download className="w-3 h-3" />}
+                        <Download className="w-3 h-3" />
                         Import
                       </Button>
                     </td>
