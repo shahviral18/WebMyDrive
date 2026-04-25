@@ -1374,7 +1374,7 @@ class AdminController
             }
         }
 
-        AuditService::log('admin', 'GOOGLE_SYNC', "Synced Google users: {$created} new, {$updated} updated");
+        AuditService::log('GOOGLE_SYNC', null, null, ['detail' => "Synced Google users: {$created} new, {$updated} updated"]);
 
         Response::json([
             'success' => true,
@@ -1552,7 +1552,7 @@ class AdminController
             [':uid' => $userId, ':now' => $now, ':id' => $existingId]
         );
 
-        AuditService::log('admin', 'IMPORT_EXISTING_USER', "Imported ExistingUser #{$existingId} ({$email}) → User #{$userId}, last payment ₹{$lastPaymentAmt} on {$lastPaymentDate}, renewal {$renewalDate}");
+        AuditService::log('IMPORT_EXISTING_USER', null, null, ['detail' => "Imported ExistingUser #{$existingId} ({$email}) → User #{$userId}, last payment ₹{$lastPaymentAmt} on {$lastPaymentDate}, renewal {$renewalDate}"]);
 
         Response::json([
             'success'       => true,
@@ -1636,7 +1636,7 @@ class AdminController
                     [':uid' => $userId, ':now' => $now, ':id' => $id]
                 );
 
-                AuditService::log('admin', 'IMPORT_EXISTING_USER', "Bulk imported ExistingUser #{$id} ({$email}) → User #{$userId}");
+                AuditService::log('IMPORT_EXISTING_USER', null, null, ['detail' => "Bulk imported ExistingUser #{$id} ({$email}) → User #{$userId}"]);
                 $results[] = ['id' => $id, 'success' => true, 'email' => $email, 'plainPassword' => $plainPassword, 'alreadyExists' => false];
 
             } catch (Throwable $e) {
@@ -1664,7 +1664,7 @@ class AdminController
                 'UPDATE "User" SET distributorId = NULL, updatedAt = :now WHERE id = :id',
                 [':now' => date('Y-m-d H:i:s'), ':id' => $userId]
             );
-            AuditService::log('admin', 'UNASSIGN_DISTRIBUTOR', "Removed distributor from user #{$userId} ({$user['email']})");
+            AuditService::log('UNASSIGN_DISTRIBUTOR', null, null, ['detail' => "Removed distributor from user #{$userId} ({$user['email']})"]);
             Response::json(['success' => true, 'message' => 'Distributor assignment removed.']);
         }
 
@@ -1678,7 +1678,7 @@ class AdminController
             [':did' => $distributorId, ':now' => date('Y-m-d H:i:s'), ':id' => $userId]
         );
 
-        AuditService::log('admin', 'ASSIGN_DISTRIBUTOR', "Assigned user #{$userId} ({$user['email']}) to distributor #{$distributorId} ({$dist['name']})");
+        AuditService::log('ASSIGN_DISTRIBUTOR', null, null, ['detail' => "Assigned user #{$userId} ({$user['email']}) to distributor #{$distributorId} ({$dist['name']})"]);
         Response::json(['success' => true, 'message' => "User assigned to distributor {$dist['name']}."]);
     }
 
@@ -1739,7 +1739,7 @@ class AdminController
             ]
         );
 
-        AuditService::log('admin', 'PROMOTE_TO_DISTRIBUTOR', "Promoted user #{$userId} ({$user['email']}) to distributor #{$distId}");
+        AuditService::log('PROMOTE_TO_DISTRIBUTOR', null, null, ['detail' => "Promoted user #{$userId} ({$user['email']}) to distributor #{$distId}"]);
 
         $dist = Database::queryOne('SELECT * FROM "Distributor" WHERE id = :id', [':id' => $distId]);
         Response::json([

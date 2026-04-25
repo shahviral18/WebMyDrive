@@ -317,6 +317,9 @@ export default function ImportUsersPage() {
   );
 
   const handleSync = async () => {
+    if (!window.confirm(
+      "Sync will fetch all webmydrive.com accounts from Google Admin and update this list.\n\nExisting billing/plan data will NOT be overwritten.\n\nProceed?"
+    )) return;
     setSyncing(true);
     setSyncResult(null);
     try {
