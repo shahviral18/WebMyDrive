@@ -71,6 +71,7 @@ require BASE_PATH . '/controllers/DistributorController.php';
 require BASE_PATH . '/controllers/SubscriptionController.php';
 require BASE_PATH . '/controllers/DistributorApplicationController.php';
 require BASE_PATH . '/controllers/PaymentController.php';
+require BASE_PATH . '/controllers/InternalController.php';
 
 // ── Global error handler ──────────────────────────────────────────────────────
 set_exception_handler(function (Throwable $e) {
@@ -225,6 +226,10 @@ $router->get('/api/distributor/wallet', [DistributorController::class, 'getWalle
 $router->get('/api/distributor/customers', [DistributorController::class, 'getCustomers'], $auth);
 $router->get('/api/distributor/earnings', [DistributorController::class, 'getEarningsStats'], $auth);
 $router->get('/api/distributor/promo-codes', [DistributorController::class, 'getPromoCodeHistory'], $auth);
+
+// ── Internal (called by GitHub Actions cron — token-authenticated, no JWT) ────
+$router->get('/api/cron/run-migration', [InternalController::class, 'runMigration']);
+$router->get('/api/cron/run-renewals',  [InternalController::class, 'runRenewals']);
 
 // ── Zoho Payments ─────────────────────────────────────────────────────────────
 $router->post('/api/payment/create-session', [PaymentController::class, 'createSession']);

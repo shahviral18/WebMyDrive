@@ -76,5 +76,8 @@ define('ZOHO_BOOKS_INVOICE_PREFIX',env('ZOHO_BOOKS_INVOICE_PREFIX','WMD'));  // 
 // ── Site URLs ─────────────────────────────────────────────────────────────────
 define('SITE_URL',           env('SITE_URL', 'https://webmydrive.com'));
 
+// ── Internal / Cron ───────────────────────────────────────────────────────────
+define('INTERNAL_CRON_TOKEN', env('INTERNAL_CRON_TOKEN', ''));
+
 // ── Logging ───────────────────────────────────────────────────────────────────
 define('LOG_DIR',            env('LOG_DIR', __DIR__ . '/../logs'));
