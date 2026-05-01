@@ -410,7 +410,7 @@ export default function SubscribeUsernamePage() {
         <div className="flex flex-col items-center gap-2 text-slate-400">
           <div className="flex items-center gap-2 text-xs">
             <Lock className="w-3 h-3" />
-            <span>Secured by Razorpay • Zoho Billing System</span>
+            <span>Secured by Zoho Payments • Zoho Billing System</span>
           </div>
           <p className="text-[10px] italic">Powered by WebMyDrive Platform</p>
         </div>

@@ -93,11 +93,12 @@ function extractRefCode(input: string): string {
     return trimmed.toUpperCase();
 }
 
-function loadRazorpayScript(): Promise<boolean> {
+function loadZohoPayScript(): Promise<boolean> {
     return new Promise(resolve => {
-        if ((window as any).Razorpay) return resolve(true);
+        if ((window as any).ZPayments) return resolve(true);
         const script = document.createElement("script");
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.id = "zpay-sdk";
+        script.src = "https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js";
         script.onload = () => resolve(true);
         script.onerror = () => resolve(false);
         document.body.appendChild(script);
@@ -323,54 +324,35 @@ export default function UserPlans() {
                 promoCode: upgradeAppliedPromo || undefined,
             });
 
-            if (initData.isDemoMode) {
-                toast.loading("Processing payment…", { id: "upg-pay" });
-                await new Promise(r => setTimeout(r, 1500));
-                await api.post("/user/confirm-upgrade", {
-                    orderId: initData.orderId,
-                    razorpayPaymentId: `demo_pay_${Date.now()}`,
-                    razorpayOrderId: initData.razorpayOrderId,
-                    razorpaySignature: "demo_sig",
-                });
-                toast.dismiss("upg-pay");
+            const loaded = await loadZohoPayScript();
+            if (!loaded) { toast.error("Could not load payment gateway."); return; }
+
+            const zpay = new (window as any).ZPayments({
+                account_id: initData.account_id,
+                domain: "IN",
+                otherOptions: { api_key: initData.api_key },
+            });
+
+            const result = await zpay.requestPaymentMethod({
+                payments_session_id: initData.payments_session_id,
+                transaction_type: "payment",
+                amount: parseFloat(initData.amount).toFixed(2),
+                currency_code: "INR",
+                reference_number: initData.referenceNumber,
+                business: "WebMyDrive",
+                description: `Upgrade to ${upgradeTargetPlan.name}`,
+            });
+
+            if (result?.status === "success" || result?.status === "succeeded") {
+                toast.loading("Confirming upgrade…", { id: "upg-confirm" });
+                await api.post("/user/confirm-upgrade", { orderId: initData.orderId });
+                toast.dismiss("upg-confirm");
                 toast.success(`Upgraded to ${upgradeTargetPlan.name}!`);
                 setUpgradeTargetPlan(null);
                 await fetchCurrentPlan();
-                return;
+            } else if (result?.status !== "widget_closed" && result?.status !== "cancelled") {
+                toast.error("Payment not completed");
             }
-
-            const loaded = await loadRazorpayScript();
-            if (!loaded) { toast.error("Could not load payment gateway."); return; }
-
-            const rzp = new (window as any).Razorpay({
-                key: initData.razorpayKeyId,
-                amount: initData.amount * 100,
-                currency: "INR",
-                name: "WebMyDrive",
-                description: `Upgrade to ${upgradeTargetPlan.name}`,
-                order_id: initData.razorpayOrderId,
-                theme: { color: "#1eb6ff" },
-                handler: async (response: any) => {
-                    try {
-                        toast.loading("Verifying payment…", { id: "upg-verify" });
-                        await api.post("/user/confirm-upgrade", {
-                            orderId: initData.orderId,
-                            razorpayPaymentId: response.razorpay_payment_id,
-                            razorpayOrderId: response.razorpay_order_id,
-                            razorpaySignature: response.razorpay_signature,
-                        });
-                        toast.dismiss("upg-verify");
-                        toast.success(`Upgraded to ${upgradeTargetPlan.name}!`);
-                        setUpgradeTargetPlan(null);
-                        await fetchCurrentPlan();
-                    } catch (e: any) {
-                        toast.dismiss("upg-verify");
-                        toast.error(e.message || "Payment verification failed");
-                    }
-                },
-                modal: { ondismiss: () => toast("Payment cancelled") },
-            });
-            rzp.open();
         } catch (e: any) {
             toast.error(e.message || "Failed to initiate upgrade");
         } finally {
@@ -565,52 +547,34 @@ export default function UserPlans() {
             if (!sessionData.success) { toast.error(sessionData.error || "Failed to create checkout session"); return; }
             if (sessionData.discountPct && !discount?.isBannerOnly) setDiscount({ pct: sessionData.discountPct });
 
-            if (sessionData.isDemoMode) {
-                toast.loading("Processing payment…", { id: "pay-verify" });
-                await new Promise(r => setTimeout(r, 1500));
-                const verifyData = await api.post("/referral/verify-payment", {
-                    orderId: sessionData.orderId,
-                    razorpay_payment_id: `demo_pay_${Date.now()}`,
-                    razorpay_order_id: sessionData.rzpOrderId,
-                    razorpay_signature: "demo_sig",
-                });
-                toast.dismiss("pay-verify");
-                if (verifyData.success) { toast.success("🎉 Payment successful!"); localStorage.removeItem("wmd_pending_ref"); pollForCredentials(); }
-                else toast.error(verifyData.error || "Payment failed");
-                return;
-            }
-
-            const loaded = await loadRazorpayScript();
+            const loaded = await loadZohoPayScript();
             if (!loaded) { toast.error("Could not load payment gateway."); return; }
 
-            const rzp = new (window as any).Razorpay({
-                key: sessionData.razorpayKeyId,
-                amount: sessionData.amount * 100,
-                currency: "INR",
-                name: "WebMyDrive",
-                description: `${plan.name} — ${isYearly ? "Yearly" : "Monthly"}`,
-                order_id: sessionData.rzpOrderId,
-                theme: { color: "#1eb6ff" },
-                handler: async function (response: any) {
-                    try {
-                        toast.loading("Verifying payment…", { id: "pay-verify" });
-                        const verifyData = await api.post("/referral/verify-payment", {
-                            orderId: sessionData.orderId,
-                            razorpay_payment_id: response.razorpay_payment_id,
-                            razorpay_order_id: response.razorpay_order_id,
-                            razorpay_signature: response.razorpay_signature,
-                        });
-                        toast.dismiss("pay-verify");
-                        if (verifyData.success) { toast.success("🎉 Payment successful!"); localStorage.removeItem("wmd_pending_ref"); pollForCredentials(); }
-                        else toast.error(verifyData.error || "Payment verification failed");
-                    } catch (e: any) {
-                        toast.dismiss("pay-verify");
-                        toast.error(e.message || "Failed to verify payment");
-                    }
-                },
-                modal: { ondismiss: () => toast("Payment cancelled") },
+            const zpay = new (window as any).ZPayments({
+                account_id: sessionData.account_id,
+                domain: "IN",
+                otherOptions: { api_key: sessionData.api_key },
             });
-            rzp.open();
+
+            const result = await zpay.requestPaymentMethod({
+                payments_session_id: sessionData.payments_session_id,
+                transaction_type: "payment",
+                amount: parseFloat(sessionData.amount).toFixed(2),
+                currency_code: "INR",
+                reference_number: sessionData.referenceNumber,
+                business: "WebMyDrive",
+                description: `${plan.name} — ${isYearly ? "Yearly" : "Monthly"}`,
+            });
+
+            if (result?.status === "success" || result?.status === "succeeded") {
+                toast.loading("Verifying payment…", { id: "pay-verify" });
+                const verifyData = await api.post("/referral/verify-payment", { orderId: sessionData.orderId });
+                toast.dismiss("pay-verify");
+                if (verifyData.success) { toast.success("Payment successful!"); localStorage.removeItem("wmd_pending_ref"); pollForCredentials(); }
+                else toast.error(verifyData.error || "Payment failed");
+            } else if (result?.status !== "widget_closed" && result?.status !== "cancelled") {
+                toast.error("Payment not completed");
+            }
         } catch (e: any) {
             toast.error(e.message || "Payment initiation failed.");
         } finally {

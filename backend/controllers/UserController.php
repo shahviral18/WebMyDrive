@@ -656,34 +656,40 @@ class UserController
 
         $amountINR = (float)($preview['upgradeTotal'] ?? 1);
 
-        // Create Razorpay order
-        $receipt = 'UPG-' . $userId . '-' . time();
-        $rzpOrder = RazorpayService::createOrder($amountINR, $receipt);
+        // Create Zoho payment session
+        $referenceNumber = 'WMD-UPG-' . strtoupper(bin2hex(random_bytes(4)));
+        $session = ZohoPaymentService::createSession(
+            $amountINR,
+            $referenceNumber,
+            "Upgrade to {$targetPlan['name']}"
+        );
+        $zohoSessionId = $session['id'] ?? '';
 
         // Create pending Order record
         $baseAmt = round($amountINR / 1.18, 2);
         $gstAmt  = round($amountINR - $baseAmt, 2);
         $orderId = Database::insert(
             'INSERT INTO "Order" (userId, planId, amount, baseAmount, gstAmount, currency, status,
-             orderType, billingPeriod, promoCode, discountAmount, fromPlanId, createdAt, updatedAt)
+             orderType, billingPeriod, promoCode, discountAmount, fromPlanId, gatewayTxId, createdAt, updatedAt)
              VALUES (:uid, :pid, :amt, :base, :gst, \'INR\', \'PENDING\',
-             \'UPGRADE\', :bp, :promo, :disc, :fpid, NOW(), NOW())',
+             \'UPGRADE\', :bp, :promo, :disc, :fpid, :sid, NOW(), NOW())',
             [':uid' => $userId, ':pid' => $targetPlanId, ':amt' => $amountINR,
              ':base' => $baseAmt, ':gst' => $gstAmt, ':bp' => $billingPeriod,
              ':promo' => $promoCode ?: null, ':disc' => $preview['discountAmt'] ?? 0,
-             ':fpid' => $ws['planId']]
+             ':fpid' => $ws['planId'], ':sid' => $zohoSessionId]
         );
 
         AuditService::log('PLAN_UPGRADE_INITIATED', $userId, $req->ip,
             ['fromPlanId' => $ws['planId'], 'toPlanId' => $targetPlanId, 'amount' => $amountINR]);
 
         Response::json([
-            'orderId'       => $orderId,
-            'razorpayOrderId' => $rzpOrder['id'],
-            'razorpayKeyId' => RAZORPAY_KEY_ID,
-            'amount'        => $amountINR,
-            'breakdown'     => $preview,
-            'isDemoMode'    => RazorpayService::isDemoMode(),
+            'orderId'            => $orderId,
+            'payments_session_id'=> $zohoSessionId,
+            'account_id'         => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'            => ZOHO_PAYMENTS_API_KEY,
+            'referenceNumber'    => $referenceNumber,
+            'amount'             => $amountINR,
+            'breakdown'          => $preview,
         ]);
     }
 
@@ -692,17 +698,8 @@ class UserController
         $userId    = $req->user['userId'] ?? null;
         if (!$userId) Response::error('Unauthorized', 401);
 
-        $orderId   = (int)($req->body['orderId'] ?? 0);
-        $paymentId = (string)($req->body['razorpayPaymentId'] ?? '');
-        $rzpOrdId  = (string)($req->body['razorpayOrderId'] ?? '');
-        $sig       = (string)($req->body['razorpaySignature'] ?? '');
-
-        if (!$orderId || !$paymentId) Response::error('orderId and razorpayPaymentId required', 400);
-
-        // Verify signature
-        if (!RazorpayService::verifySignature($rzpOrdId, $paymentId, $sig)) {
-            Response::error('Payment signature invalid', 400);
-        }
+        $orderId = (int)($req->body['orderId'] ?? 0);
+        if (!$orderId) Response::error('orderId required', 400);
 
         // Load order
         $order = Database::queryOne(
@@ -710,6 +707,14 @@ class UserController
             [':id' => $orderId, ':uid' => $userId]
         );
         if (!$order) Response::error('Order not found or already processed', 404);
+
+        // Verify payment via Zoho
+        $sessionId = $order['gatewayTxId'] ?? '';
+        if (!$sessionId) Response::error('No payment session found for this order', 400);
+        $sessionStatus = ZohoPaymentService::getSessionStatus($sessionId);
+        if ($sessionStatus !== 'paid') Response::error('Payment not completed (status: ' . $sessionStatus . ')', 402);
+
+        $paymentId = $sessionId;
 
         $targetPlan = Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => $order['planId']]);
         if (!$targetPlan) Response::error('Target plan not found', 404);

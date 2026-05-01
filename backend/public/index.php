@@ -51,11 +51,9 @@ require BASE_PATH . '/services/ConfigService.php';
 require BASE_PATH . '/services/ReferralLinkService.php';
 require BASE_PATH . '/services/ReferralService.php';
 require BASE_PATH . '/services/DistributorService.php';
-require BASE_PATH . '/services/RazorpayService.php';
 require BASE_PATH . '/services/ZohoPaymentService.php';
 require BASE_PATH . '/services/ZohoBooksService.php';
 require BASE_PATH . '/services/SubscriptionService.php';
-require BASE_PATH . '/services/PaymentHandler.php';
 require BASE_PATH . '/services/GoogleWorkspaceService.php';
 
 // Middleware
@@ -70,7 +68,6 @@ require BASE_PATH . '/controllers/UserController.php';
 require BASE_PATH . '/controllers/ReferralController.php';
 require BASE_PATH . '/controllers/DistributorController.php';
 require BASE_PATH . '/controllers/SubscriptionController.php';
-require BASE_PATH . '/controllers/CheckoutController.php';
 require BASE_PATH . '/controllers/DistributorApplicationController.php';
 require BASE_PATH . '/controllers/PaymentController.php';
 
@@ -199,8 +196,6 @@ $router->post('/api/referral/verify-payment', [ReferralController::class, 'verif
 $router->post('/api/referral/process-purchase', [ReferralController::class, 'processPurchase'], $auth);
 
 // ── Subscription ──────────────────────────────────────────────────────────────
-$router->post('/api/subscription/payment-success', [SubscriptionController::class, 'handlePaymentSuccess']);
-$router->post('/api/subscription/verify-payment', [SubscriptionController::class, 'verifyPayment'], $auth);
 $router->get('/api/subscription/status', [SubscriptionController::class, 'getSubscriptionStatus'], $auth);
 $router->get('/api/subscription/details', [SubscriptionController::class, 'getSubscriptionDetails'], $auth);
 $router->post('/api/subscription/renew', [SubscriptionController::class, 'renewSubscription'], $auth);
@@ -214,9 +209,6 @@ $router->get('/api/admin/distributor-applications/:id', [DistributorApplicationC
 $router->patch('/api/admin/distributor-applications/:id', [DistributorApplicationController::class, 'adminUpdate'], $adminOnly);
 $router->get('/api/admin/distributor-applications/:id/files/:type', [DistributorApplicationController::class, 'adminDownload'], $adminOnly);
 
-// ── Checkout (Public - unauthenticated) ───────────────────────────────────
-$router->post('/api/checkout/create-session', [CheckoutController::class, 'createSession']);
-$router->post('/api/checkout/process-payment', [CheckoutController::class, 'processPayment']);
 // ── Distributor ───────────────────────────────────────────────────────────────
 $router->post('/api/distributor/onboard', [DistributorController::class, 'onboard'], $auth);
 $router->get('/api/distributor/dashboard', [DistributorController::class, 'getDashboard'], $auth);
@@ -233,26 +225,6 @@ $router->get('/api/distributor/promo-codes', [DistributorController::class, 'get
 $router->post('/api/payment/create-session', [PaymentController::class, 'createSession']);
 $router->get('/api/payment/status',          [PaymentController::class, 'getStatus']);
 $router->post('/api/webhook/zoho-payment',   [PaymentController::class, 'zohoWebhook']);
-
-// ── Payment webhooks ──────────────────────────────────────────────────────────
-// Raw body available via $request->rawBody
-$router->post('/api/payment/webhook/razorpay', function (Request $req) {
-    // Razorpay webhook signature verification
-    $sig = $req->header('x_razorpay_signature') ?? '';
-    $secret = RAZORPAY_KEY_SECRET;
-    $payload = $req->rawBody;
-
-    if ($secret && $sig) {
-        $expected = hash_hmac('sha256', $payload, $secret);
-        if (!hash_equals($expected, $sig)) {
-            Response::error('Invalid Razorpay webhook signature', 400);
-        }
-    }
-
-    $event = json_decode($payload, true);
-    Logger::info('[Razorpay Webhook] Received event: ' . ($event['event'] ?? 'unknown'));
-    Response::json(['received' => true]);
-});
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
 $router->dispatch();

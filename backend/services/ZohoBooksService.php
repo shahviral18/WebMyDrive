@@ -200,11 +200,10 @@ class ZohoBooksService
             'customer_id'            => $contactId,
             'invoice_date'           => $activationDate,
             'due_date'               => date('Y-m-d', strtotime($activationDate . ' +7 days')),
-            'reference_number'       => $data['referenceNumber'],
+            'reference_number'       => 'WMD-' . str_pad((int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT),
             'notes'                  => "Thank you for subscribing to WebMyDrive.",
             'line_items'             => $lineItems,
             'send_from_org_email_id' => true,
-            'transaction_series'     => 'WebMyDrive',
         ];
 
         Logger::info('[ZohoBooks] Creating invoice payload=' . json_encode($invoicePayload));

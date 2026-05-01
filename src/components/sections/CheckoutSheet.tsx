@@ -397,7 +397,7 @@ export function CheckoutSheet({
             </div>
 
             <p className="text-center text-xs text-slate-400 pb-4">
-              Secured by Razorpay · Zoho Billing System · Powered by WebMyDrive
+              Secured by Zoho Payments · Zoho Billing System · Powered by WebMyDrive
             </p>
           </form>
         </div>

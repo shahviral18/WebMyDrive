@@ -39,7 +39,6 @@ export default function Settings() {
     const [features, setFeatures] = useState(DEFAULT_FEATURES);
     const [gateways, setGateways] = useState({
         activeGateway: "primary", primary: "Zoho Payments", primaryStatus: "online",
-        backup: "Razorpay", backupStatus: "online"
     });
     const [limits, setLimits] = useState({
         sleepInterval: 500, burstLimit: 300, syncConcurrency: 1, availabilityCheckLimit: 5
@@ -213,8 +212,7 @@ export default function Settings() {
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="primary">Primary (Zoho Payments)</SelectItem>
-                                            <SelectItem value="backup">Backup (Razorpay)</SelectItem>
+                                            <SelectItem value="primary">Zoho Payments</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">

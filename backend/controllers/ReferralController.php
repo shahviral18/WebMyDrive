@@ -268,18 +268,26 @@ class ReferralController
             ]);
         }
 
-        // Create Razorpay order
-        $rzpOrder = RazorpayService::createOrder($discountedAmount, (string) $orderId);
+        // Create Zoho payment session
+        $referenceNumber = 'WMD-' . strtoupper(bin2hex(random_bytes(5)));
+        $session = ZohoPaymentService::createSession(
+            $discountedAmount,
+            $referenceNumber,
+            "{$plan['name']} — {$billingPeriod}"
+        );
+        $zohoSessionId = $session['id'] ?? '';
+        Database::execute('UPDATE "Order" SET gatewayTxId = :sid WHERE id = :id', [':sid' => $zohoSessionId, ':id' => $orderId]);
 
         Response::json([
-            'success' => true,
-            'orderId' => $orderId,
-            'rzpOrderId' => $rzpOrder['id'],
-            'amount' => $discountedAmount,
-            'originalAmount' => $amountINR,
-            'discountPct' => (int) round($discountPct * 100),
-            'razorpayKeyId' => RAZORPAY_KEY_ID,
-            'isDemoMode' => RazorpayService::isDemoMode(),
+            'success'            => true,
+            'orderId'            => $orderId,
+            'payments_session_id'=> $zohoSessionId,
+            'account_id'         => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'            => ZOHO_PAYMENTS_API_KEY,
+            'referenceNumber'    => $referenceNumber,
+            'amount'             => $discountedAmount,
+            'originalAmount'     => $amountINR,
+            'discountPct'        => (int) round($discountPct * 100),
         ]);
     }
 
@@ -290,56 +298,36 @@ class ReferralController
             Response::error('Unauthorized', 401);
 
         $orderId = $req->body['orderId'] ?? null;
-        $razorpay_payment_id = (string) ($req->body['razorpay_payment_id'] ?? '');
-        $razorpay_order_id = (string) ($req->body['razorpay_order_id'] ?? '');
-        $razorpay_signature = (string) ($req->body['razorpay_signature'] ?? '');
-
-        if (!$orderId || !$razorpay_payment_id || !$razorpay_order_id || !$razorpay_signature) {
-            Response::error('Missing required payment verification fields', 400);
-        }
+        if (!$orderId) Response::error('orderId is required', 400);
 
         $orderIdNum = (int) $orderId;
 
-        // Verify signature
-        $isValid = RazorpayService::verifySignature($razorpay_order_id, $razorpay_payment_id, $razorpay_signature);
-        if (!$isValid) {
-            AuditService::log('PAYMENT_SIGNATURE_INVALID', $userId, null, ['razorpay_payment_id' => $razorpay_payment_id]);
-            Response::error('Invalid payment signature', 400);
-        }
-
         $order = Database::queryOne('SELECT * FROM "Order" WHERE id = :id', [':id' => $orderIdNum]);
-        if (!$order)
-            Response::error('Order not found', 404);
-        if ((int) $order['userId'] !== $userId)
-            Response::error('Forbidden', 403);
+        if (!$order) Response::error('Order not found', 404);
+        if ((int) $order['userId'] !== $userId) Response::error('Forbidden', 403);
 
         if ($order['status'] === 'PAID')
             Response::json(['success' => true, 'message' => 'Payment already recorded']);
-        if (in_array($order['status'], ['FAILED', 'REFUNDED'])) {
+        if (in_array($order['status'], ['FAILED', 'REFUNDED']))
             Response::error("Order is in terminal state: {$order['status']}", 400);
-        }
 
-        // Prevent double payment
-        $dupPayment = Database::queryOne(
-            'SELECT id FROM "Order" WHERE gatewayTxId = :txid',
-            [':txid' => $razorpay_payment_id]
-        );
-        if ($dupPayment && (int) $dupPayment['id'] !== $orderIdNum) {
-            Response::error('This payment was already applied to another order.', 409);
-        }
+        // Verify payment via Zoho
+        $sessionId = $order['gatewayTxId'] ?? '';
+        if (!$sessionId) Response::error('No payment session found for this order', 400);
+        $sessionStatus = ZohoPaymentService::getSessionStatus($sessionId);
+        if ($sessionStatus !== 'paid') Response::error('Payment not completed (status: ' . $sessionStatus . ')', 402);
 
-        // Mark PAID atomically
+        // Mark PAID
         $now = date('Y-m-d H:i:s');
         Database::execute(
-            'UPDATE "Order" SET status = \'PAID\', gatewayTxId = :txid, updatedAt = :now WHERE id = :id AND status != \'PAID\'',
-            [':txid' => $razorpay_payment_id, ':now' => $now, ':id' => $orderIdNum]
+            'UPDATE "Order" SET status = \'PAID\', paymentId = :sid, updatedAt = :now WHERE id = :id AND status != \'PAID\'',
+            [':sid' => $sessionId, ':now' => $now, ':id' => $orderIdNum]
         );
 
         AuditService::log('PAYMENT_VERIFIED', $userId, null, [
-            'razorpay_payment_id' => $razorpay_payment_id,
-            'razorpay_order_id' => $razorpay_order_id,
-            'planId' => $order['planId'],
-            'amount' => $order['amount'],
+            'zohoSessionId' => $sessionId,
+            'planId'        => $order['planId'],
+            'amount'        => $order['amount'],
         ]);
 
         // Provision workspace (demo mode inline)

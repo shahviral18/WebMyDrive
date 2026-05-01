@@ -56,10 +56,6 @@ define('JWT_EXPIRY',         (int) env('JWT_EXPIRY', 86400 * 7)); // 7 days in s
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 define('GOOGLE_CLIENT_ID',   env('GOOGLE_CLIENT_ID', ''));
 
-// ── Razorpay ──────────────────────────────────────────────────────────────────
-define('RAZORPAY_KEY_ID',    env('RAZORPAY_KEY_ID', ''));
-define('RAZORPAY_KEY_SECRET',env('RAZORPAY_KEY_SECRET', ''));
-
 // ── Zoho Payments ─────────────────────────────────────────────────────────────
 define('ZOHO_PAYMENTS_API_KEY',        env('ZOHO_PAYMENTS_API_KEY',        '1003.2d44007cbc28ce3285119f4ac758d854.702587377c1ecdb22019c757d7c668f0'));
 define('ZOHO_PAYMENTS_ACCOUNT_ID',     env('ZOHO_PAYMENTS_ACCOUNT_ID',     '60035396803'));

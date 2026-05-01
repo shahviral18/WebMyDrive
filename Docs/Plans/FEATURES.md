@@ -41,7 +41,7 @@
 | Post-payment: Google Workspace account provisioned | ✅ | Temp password `Welcome@XXXX` |
 | Post-payment: welcome email with credentials + service links | ✅ | PHP mail() from noreply@webmydrive.com |
 | Post-payment: Zoho Books invoice created & emailed | ✅ | Auto GST: CGST+SGST (Gujarat) or IGST (others) |
-| Razorpay (legacy) | ⚠️ | Code present; demo mode when keys not set |
+| Razorpay | ❌ | Removed — Zoho Payments is the sole gateway |
 | Subscription renewal payments | ⚠️ | Backend logic exists; renewal flow not fully tested |
 
 ---
@@ -144,7 +144,7 @@
 | **Google OAuth 2.0** | ✅ | User login via Google account |
 | **Zoho Payments India** | ✅ | Widget flow; API key + signing key configured |
 | **Zoho Books** | ✅ | Invoice creation + email; OAuth refresh token configured |
-| **Razorpay** | ⚠️ | Keys present but running in demo mode; not primary gateway |
+| **Razorpay** | ❌ | Removed — Zoho Payments is the sole gateway |
 | **PHP mail()** | ✅ | Welcome emails via server sendmail; from noreply@webmydrive.com |
 
 ---
@@ -172,7 +172,7 @@
 | JWT authentication | ✅ | 7-day expiry; separate tokens for user/admin/distributor |
 | Rate limiting | ⚠️ | Middleware exists; limits set for login/register/OTP |
 | CORS | ✅ | Origin whitelist from env |
-| Webhook signature verification | ✅ | HMAC-SHA256 for both Zoho and Razorpay |
+| Webhook signature verification | ✅ | HMAC-SHA256 via Zoho Payments |
 | Audit logging | ✅ | Every create/update/delete logged |
 | Password hashing | ✅ | bcrypt |
 | Credentials outside web root | ✅ | Google API keys at `/home1/wmdadmin/google_api/` |
@@ -184,7 +184,7 @@
 
 1. **Google Workspace OU paths** — Set `googleOrgUnit` for each plan in Admin → Plans (e.g. `/webmydrive.com/A - Basic - 500GB`)
 2. **Google Admin SDK scopes** — Service account needs `admin.directory.user` + `admin.directory.orgunit` in domain-wide delegation
-3. **Zoho Books invoice series** — Confirm prefix with accounts team; currently `WMD`
+3. **Zoho Books invoice series** — Default FY sequence `INV-26-27-000xxx`; invoice reference uses `WMD-{orderId}` format (e.g. `WMD-0001`)
 4. **Email delivery** — PHP mail() works on cPanel but may land in spam; consider Zoho Mail SMTP for production
 5. **Razorpay keys** — Either configure live keys or fully remove from codebase if Zoho Payments is the only gateway
 6. **Webhook URL update** — When going live (root domain), update Zoho webhook URL from `/demo1/...` to `/...`
