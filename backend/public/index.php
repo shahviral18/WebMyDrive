@@ -53,6 +53,7 @@ require BASE_PATH . '/services/ReferralService.php';
 require BASE_PATH . '/services/DistributorService.php';
 require BASE_PATH . '/services/ZohoPaymentService.php';
 require BASE_PATH . '/services/ZohoBooksService.php';
+require BASE_PATH . '/services/ZohoMandateService.php';
 require BASE_PATH . '/services/SubscriptionService.php';
 require BASE_PATH . '/services/GoogleWorkspaceService.php';
 
@@ -182,8 +183,12 @@ $router->get('/api/user/current-plan',     [UserController::class, 'getCurrentPl
 $router->get('/api/user/upgrade-preview',  [UserController::class, 'getUpgradePreview'], $auth);
 $router->post('/api/user/initiate-upgrade',   [UserController::class, 'initiateUpgrade'],   $auth);
 $router->post('/api/user/confirm-upgrade',    [UserController::class, 'confirmUpgrade'],    $auth);
-$router->post('/api/user/schedule-downgrade', [UserController::class, 'scheduleDowngrade'], $auth);
-$router->delete('/api/user/cancel-downgrade', [UserController::class, 'cancelDowngrade'],   $auth);
+$router->post('/api/user/schedule-downgrade',    [UserController::class, 'scheduleDowngrade'],    $auth);
+$router->delete('/api/user/cancel-downgrade',    [UserController::class, 'cancelDowngrade'],      $auth);
+$router->get('/api/user/autorenewal-status',     [UserController::class, 'getAutoRenewalStatus'], $auth);
+$router->post('/api/user/enable-autorenewal',    [UserController::class, 'enableAutoRenewal'],    $auth);
+$router->post('/api/user/confirm-mandate',       [UserController::class, 'confirmMandate'],       $auth);
+$router->post('/api/user/disable-autorenewal',   [UserController::class, 'disableAutoRenewal'],   $auth);
 
 // ── Referral ──────────────────────────────────────────────────────────────────
 $router->get('/api/referral/dashboard', [ReferralController::class, 'getDashboard'], $auth);

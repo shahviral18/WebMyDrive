@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS "Workspace" (
   planId            INT,
   status            VARCHAR(50) NOT NULL DEFAULT 'PENDING',
   renewalDate       DATETIME,
+  billingPeriod     VARCHAR(20) NOT NULL DEFAULT 'yearly',
+  autoRenew         TINYINT(1) NOT NULL DEFAULT 0,
+  mandateId         VARCHAR(255) NULL,
+  graceExpiry       DATETIME NULL,
   googleCustomerId  VARCHAR(255),
   metadata          TEXT,
   createdAt         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -55,6 +59,13 @@ CREATE TABLE IF NOT EXISTS "Workspace" (
   FOREIGN KEY (userId) REFERENCES "User"(id),
   FOREIGN KEY (planId) REFERENCES "Plan"(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Run on existing installs:
+-- ALTER TABLE `Workspace`
+--   ADD COLUMN `billingPeriod` VARCHAR(20) NOT NULL DEFAULT 'yearly' AFTER `renewalDate`,
+--   ADD COLUMN `autoRenew`     TINYINT(1)  NOT NULL DEFAULT 0         AFTER `billingPeriod`,
+--   ADD COLUMN `mandateId`     VARCHAR(255) NULL                      AFTER `autoRenew`,
+--   ADD COLUMN `graceExpiry`   DATETIME    NULL                       AFTER `mandateId`;
 
 CREATE TABLE IF NOT EXISTS "Order" (
   id             INT AUTO_INCREMENT PRIMARY KEY,

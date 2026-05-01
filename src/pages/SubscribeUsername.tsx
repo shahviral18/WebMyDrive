@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Check, Eye, EyeOff, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Lock, Check, Eye, EyeOff, Loader2, CheckCircle2, XCircle, RefreshCw, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -80,6 +80,7 @@ export default function SubscribeUsernamePage() {
   const [showPw, setShowPw] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [autoRenew, setAutoRenew] = useState(true);
 
   const normalizedUsername = useMemo(
     () => username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, ""),
@@ -135,6 +136,7 @@ export default function SubscribeUsernamePage() {
         whatsapp: state.whatsapp || undefined,
         companyName: state.companyName || undefined,
         gstNumber: state.gstNumber || undefined,
+        autoRenew,
         billingAddress: {
           country: state.billing.country,
           state: state.billing.state,
@@ -385,6 +387,60 @@ export default function SubscribeUsernamePage() {
               full
             />
           </dl>
+        </div>
+
+        {/* Auto-Renewal Choice */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-1">Renewal preference</h2>
+          <p className="text-sm text-slate-500 mb-5">Choose how you'd like your subscription renewed when it expires.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setAutoRenew(true)}
+              className={[
+                "flex items-start gap-4 rounded-xl border-2 p-4 text-left transition-all",
+                autoRenew
+                  ? "border-blue-500 bg-blue-50 ring-1 ring-blue-300"
+                  : "border-slate-200 hover:border-blue-300",
+              ].join(" ")}
+            >
+              <div className={["mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2", autoRenew ? "border-blue-500 bg-blue-500" : "border-slate-300"].join(" ")}>
+                {autoRenew && <div className="h-2 w-2 rounded-full bg-white" />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 font-semibold text-slate-800">
+                  <RefreshCw className="w-4 h-4 text-blue-500" /> Enable Auto-Renewal
+                  <span className="ml-1 text-[10px] font-bold uppercase tracking-wide text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">Recommended</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Never lose access to your files. We'll automatically renew your plan before it expires using your saved payment method.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAutoRenew(false)}
+              className={[
+                "flex items-start gap-4 rounded-xl border-2 p-4 text-left transition-all",
+                !autoRenew
+                  ? "border-slate-500 bg-slate-50 ring-1 ring-slate-300"
+                  : "border-slate-200 hover:border-slate-300",
+              ].join(" ")}
+            >
+              <div className={["mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2", !autoRenew ? "border-slate-600 bg-slate-600" : "border-slate-300"].join(" ")}>
+                {!autoRenew && <div className="h-2 w-2 rounded-full bg-white" />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 font-semibold text-slate-800">
+                  <CalendarClock className="w-4 h-4 text-slate-500" /> I'll renew manually
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  We'll send you reminders at 30 days and 7 days before expiry so you can renew on your own schedule.
+                </p>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* Actions */}

@@ -5,6 +5,7 @@ import {
     Monitor, Phone, Shield, Briefcase,
     CheckCircle2, AlertCircle, Info, FolderOpen,
     Clock, MapPin, ShieldAlert, ShieldCheck, ExternalLink,
+    RefreshCw, CalendarClock,
 } from "lucide-react";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
@@ -258,6 +259,104 @@ export default function UserSettings() {
             .catch(() => { setTwoFAProvisioned(false); setTwoFAEnabled(null); });
     }, []);
 
+    // ── Auto-Renewal ──────────────────────────────────────────────────────────
+    const [autoRenew, setAutoRenew]           = useState(false);
+    const [mandateStatus, setMandateStatus]   = useState<"none" | "pending" | "active">("none");
+    const [autoRenewLoading, setAutoRenewLoading] = useState(false);
+
+    useEffect(() => {
+        api.get("/user/autorenewal-status")
+            .then(d => {
+                setAutoRenew(d.autoRenew ?? false);
+                setMandateStatus(d.mandateStatus ?? "none");
+            })
+            .catch(() => {});
+    }, []);
+
+    async function handleEnableAutoRenewal() {
+        setAutoRenewLoading(true);
+        try {
+            const res = await api.post("/user/enable-autorenewal", {});
+            if (!res.success) { toast.error(res.error || "Failed to enable auto-renewal"); return; }
+
+            setAutoRenew(true);
+            setMandateStatus("pending");
+
+            // Open Zoho mandate widget for user to authorize
+            const loadAndOpen = async () => {
+                const zpay = new (window as any).ZPayments({
+                    account_id: res.account_id,
+                    domain: "IN",
+                    otherOptions: { api_key: res.api_key },
+                });
+                try {
+                    await zpay.requestPaymentMethod({
+                        payments_session_id: res.mandate_session_id,
+                        transaction_type: "mandate",
+                        amount: parseFloat(res.max_amount).toFixed(2),
+                        currency_code: "INR",
+                        business: "WebMyDrive",
+                        description: "WebMyDrive Auto-Renewal Authorization",
+                    });
+                    // After widget completes, confirm with backend
+                    const confirm = await api.post("/user/confirm-mandate", {});
+                    if (confirm.mandateStatus === "active") {
+                        setMandateStatus("active");
+                        toast.success("Auto-renewal is now active.");
+                    } else {
+                        toast.info("Authorization is being processed. Check back in a moment.");
+                    }
+                } catch {
+                    toast.info("Complete the mandate authorization to activate auto-renewal.");
+                }
+            };
+
+            if ((window as any).ZPayments) {
+                loadAndOpen();
+            } else {
+                const script = document.createElement("script");
+                script.src = "https://static.zohocdn.com/zpay/zpay-js/v1/zpayments.js";
+                script.async = true;
+                script.onload = loadAndOpen;
+                script.onerror = () => toast.error("Failed to load payment widget.");
+                document.body.appendChild(script);
+            }
+        } catch (err: any) {
+            toast.error(err.message || "Failed to enable auto-renewal");
+        } finally {
+            setAutoRenewLoading(false);
+        }
+    }
+
+    async function handleDisableAutoRenewal() {
+        if (!confirm("Disable auto-renewal? Your subscription will not renew automatically.")) return;
+        setAutoRenewLoading(true);
+        try {
+            await api.post("/user/disable-autorenewal", {});
+            setAutoRenew(false);
+            setMandateStatus("none");
+            toast.success("Auto-renewal disabled.");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to disable auto-renewal");
+        } finally {
+            setAutoRenewLoading(false);
+        }
+    }
+
+    async function handleCheckMandateStatus() {
+        setAutoRenewLoading(true);
+        try {
+            const res = await api.post("/user/confirm-mandate", {});
+            setMandateStatus(res.mandateStatus ?? "pending");
+            if (res.mandateStatus === "active") toast.success("Auto-renewal mandate is now active.");
+            else toast.info("Mandate not yet authorized. Please complete the bank approval.");
+        } catch (err: any) {
+            toast.error(err.message || "Failed to check mandate status");
+        } finally {
+            setAutoRenewLoading(false);
+        }
+    }
+
     // ── Workspace tab ─────────────────────────────────────────────────────────
     const [drivesLoading, setDrivesLoading] = useState(false);
     const [sharedDrives, setSharedDrives] = useState<{ id: string; name: string; createdTime: string; fileCount: number; storageUsed: number }[]>([]);
@@ -403,6 +502,51 @@ export default function UserSettings() {
                                 )}
                             </Card>
                         )}
+
+                        {/* Auto-Renewal */}
+                        <Card className={autoRenew && mandateStatus === "active"
+                            ? "border-emerald-400/50 dark:border-emerald-600/40 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm"
+                            : "border-border shadow-sm"
+                        }>
+                            <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center gap-2 text-sm">
+                                    {autoRenew && mandateStatus === "active"
+                                        ? <><RefreshCw className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 dark:text-emerald-400">Auto-Renewal — Active</span></>
+                                        : <><CalendarClock className="w-4 h-4" /><span>Auto-Renewal</span></>
+                                    }
+                                </CardTitle>
+                                <CardDescription>
+                                    {!autoRenew && "Enable auto-renewal to never lose access to your files. We'll charge your saved payment method before your plan expires."}
+                                    {autoRenew && mandateStatus === "pending" && "Auto-renewal is enabled but awaiting your bank authorization. Please complete the approval to activate it."}
+                                    {autoRenew && mandateStatus === "active" && "Your subscription renews automatically. You'll be notified 7 days before each renewal."}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="pt-0 flex flex-wrap gap-2">
+                                {!autoRenew && (
+                                    <Button size="sm" onClick={handleEnableAutoRenewal} disabled={autoRenewLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                                        {autoRenewLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                                        Enable Auto-Renewal
+                                    </Button>
+                                )}
+                                {autoRenew && mandateStatus === "pending" && (
+                                    <>
+                                        <Button size="sm" onClick={handleCheckMandateStatus} disabled={autoRenewLoading} variant="outline">
+                                            {autoRenewLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                                            Check Authorization Status
+                                        </Button>
+                                        <Button size="sm" onClick={handleDisableAutoRenewal} disabled={autoRenewLoading} variant="outline" className="text-rose-600 border-rose-300 hover:bg-rose-50">
+                                            Cancel
+                                        </Button>
+                                    </>
+                                )}
+                                {autoRenew && mandateStatus === "active" && (
+                                    <Button size="sm" onClick={handleDisableAutoRenewal} disabled={autoRenewLoading} variant="outline" className="text-rose-600 border-rose-300 hover:bg-rose-50">
+                                        {autoRenewLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                                        Disable Auto-Renewal
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
 
                         {/* Change Password */}
                         <Card className="border-border shadow-sm">

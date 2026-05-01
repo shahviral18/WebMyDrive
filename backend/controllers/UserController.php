@@ -830,6 +830,148 @@ class UserController
         Response::json(['success' => true]);
     }
 
+    // ── Auto-Renewal: status ──────────────────────────────────────────────────
+
+    public function getAutoRenewalStatus(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $ws = Database::queryOne(
+            'SELECT autoRenew, mandateId FROM "Workspace" WHERE userId = :uid AND status = \'ACTIVE\'',
+            [':uid' => $userId]
+        );
+        if (!$ws) Response::error('No active workspace', 404);
+
+        $autoRenew = (bool)($ws['autoRenew'] ?? false);
+        $mandateRaw = $ws['mandateId'] ?? '';
+
+        // Distinguish between pending session and confirmed mandate
+        $mandateStatus = 'none';
+        if ($mandateRaw) {
+            $mandateStatus = str_starts_with($mandateRaw, 'SESSION:') ? 'pending' : 'active';
+        }
+
+        Response::json([
+            'autoRenew'     => $autoRenew,
+            'mandateStatus' => $mandateStatus,
+        ]);
+    }
+
+    // ── Auto-Renewal: enable (creates mandate session) ────────────────────────
+
+    public function enableAutoRenewal(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $ws = Database::queryOne(
+            'SELECT w.id, w.mandateId, p.price, p.monthlyPrice, w.billingPeriod
+               FROM "Workspace" w JOIN "Plan" p ON p.id = w.planId
+              WHERE w.userId = :uid AND w.status = \'ACTIVE\'',
+            [':uid' => $userId]
+        );
+        if (!$ws) Response::error('No active workspace', 404);
+
+        $billingPeriod = strtolower($ws['billingPeriod'] ?? 'yearly');
+        $planAmt = ($billingPeriod === 'monthly')
+            ? (float)($ws['monthlyPrice'] ?? round((float)$ws['price'] / 12, 2))
+            : (float)($ws['price'] ?? 0);
+        $maxAmount  = round($planAmt * 1.5, 2);
+        $mandateRef = 'WMD-MND-' . strtoupper(bin2hex(random_bytes(4)));
+
+        try {
+            $session = ZohoMandateService::createMandateSession($maxAmount, $mandateRef, 'WebMyDrive Auto-Renewal');
+        } catch (Throwable $e) {
+            Response::error('Could not create mandate session: ' . $e->getMessage(), 502);
+        }
+
+        $sessionId = $session['id'] ?? ($session['mandate_session_id'] ?? '');
+        if (!$sessionId) Response::error('Mandate session creation returned no ID', 502);
+
+        $now = date('Y-m-d H:i:s');
+        Database::execute(
+            'UPDATE "Workspace" SET autoRenew=1, mandateId=:mid, updatedAt=:now WHERE id=:id',
+            [':mid' => 'SESSION:' . $sessionId, ':now' => $now, ':id' => (int)$ws['id']]
+        );
+
+        AuditService::log('AUTO_RENEWAL_ENABLED', $userId, $req->ip, ['sessionId' => $sessionId]);
+
+        Response::json([
+            'success'           => true,
+            'mandate_session_id'=> $sessionId,
+            'account_id'        => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'           => ZOHO_PAYMENTS_API_KEY,
+            'max_amount'        => $maxAmount,
+        ]);
+    }
+
+    // ── Auto-Renewal: confirm mandate after widget authorization ──────────────
+
+    public function confirmMandate(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $ws = Database::queryOne(
+            'SELECT id, mandateId FROM "Workspace" WHERE userId = :uid AND status = \'ACTIVE\'',
+            [':uid' => $userId]
+        );
+        if (!$ws) Response::error('No active workspace', 404);
+
+        $mandateRaw = $ws['mandateId'] ?? '';
+        if (!str_starts_with($mandateRaw, 'SESSION:')) {
+            Response::json(['success' => true, 'mandateStatus' => 'active']);
+            return;
+        }
+
+        $sessionId = substr($mandateRaw, strlen('SESSION:'));
+        $mandateId = ZohoMandateService::getMandateIdFromSession($sessionId);
+
+        if (!$mandateId) {
+            Response::json(['success' => false, 'mandateStatus' => 'pending', 'message' => 'Mandate not yet authorized']);
+            return;
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Database::execute(
+            'UPDATE "Workspace" SET mandateId=:mid, updatedAt=:now WHERE id=:id',
+            [':mid' => $mandateId, ':now' => $now, ':id' => (int)$ws['id']]
+        );
+
+        AuditService::log('MANDATE_CONFIRMED', $userId, $req->ip, ['mandateId' => $mandateId]);
+        Response::json(['success' => true, 'mandateStatus' => 'active']);
+    }
+
+    // ── Auto-Renewal: disable ─────────────────────────────────────────────────
+
+    public function disableAutoRenewal(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $ws = Database::queryOne(
+            'SELECT id, mandateId FROM "Workspace" WHERE userId = :uid AND status = \'ACTIVE\'',
+            [':uid' => $userId]
+        );
+        if (!$ws) Response::error('No active workspace', 404);
+
+        $mandateRaw = $ws['mandateId'] ?? '';
+        // Only cancel if it's a confirmed mandate (not a pending session)
+        if ($mandateRaw && !str_starts_with($mandateRaw, 'SESSION:')) {
+            ZohoMandateService::cancelMandate($mandateRaw);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        Database::execute(
+            'UPDATE "Workspace" SET autoRenew=0, mandateId=NULL, graceExpiry=NULL, updatedAt=:now WHERE id=:id',
+            [':now' => $now, ':id' => (int)$ws['id']]
+        );
+
+        AuditService::log('AUTO_RENEWAL_DISABLED', $userId, $req->ip, []);
+        Response::json(['success' => true]);
+    }
+
     private static function parseUserAgent(string $ua): string
     {
         if (!$ua) return 'Unknown Device';

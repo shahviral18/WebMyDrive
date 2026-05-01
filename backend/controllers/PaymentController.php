@@ -32,6 +32,7 @@ class PaymentController
         $companyName   = (string)($b['companyName']   ?? '');
         $gstNumber     = (string)($b['gstNumber']     ?? '');
         $billingAddr   = $b['billingAddress'] ?? [];
+        $autoRenew     = !empty($b['autoRenew']);
 
         if (!$planId || $amount <= 0 || !$username || !$password || !$customerEmail) {
             Response::error('planId, amount, username, password and customerEmail are required', 400);
@@ -60,6 +61,7 @@ class PaymentController
             'companyName'      => $companyName,
             'gstNumber'        => $gstNumber,
             'billingAddress'   => $billingAddr,
+            'autoRenew'        => $autoRenew,
         ];
         $checkoutMeta = json_encode($checkoutMetaArr);
 
@@ -314,27 +316,58 @@ class PaymentController
             $renewalDate   = $billingPeriod === 'MONTHLY'
                 ? date('Y-m-d H:i:s', strtotime('+1 month'))
                 : date('Y-m-d H:i:s', strtotime('+1 year'));
+            $autoRenew     = !empty($meta['autoRenew']) ? 1 : 0;
+            $billingPeriodLower = strtolower($billingPeriod);
 
             // Check if workspace exists
             $wsExists = Database::queryOne('SELECT id FROM `Workspace` WHERE userId = :uid', [':uid' => $userId]);
             if (!$wsExists) {
                 Database::insert(
                     'INSERT INTO `Workspace`
-                     (userId, planId, status, renewalDate, createdAt, updatedAt)
-                     VALUES (:uid, :planId, \'ACTIVE\', :renewal, :now1, :now2)',
+                     (userId, planId, status, renewalDate, billingPeriod, autoRenew, createdAt, updatedAt)
+                     VALUES (:uid, :planId, \'ACTIVE\', :renewal, :bp, :ar, :now1, :now2)',
                     [
                         ':uid'     => $userId,
                         ':planId'  => (int) $checkout['planId'],
                         ':renewal' => $renewalDate,
+                        ':bp'      => $billingPeriodLower,
+                        ':ar'      => $autoRenew,
                         ':now1'    => $now,
                         ':now2'    => $now,
                     ]
                 );
             } else {
                 Database::execute(
-                    'UPDATE `Workspace` SET planId=:planId, status=\'ACTIVE\', renewalDate=:renewal, updatedAt=:now WHERE userId=:uid',
-                    [':planId' => (int) $checkout['planId'], ':renewal' => $renewalDate, ':now' => $now, ':uid' => $userId]
+                    'UPDATE `Workspace` SET planId=:planId, status=\'ACTIVE\', renewalDate=:renewal,
+                     billingPeriod=:bp, autoRenew=:ar, updatedAt=:now WHERE userId=:uid',
+                    [':planId' => (int) $checkout['planId'], ':renewal' => $renewalDate,
+                     ':bp' => $billingPeriodLower, ':ar' => $autoRenew, ':now' => $now, ':uid' => $userId]
                 );
+            }
+
+            // 4a. If auto-renew opted in, create mandate session (non-fatal — requires ZohoPay.mandates.ALL scope)
+            if ($autoRenew) {
+                try {
+                    $plan = Database::queryOne('SELECT price, monthlyPrice FROM `Plan` WHERE id = :id', [':id' => (int)$checkout['planId']]);
+                    $planAmt = ($billingPeriodLower === 'monthly')
+                        ? (float)($plan['monthlyPrice'] ?? round((float)$plan['price'] / 12, 2))
+                        : (float)($plan['price'] ?? 0);
+                    $maxAmount   = round($planAmt * 1.5, 2);
+                    $mandateRef  = 'WMD-MND-' . strtoupper(bin2hex(random_bytes(4)));
+                    $mandateSess = ZohoMandateService::createMandateSession(
+                        $maxAmount, $mandateRef, 'WebMyDrive Auto-Renewal'
+                    );
+                    $mandateSessionId = $mandateSess['id'] ?? ($mandateSess['mandate_session_id'] ?? '');
+                    if ($mandateSessionId) {
+                        Database::execute(
+                            'UPDATE `Workspace` SET mandateId=:mid, updatedAt=:now WHERE userId=:uid',
+                            [':mid' => 'SESSION:' . $mandateSessionId, ':now' => $now, ':uid' => $userId]
+                        );
+                        Logger::info("[ZohoWebhook] Mandate session created={$mandateSessionId} for userId={$userId}");
+                    }
+                } catch (Throwable $me) {
+                    Logger::error('[ZohoWebhook] Mandate session creation failed (non-fatal): ' . $me->getMessage());
+                }
             }
 
             // 5. Mark checkout as completed
