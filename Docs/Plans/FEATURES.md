@@ -184,7 +184,7 @@
 
 1. **Google Workspace OU paths** — Set `googleOrgUnit` for each plan in Admin → Plans (e.g. `/webmydrive.com/A - Basic - 500GB`)
 2. **Google Admin SDK scopes** — Service account needs `admin.directory.user` + `admin.directory.orgunit` in domain-wide delegation
-3. **Zoho Books invoice series** — Confirm prefix with accounts team; currently `WMD`
+3. **Zoho Books invoice series** — Default FY sequence `INV-26-27-000xxx`; invoice reference uses `WMD-{orderId}` format (e.g. `WMD-0001`)
 4. **Email delivery** — PHP mail() works on cPanel but may land in spam; consider Zoho Mail SMTP for production
 5. **Razorpay keys** — Either configure live keys or fully remove from codebase if Zoho Payments is the only gateway
 6. **Webhook URL update** — When going live (root domain), update Zoho webhook URL from `/demo1/...` to `/...`

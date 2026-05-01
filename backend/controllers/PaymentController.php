@@ -411,6 +411,7 @@ class PaymentController
                     'renewalDate'    => $renewalDate,
                     'baseAmount'     => (float) $checkout['amount'],
                     'referenceNumber'=> $referenceNumber,
+                    'orderId'        => $orderId,
                 ]);
             } catch (Throwable $ie) {
                 Logger::error('[ZohoWebhook] Invoice creation failed (non-fatal): ' . $ie->getMessage());
