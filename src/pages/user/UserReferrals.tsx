@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Users, Copy, Check, Loader2, ShieldCheck, DollarSign, TrendingUp, UserPlus, RefreshCw, Pencil, Shuffle, AlertTriangle } from "lucide-react";
+import { Users, Copy, Check, Loader2, ShieldCheck, DollarSign, TrendingUp, UserPlus, RefreshCw, AlertTriangle, Sparkles, EyeOff } from "lucide-react";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/contexts/UserContext";
@@ -26,7 +26,9 @@ export default function UserReferrals() {
     const [refreshing, setRefreshing] = useState(false);
 
     // Custom code state
+    const [vibe, setVibe] = useState<"showoff" | "secret" | null>(null);
     const [customCode, setCustomCode] = useState("");
+    const [previewRandom, setPreviewRandom] = useState("");
     const [savingCode, setSavingCode] = useState(false);
     const [showWarning, setShowWarning] = useState(false);
 
@@ -104,6 +106,8 @@ export default function UserReferrals() {
             const result = await api.patch('/user/referral-code', { code });
             toast.success(`Referral code updated to ${result.newCode}`);
             setCustomCode("");
+            setVibe(null);
+            setPreviewRandom("");
             await fetchData();
         } catch (e: any) {
             toast.error(e.message || "Failed to update code.");
@@ -237,53 +241,21 @@ export default function UserReferrals() {
                         </CardContent>
                     </Card>
 
-                    {/* Customize Referral Code */}
+                    {/* Your Referral Style */}
                     <Card className="border-border shadow-sm h-full">
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Pencil className="w-4 h-4 text-primary" />
-                                Customize Your Code
-                            </CardTitle>
+                            <CardTitle>Your Referral Style</CardTitle>
                             <CardDescription>
-                                Set a custom code that reflects your name or brand. You can change it {MAX_CHANGES} times total.
+                                How do you want to share your link?
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={customCode}
-                                    onChange={e => {
-                                        setCustomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
-                                        setShowWarning(false);
-                                    }}
-                                    placeholder="E.g. VIRAL2026"
-                                    maxLength={16}
-                                    disabled={changesRemaining <= 0 || savingCode}
-                                    className="flex-1 font-mono font-bold tracking-widest text-sm h-10 px-3 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                                />
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    title="Generate random code"
-                                    disabled={changesRemaining <= 0 || savingCode}
-                                    onClick={() => { setCustomCode(randomCode()); setShowWarning(false); }}
-                                    className="h-10 w-10 shrink-0"
-                                >
-                                    <Shuffle className="w-4 h-4" />
-                                </Button>
-                            </div>
-
-                            <p className="text-xs text-muted-foreground">
-                                6–16 characters, letters and numbers only. Uppercase enforced.
-                            </p>
-
                             {/* Change counter */}
                             <div className="flex items-center gap-2">
                                 {Array.from({ length: MAX_CHANGES }).map((_, i) => (
                                     <div
                                         key={i}
-                                        className={`h-2 flex-1 rounded-full ${i < changesUsed ? "bg-primary" : "bg-border"}`}
+                                        className={`h-1.5 flex-1 rounded-full ${i < changesUsed ? "bg-primary" : "bg-border"}`}
                                     />
                                 ))}
                                 <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -293,55 +265,154 @@ export default function UserReferrals() {
                                 </span>
                             </div>
 
-                            {/* Warning before save */}
-                            {showWarning && (
-                                <div className="flex items-start gap-2 p-3 rounded-md bg-warning/10 border border-warning/30 text-xs text-foreground">
-                                    <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
-                                    <span>
-                                        <strong>Heads up:</strong> Changing your code will invalidate your current referral link. Anyone using the old link won't be credited. Are you sure?
-                                    </span>
-                                </div>
-                            )}
-
                             {changesRemaining <= 0 ? (
-                                <Button disabled className="w-full opacity-50 cursor-not-allowed">
-                                    Change limit reached
-                                </Button>
-                            ) : !showWarning ? (
-                                <Button
-                                    onClick={() => {
-                                        const code = customCode.trim();
-                                        if (!code || !/^[A-Z0-9]{6,16}$/.test(code)) {
-                                            toast.error("Code must be 6–16 alphanumeric characters.");
-                                            return;
-                                        }
-                                        setShowWarning(true);
-                                    }}
-                                    className="w-full bg-primary text-white hover:bg-primary/90"
-                                    disabled={savingCode}
-                                >
-                                    <Pencil className="w-4 h-4 mr-2" />
-                                    Save Code
-                                </Button>
-                            ) : (
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={() => setShowWarning(false)}
-                                        disabled={savingCode}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        className="flex-1 bg-primary text-white hover:bg-primary/90"
-                                        onClick={handleSaveCode}
-                                        disabled={savingCode}
-                                    >
-                                        {savingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                                        Yes, Change It
-                                    </Button>
+                                <div className="flex flex-col items-center gap-2 py-6 text-center text-muted-foreground">
+                                    <ShieldCheck className="w-8 h-8" />
+                                    <p className="text-sm font-medium">Change limit reached</p>
+                                    <p className="text-xs">You've used both of your code changes. Your current code is locked in.</p>
                                 </div>
+                            ) : (
+                                <>
+                                    {/* Vibe picker */}
+                                    {!vibe && (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                onClick={() => {
+                                                    setVibe("showoff");
+                                                    setCustomCode("");
+                                                    setShowWarning(false);
+                                                }}
+                                                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-center group"
+                                            >
+                                                <span className="text-2xl">🎉</span>
+                                                <p className="text-sm font-semibold text-foreground group-hover:text-primary">Show off your brand</p>
+                                                <p className="text-xs text-muted-foreground">Let everyone know it's you</p>
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const r = randomCode();
+                                                    setVibe("secret");
+                                                    setPreviewRandom(r);
+                                                    setCustomCode(r);
+                                                    setShowWarning(false);
+                                                }}
+                                                className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all text-center group"
+                                            >
+                                                <span className="text-2xl">🤫</span>
+                                                <p className="text-sm font-semibold text-foreground group-hover:text-primary">Keep it secret</p>
+                                                <p className="text-xs text-muted-foreground">Share anonymously</p>
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Show off — custom input */}
+                                    {vibe === "showoff" && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-xs text-primary font-medium">
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                Make it yours
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={customCode}
+                                                autoFocus
+                                                onChange={e => {
+                                                    setCustomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                                                    setShowWarning(false);
+                                                }}
+                                                placeholder="E.g. VIRAL2026"
+                                                maxLength={16}
+                                                disabled={savingCode}
+                                                className="w-full font-mono font-bold tracking-widest text-lg h-12 px-4 rounded-xl border-2 border-primary/30 bg-primary/5 text-primary focus:outline-none focus:border-primary disabled:opacity-50"
+                                            />
+                                            <p className="text-xs text-muted-foreground">6–16 characters, letters and numbers only.</p>
+                                        </div>
+                                    )}
+
+                                    {/* Keep it secret — random preview */}
+                                    {vibe === "secret" && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+                                                <EyeOff className="w-3.5 h-3.5" />
+                                                Your anonymous code
+                                            </div>
+                                            <div className="flex items-center gap-2 p-3 rounded-xl border-2 border-border bg-muted/30">
+                                                <span className="flex-1 font-mono font-bold tracking-widest text-lg text-foreground">{previewRandom}</span>
+                                                <button
+                                                    onClick={() => {
+                                                        const r = randomCode();
+                                                        setPreviewRandom(r);
+                                                        setCustomCode(r);
+                                                        setShowWarning(false);
+                                                    }}
+                                                    className="text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1 rounded"
+                                                    disabled={savingCode}
+                                                >
+                                                    regenerate
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Warning */}
+                                    {showWarning && vibe && (
+                                        <div className="flex items-start gap-2 p-3 rounded-md bg-warning/10 border border-warning/30 text-xs text-foreground">
+                                            <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
+                                            <span>
+                                                <strong>Heads up:</strong> Your old referral link will stop working. Anyone with the old link won't be credited. Sure?
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Action buttons */}
+                                    {vibe && !showWarning && (
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                className="flex-1"
+                                                onClick={() => { setVibe(null); setCustomCode(""); setShowWarning(false); }}
+                                                disabled={savingCode}
+                                            >
+                                                Back
+                                            </Button>
+                                            <Button
+                                                className="flex-1 bg-primary text-white hover:bg-primary/90"
+                                                onClick={() => {
+                                                    const code = customCode.trim();
+                                                    if (!code || !/^[A-Z0-9]{6,16}$/.test(code)) {
+                                                        toast.error("Code must be 6–16 alphanumeric characters.");
+                                                        return;
+                                                    }
+                                                    setShowWarning(true);
+                                                }}
+                                                disabled={savingCode}
+                                            >
+                                                {vibe === "secret" ? "Use This Code" : "Save Code"}
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {vibe && showWarning && (
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                className="flex-1"
+                                                onClick={() => setShowWarning(false)}
+                                                disabled={savingCode}
+                                            >
+                                                Cancel
+                                            </Button>
+                                            <Button
+                                                className="flex-1 bg-primary text-white hover:bg-primary/90"
+                                                onClick={handleSaveCode}
+                                                disabled={savingCode}
+                                            >
+                                                {savingCode && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                                                Yes, Change It
+                                            </Button>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </CardContent>
                     </Card>

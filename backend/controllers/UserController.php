@@ -1017,7 +1017,7 @@ class UserController
 
         // Update the ReferralLink record so the new code takes effect immediately
         Database::execute(
-            'UPDATE `ReferralLink` SET code = :code, updatedAt = NOW() WHERE userId = :uid AND type = \'USER\'',
+            'UPDATE `ReferralLink` SET code = :code, updatedAt = NOW() WHERE referrerId = :uid AND role = \'USER\'',
             [':code' => $newCode, ':uid' => $userId]
         );
 
