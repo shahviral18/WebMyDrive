@@ -244,7 +244,7 @@ class ReferralService
     public static function getUserReferralDashboard(int $userId): ?array
     {
         $user = Database::queryOne(
-            'SELECT id, walletBalance FROM "User" WHERE id = :id',
+            'SELECT id, walletBalance, referralCodeChanges FROM `User` WHERE id = :id',
             [':id' => $userId]
         );
         if (!$user)
@@ -272,12 +272,16 @@ class ReferralService
         $config = ConfigService::getUserReferralConfig();
         $activeLink = ReferralLinkService::getActiveLink($userId, 'USER');
 
+        $changesUsed = (int)($user['referralCodeChanges'] ?? 0);
+
         return [
-            'promoCode' => $activeLink['code'],
-            'totalReferrals' => $totalReferrals,
-            'activeReferrals' => $activeRefereesCount,
-            'creditBalance' => (float) $user['walletBalance'],
+            'promoCode'                     => $activeLink['code'],
+            'totalReferrals'                => $totalReferrals,
+            'activeReferrals'               => $activeRefereesCount,
+            'creditBalance'                 => (float) $user['walletBalance'],
             'isEligibleForDistributorNudge' => $totalReferrals >= (int) ($config['nudgeThreshold'] ?? 5),
+            'changesUsed'                   => $changesUsed,
+            'changesRemaining'              => max(0, 2 - $changesUsed),
         ];
     }
 

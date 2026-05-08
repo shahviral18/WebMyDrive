@@ -972,6 +972,68 @@ class UserController
         Response::json(['success' => true]);
     }
 
+    public function updateReferralCode(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $body = $req->body;
+        $newCode = strtoupper(trim((string)($body['code'] ?? '')));
+
+        if (!$newCode || !preg_match('/^[A-Z0-9]{6,16}$/', $newCode)) {
+            Response::error('Code must be 6–16 alphanumeric characters.', 422);
+        }
+
+        $user = Database::queryOne(
+            'SELECT id, referralCode, referralCodeChanges FROM `User` WHERE id = :id',
+            [':id' => $userId]
+        );
+        if (!$user) Response::error('User not found', 404);
+
+        $changesUsed = (int)($user['referralCodeChanges'] ?? 0);
+        $maxChanges  = 2;
+
+        if ($changesUsed >= $maxChanges) {
+            Response::error('You have reached the maximum number of referral code changes (2).', 422);
+        }
+
+        // Check uniqueness across User and Distributor tables
+        $existingUser = Database::queryOne(
+            'SELECT id FROM `User` WHERE referralCode = :code AND id != :uid',
+            [':code' => $newCode, ':uid' => $userId]
+        );
+        if ($existingUser) Response::error('This code is already taken. Please choose a different one.', 409);
+
+        $existingDist = Database::queryOne(
+            'SELECT id FROM `Distributor` WHERE referralCode = :code',
+            [':code' => $newCode]
+        );
+        if ($existingDist) Response::error('This code is already taken. Please choose a different one.', 409);
+
+        Database::execute(
+            'UPDATE `User` SET referralCode = :code, referralCodeChanges = referralCodeChanges + 1, updatedAt = NOW() WHERE id = :id',
+            [':code' => $newCode, ':id' => $userId]
+        );
+
+        // Update the ReferralLink record so the new code takes effect immediately
+        Database::execute(
+            'UPDATE `ReferralLink` SET code = :code, updatedAt = NOW() WHERE userId = :uid AND type = \'USER\'',
+            [':code' => $newCode, ':uid' => $userId]
+        );
+
+        AuditService::log('REFERRAL_CODE_CHANGED', $userId, $req->ip ?? '', [
+            'oldCode' => $user['referralCode'],
+            'newCode' => $newCode,
+        ]);
+
+        Response::json([
+            'success'          => true,
+            'newCode'          => $newCode,
+            'changesUsed'      => $changesUsed + 1,
+            'changesRemaining' => $maxChanges - ($changesUsed + 1),
+        ]);
+    }
+
     private static function parseUserAgent(string $ua): string
     {
         if (!$ua) return 'Unknown Device';

@@ -190,6 +190,7 @@ $router->get('/api/user/autorenewal-status',     [UserController::class, 'getAut
 $router->post('/api/user/enable-autorenewal',    [UserController::class, 'enableAutoRenewal'],    $auth);
 $router->post('/api/user/confirm-mandate',       [UserController::class, 'confirmMandate'],       $auth);
 $router->post('/api/user/disable-autorenewal',   [UserController::class, 'disableAutoRenewal'],   $auth);
+$router->patch('/api/user/referral-code',        [UserController::class, 'updateReferralCode'],   $auth);
 
 // ── Referral ──────────────────────────────────────────────────────────────────
 $router->get('/api/referral/dashboard', [ReferralController::class, 'getDashboard'], $auth);

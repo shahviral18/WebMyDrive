@@ -1,25 +1,34 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Users, Copy, Check, Lock, Save, Loader2, ShieldCheck, DollarSign, TrendingUp, UserPlus, RefreshCw } from "lucide-react";
+import { Users, Copy, Check, Loader2, ShieldCheck, DollarSign, TrendingUp, UserPlus, RefreshCw, Pencil, Shuffle, AlertTriangle } from "lucide-react";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { useUser } from "@/contexts/UserContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 
+const MAX_CHANGES = 2;
+
+function randomCode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
 export default function UserReferrals() {
     const { user } = useUser();
-    const [savingPassword, setSavingPassword] = useState(false);
     const [copied, setCopied] = useState(false);
-    const [referralPassword, setReferralPassword] = useState("");
     const linkRef = useRef<HTMLInputElement>(null);
 
     const [referralData, setReferralData] = useState<any>(null);
     const [recentReferrals, setRecentReferrals] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Custom code state
+    const [customCode, setCustomCode] = useState("");
+    const [savingCode, setSavingCode] = useState(false);
+    const [showWarning, setShowWarning] = useState(false);
 
     const fetchData = async () => {
         setRefreshing(true);
@@ -44,11 +53,10 @@ export default function UserReferrals() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Referral code — always from DB, never generated client-side
     const referralCode: string | null = referralData?.promoCode || null;
+    const changesUsed: number = referralData?.changesUsed ?? 0;
+    const changesRemaining: number = referralData?.changesRemaining ?? MAX_CHANGES;
 
-    // ← IMPORTANT: link goes to /login so unauthenticated buyers
-    //   sign in first; the ref param is preserved & auto-applied after login
     const referralLink = referralCode
         ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/ref/${referralCode}`
         : "";
@@ -80,14 +88,28 @@ export default function UserReferrals() {
         }
     };
 
-    const handleUpdatePassword = () => {
-        if (!referralPassword) { toast.error("Please enter a new password"); return; }
-        setSavingPassword(true);
-        setTimeout(() => {
-            setSavingPassword(false);
-            setReferralPassword("");
-            toast.success("Referral password updated");
-        }, 1000);
+    const handleSaveCode = async () => {
+        const code = customCode.toUpperCase().trim();
+        if (!code || !/^[A-Z0-9]{6,16}$/.test(code)) {
+            toast.error("Code must be 6–16 alphanumeric characters.");
+            return;
+        }
+        if (changesRemaining <= 0) {
+            toast.error("You've used all your code changes.");
+            return;
+        }
+        setSavingCode(true);
+        setShowWarning(false);
+        try {
+            const result = await api.patch('/user/referral-code', { code });
+            toast.success(`Referral code updated to ${result.newCode}`);
+            setCustomCode("");
+            await fetchData();
+        } catch (e: any) {
+            toast.error(e.message || "Failed to update code.");
+        } finally {
+            setSavingCode(false);
+        }
     };
 
     const walletBalance = referralData?.creditBalance ?? 0;
@@ -139,8 +161,9 @@ export default function UserReferrals() {
                     ))}
                 </div>
 
-                {/* Referral Code + Security */}
+                {/* Referral Code + Customize */}
                 <div className="grid gap-6 md:grid-cols-2">
+                    {/* My Referral Code */}
                     <Card className="border-border shadow-sm relative overflow-hidden h-full">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                             <Users className="w-32 h-32 text-primary" />
@@ -154,7 +177,6 @@ export default function UserReferrals() {
                         <CardContent>
                             {referralCode ? (
                                 <>
-                                    {/* ── Big code badge ── */}
                                     <div className="flex items-center gap-3 mb-4">
                                         <div className="flex-1 bg-primary/5 border-2 border-primary/20 rounded-xl px-5 py-4 flex items-center justify-between group hover:border-primary/40 transition-colors">
                                             <span className="font-mono text-2xl font-extrabold tracking-widest text-primary select-all">
@@ -168,8 +190,7 @@ export default function UserReferrals() {
                                                         .then(() => { setCopied(true); toast.success("Code copied!"); setTimeout(() => setCopied(false), 2500); })
                                                         .catch(() => { toast.info("Select & copy: " + referralCode); });
                                                 }}
-                                                className={`shrink-0 transition-all ${copied ? "text-green-600" : "text-muted-foreground hover:text-primary"
-                                                    }`}
+                                                className={`shrink-0 transition-all ${copied ? "text-green-600" : "text-muted-foreground hover:text-primary"}`}
                                                 title="Copy code"
                                             >
                                                 {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
@@ -177,13 +198,11 @@ export default function UserReferrals() {
                                         </div>
                                     </div>
 
-                                    {/* ── Active badge ── */}
                                     <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-950/30 px-3 py-2 rounded-md border border-green-200 dark:border-green-800 w-fit mb-4">
                                         <ShieldCheck className="w-4 h-4" />
                                         <span>Active</span>
                                     </div>
 
-                                    {/* ── Full link (secondary, small) ── */}
                                     <div className="space-y-1">
                                         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Or share the full link</p>
                                         <div className="flex items-center gap-2">
@@ -218,34 +237,112 @@ export default function UserReferrals() {
                         </CardContent>
                     </Card>
 
+                    {/* Customize Referral Code */}
                     <Card className="border-border shadow-sm h-full">
                         <CardHeader>
-                            <CardTitle>Referral Security</CardTitle>
-                            <CardDescription>Update the password for your referral code.</CardDescription>
+                            <CardTitle className="flex items-center gap-2">
+                                <Pencil className="w-4 h-4 text-primary" />
+                                Customize Your Code
+                            </CardTitle>
+                            <CardDescription>
+                                Set a custom code that reflects your name or brand. You can change it {MAX_CHANGES} times total.
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="ref-pass">New Referral Password</Label>
-                                <div className="relative">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <input
-                                        id="ref-pass"
-                                        type="password"
-                                        value={referralPassword}
-                                        onChange={e => setReferralPassword(e.target.value)}
-                                        placeholder="Enter new password"
-                                        className="w-full pl-9 pr-3 h-10 rounded-md border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                                    />
-                                </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={customCode}
+                                    onChange={e => {
+                                        setCustomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                                        setShowWarning(false);
+                                    }}
+                                    placeholder="E.g. VIRAL2026"
+                                    maxLength={16}
+                                    disabled={changesRemaining <= 0 || savingCode}
+                                    className="flex-1 font-mono font-bold tracking-widest text-sm h-10 px-3 rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    title="Generate random code"
+                                    disabled={changesRemaining <= 0 || savingCode}
+                                    onClick={() => { setCustomCode(randomCode()); setShowWarning(false); }}
+                                    className="h-10 w-10 shrink-0"
+                                >
+                                    <Shuffle className="w-4 h-4" />
+                                </Button>
                             </div>
-                            <Button
-                                onClick={handleUpdatePassword}
-                                className="w-full bg-primary hover:bg-primary/90 text-white"
-                                disabled={savingPassword}
-                            >
-                                {savingPassword ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                                Update Password
-                            </Button>
+
+                            <p className="text-xs text-muted-foreground">
+                                6–16 characters, letters and numbers only. Uppercase enforced.
+                            </p>
+
+                            {/* Change counter */}
+                            <div className="flex items-center gap-2">
+                                {Array.from({ length: MAX_CHANGES }).map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className={`h-2 flex-1 rounded-full ${i < changesUsed ? "bg-primary" : "bg-border"}`}
+                                    />
+                                ))}
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {changesRemaining > 0
+                                        ? `${changesRemaining} change${changesRemaining !== 1 ? "s" : ""} remaining`
+                                        : "No changes left"}
+                                </span>
+                            </div>
+
+                            {/* Warning before save */}
+                            {showWarning && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-warning/10 border border-warning/30 text-xs text-foreground">
+                                    <AlertTriangle className="w-4 h-4 shrink-0 text-warning mt-0.5" />
+                                    <span>
+                                        <strong>Heads up:</strong> Changing your code will invalidate your current referral link. Anyone using the old link won't be credited. Are you sure?
+                                    </span>
+                                </div>
+                            )}
+
+                            {changesRemaining <= 0 ? (
+                                <Button disabled className="w-full opacity-50 cursor-not-allowed">
+                                    Change limit reached
+                                </Button>
+                            ) : !showWarning ? (
+                                <Button
+                                    onClick={() => {
+                                        const code = customCode.trim();
+                                        if (!code || !/^[A-Z0-9]{6,16}$/.test(code)) {
+                                            toast.error("Code must be 6–16 alphanumeric characters.");
+                                            return;
+                                        }
+                                        setShowWarning(true);
+                                    }}
+                                    className="w-full bg-primary text-white hover:bg-primary/90"
+                                    disabled={savingCode}
+                                >
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Save Code
+                                </Button>
+                            ) : (
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => setShowWarning(false)}
+                                        disabled={savingCode}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        className="flex-1 bg-primary text-white hover:bg-primary/90"
+                                        onClick={handleSaveCode}
+                                        disabled={savingCode}
+                                    >
+                                        {savingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                        Yes, Change It
+                                    </Button>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
