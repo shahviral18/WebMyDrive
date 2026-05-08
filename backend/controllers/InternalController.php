@@ -43,37 +43,150 @@ class InternalController
         $this->authenticate();
 
         $results = [];
-        $alterations = [
-            'billingPeriod' => "ALTER TABLE `Workspace` ADD COLUMN `billingPeriod` VARCHAR(20) NOT NULL DEFAULT 'yearly' AFTER `renewalDate`",
-            'autoRenew'     => "ALTER TABLE `Workspace` ADD COLUMN `autoRenew`     TINYINT(1)  NOT NULL DEFAULT 0         AFTER `billingPeriod`",
-            'mandateId'     => "ALTER TABLE `Workspace` ADD COLUMN `mandateId`     VARCHAR(255) NULL                      AFTER `autoRenew`",
-            'graceExpiry'   => "ALTER TABLE `Workspace` ADD COLUMN `graceExpiry`   DATETIME    NULL                       AFTER `mandateId`",
-        ];
 
-        foreach ($alterations as $col => $sql) {
+        // ── Helper: add column if missing ─────────────────────────────────────
+        $addCol = function (string $table, string $col, string $definition) use (&$results): void {
             $exists = Database::queryOne(
                 "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
                   WHERE TABLE_SCHEMA = DATABASE()
-                    AND TABLE_NAME   = 'Workspace'
+                    AND TABLE_NAME   = :tbl
                     AND COLUMN_NAME  = :col",
-                [':col' => $col]
+                [':tbl' => $table, ':col' => $col]
             );
+            $key = "$table.$col";
             if ($exists && (int)$exists['cnt'] > 0) {
-                $results[$col] = 'already exists';
+                $results[$key] = 'already exists';
             } else {
                 try {
-                    Database::execute($sql, []);
-                    $results[$col] = 'added';
+                    Database::execute("ALTER TABLE `$table` ADD COLUMN `$col` $definition", []);
+                    $results[$key] = 'added';
                 } catch (Throwable $e) {
-                    $results[$col] = 'ERROR: ' . $e->getMessage();
+                    $results[$key] = 'ERROR: ' . $e->getMessage();
                 }
             }
+        };
+
+        // ── Helper: create table if missing ───────────────────────────────────
+        $createTable = function (string $name, string $ddl) use (&$results): void {
+            try {
+                Database::execute($ddl, []);
+                $results["table.$name"] = 'ready';
+            } catch (Throwable $e) {
+                $results["table.$name"] = 'ERROR: ' . $e->getMessage();
+            }
+        };
+
+        // ── v2: Workspace auto-renewal columns ────────────────────────────────
+        $addCol('Workspace', 'billingPeriod', "VARCHAR(20) NOT NULL DEFAULT 'yearly'");
+        $addCol('Workspace', 'autoRenew',     'TINYINT(1) NOT NULL DEFAULT 0');
+        $addCol('Workspace', 'mandateId',     'VARCHAR(255) NULL');
+        $addCol('Workspace', 'graceExpiry',   'DATETIME NULL');
+
+        // ── v3: User referral code changes ────────────────────────────────────
+        $addCol('User', 'referralCodeChanges', 'INT NOT NULL DEFAULT 0');
+
+        // ── v4: Wallet credits & per-plan referral discounts ──────────────────
+
+        // Workspace
+        $addCol('Workspace', 'discount_percent', 'DECIMAL(5,2) NOT NULL DEFAULT 0');
+        $addCol('Workspace', 'referred_by',      'INT NULL');
+        $addCol('Workspace', 'nextPlanId',        'INT NULL');
+        $addCol('Workspace', 'baseAmountPaid',    'DECIMAL(12,2) NULL');
+
+        // Plan
+        $addCol('Plan', 'priceINR',        'DECIMAL(12,2) NULL');
+        $addCol('Plan', 'priceMonthlyINR', 'DECIMAL(12,2) NULL');
+        $addCol('Plan', 'priceYearlyINR',  'DECIMAL(12,2) NULL');
+        $addCol('Plan', 'monthlyPrice',    'DECIMAL(12,2) NULL');
+        $addCol('Plan', 'yearlyPrice',     'DECIMAL(12,2) NULL');
+        $addCol('Plan', 'storageGB',       'INT NULL');
+        $addCol('Plan', 'hasOverride',     'TINYINT NOT NULL DEFAULT 0');
+        $addCol('Plan', 'googleOrgUnit',   'VARCHAR(255) NULL');
+        $addCol('Plan', 'sortOrder',       'INT NOT NULL DEFAULT 0');
+
+        // Order
+        $addCol('Order', 'orderType',      "VARCHAR(50) NOT NULL DEFAULT 'NEW'");
+        $addCol('Order', 'baseAmount',     'DECIMAL(12,2) NULL');
+        $addCol('Order', 'gstAmount',      'DECIMAL(12,2) NULL');
+        $addCol('Order', 'discountAmount', 'DECIMAL(12,2) NULL');
+        $addCol('Order', 'fromPlanId',     'INT NULL');
+        $addCol('Order', 'promoCode',      'VARCHAR(100) NULL');
+
+        // ReferralLog
+        $addCol('ReferralLog', 'referralYear',      'INT NOT NULL DEFAULT 1');
+        $addCol('ReferralLog', 'referrer_credited', 'TINYINT(1) NOT NULL DEFAULT 1');
+        $addCol('ReferralLog', 'commissionEarned',  'DECIMAL(12,2) NOT NULL DEFAULT 0');
+
+        // PendingCheckout — create if missing, else add promoCode column
+        $checkoutExists = Database::queryOne(
+            "SELECT COUNT(*) AS cnt FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PendingCheckout'"
+        );
+        if (!(int)($checkoutExists['cnt'] ?? 0)) {
+            $createTable('PendingCheckout', "
+                CREATE TABLE IF NOT EXISTS `PendingCheckout` (
+                  id               INT AUTO_INCREMENT PRIMARY KEY,
+                  referenceNumber  VARCHAR(100) NOT NULL UNIQUE,
+                  planId           INT,
+                  amount           DECIMAL(12,2) NOT NULL,
+                  billingPeriod    VARCHAR(20) NOT NULL DEFAULT 'yearly',
+                  customerEmail    VARCHAR(255) NOT NULL,
+                  customerName     VARCHAR(255),
+                  customerPhone    VARCHAR(50),
+                  checkoutMeta     TEXT,
+                  promoCode        VARCHAR(100) NULL,
+                  status           VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+                  zohoPaymentId    VARCHAR(255),
+                  createdUserId    INT NULL,
+                  createdAt        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updatedAt        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } else {
+            $addCol('PendingCheckout', 'promoCode',     'VARCHAR(100) NULL');
+            $addCol('PendingCheckout', 'zohoPaymentId', 'VARCHAR(255) NULL');
+            $addCol('PendingCheckout', 'createdUserId', 'INT NULL');
         }
 
-        Logger::info('[Internal/Migration] auto-renewal columns: ' . json_encode($results));
+        // WalletTransaction table
+        $createTable('WalletTransaction', "
+            CREATE TABLE IF NOT EXISTS `WalletTransaction` (
+              id          INT AUTO_INCREMENT PRIMARY KEY,
+              userId      INT NOT NULL,
+              amount      DECIMAL(12,2) NOT NULL,
+              type        VARCHAR(20) NOT NULL,
+              source      VARCHAR(30) NOT NULL DEFAULT 'ADMIN',
+              description TEXT,
+              orderId     INT NULL,
+              expires_at  DATETIME NULL,
+              createdAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_wt_user (userId),
+              INDEX idx_wt_expires (expires_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        // Voucher table
+        $createTable('Voucher', "
+            CREATE TABLE IF NOT EXISTS `Voucher` (
+              id          INT AUTO_INCREMENT PRIMARY KEY,
+              code        VARCHAR(50) NOT NULL UNIQUE,
+              value       DECIMAL(12,2) NOT NULL,
+              created_by  INT NOT NULL,
+              used_by     INT NULL,
+              used_at     DATETIME NULL,
+              expires_at  DATETIME NULL,
+              status      VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+              description TEXT,
+              createdAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_voucher_code   (code),
+              INDEX idx_voucher_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        Logger::info('[Internal/Migration] v4 completed: ' . json_encode($results));
         http_response_code(200);
         header('Content-Type: application/json');
-        echo json_encode(['success' => true, 'columns' => $results]);
+        echo json_encode(['success' => true, 'results' => $results]);
         exit;
     }
 
