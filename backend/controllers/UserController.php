@@ -585,29 +585,28 @@ class UserController
         $targetPlan = Database::queryOne('SELECT * FROM "Plan" WHERE id = :id AND isActive = 1', [':id' => $targetPlanId]);
         if (!$targetPlan) Response::error('Plan not found', 404);
 
-        $billingDays     = ($billingPeriod === 'monthly') ? 30 : 365;
-        $renewalTs       = $ws['renewalDate'] ? strtotime($ws['renewalDate']) : (time() + $billingDays * 86400);
-        $daysRemaining   = max(0, (int)ceil(($renewalTs - time()) / 86400));
+        $billingDays   = ($billingPeriod === 'monthly') ? 30 : 365;
+        $renewalTs     = $ws['renewalDate'] ? strtotime($ws['renewalDate']) : (time() + $billingDays * 86400);
+        $daysRemaining = max(0, (int)ceil(($renewalTs - time()) / 86400));
 
-        // Current plan remaining value (back out from stored base amount)
+        // Locked referral discount from workspace (grandfathered)
+        $lockedDiscountPct = (float)($ws['discount_percent'] ?? 0);
+
+        // Current plan remaining value (back out from stored base amount, with locked discount)
         $currentBase     = (float)($ws['baseAmountPaid'] ?? 0);
         $currentBillingDays = ($ws['billingPeriod'] === 'monthly') ? 30 : 365;
         $currentDailyRate   = $currentBase > 0 ? $currentBase / $currentBillingDays : 0;
         $remainingValue     = round($currentDailyRate * $daysRemaining, 2);
 
-        // New plan cost for remaining days
-        $newPlanPeriodBase = ($billingPeriod === 'monthly')
+        // New plan cost for remaining days, with same locked discount applied
+        $newPlanFullBase = ($billingPeriod === 'monthly')
             ? (float)($targetPlan['monthlyPrice'] ?? 0)
             : (float)($targetPlan['yearlyPrice'] ?? 0) * 12;
-        $newDailyRate      = $newPlanPeriodBase / $billingDays;
+        $newPlanDiscounted = round($newPlanFullBase * (1 - $lockedDiscountPct / 100), 2);
+        $newDailyRate      = $newPlanDiscounted / $billingDays;
         $newPlanRemaining  = round($newDailyRate * $daysRemaining, 2);
 
-        // Promo discount on new plan remaining cost
-        $discountPct  = $promoCode ? $this->resolvePromoDiscount($promoCode, $targetPlanId) : 0.0;
-        $discountAmt  = round($newPlanRemaining * ($discountPct / 100), 2);
-        $newAfterPromo = $newPlanRemaining - $discountAmt;
-
-        $upgradeBase  = round($newAfterPromo - $remainingValue, 2);
+        $upgradeBase  = round($newPlanRemaining - $remainingValue, 2);
         $upgradeGST   = round($upgradeBase * 0.18, 2);
         $upgradeTotal = round($upgradeBase * 1.18, 2);
 
@@ -616,14 +615,12 @@ class UserController
             'currentPlanName'  => $ws['planName'],
             'targetPlanName'   => $targetPlan['name'],
             'billingPeriod'    => $billingPeriod,
+            'lockedDiscountPct'=> $lockedDiscountPct,
             'newPlanRemaining' => $newPlanRemaining,
-            'discountPct'      => $discountPct,
-            'discountAmt'      => $discountAmt,
             'remainingValue'   => $remainingValue,
             'upgradeBase'      => $upgradeBase,
             'upgradeGST'       => $upgradeGST,
-            'upgradeTotal'     => max(1.0, $upgradeTotal), // min ₹1 for Razorpay
-            'promoValid'       => $promoCode !== '' && $discountPct > 0,
+            'upgradeTotal'     => max(1.0, $upgradeTotal),
         ]);
     }
 
@@ -635,7 +632,6 @@ class UserController
         $targetPlanId  = (int)($req->body['planId'] ?? 0);
         $billingPeriod = in_array($req->body['billingPeriod'] ?? 'yearly', ['monthly', 'yearly'])
             ? $req->body['billingPeriod'] : 'yearly';
-        $promoCode     = strtoupper(trim($req->body['promoCode'] ?? ''));
 
         if (!$targetPlanId) Response::error('planId required', 400);
 
@@ -645,16 +641,25 @@ class UserController
         $targetPlan = Database::queryOne('SELECT * FROM "Plan" WHERE id = :id AND isActive = 1', [':id' => $targetPlanId]);
         if (!$targetPlan) Response::error('Plan not found', 404);
 
-        // Recalculate preview to get authoritative total
-        $_GET['planId']        = (string)$targetPlanId;
-        $_GET['billingPeriod'] = $billingPeriod;
-        $_GET['promoCode']     = $promoCode;
-        ob_start();
-        $this->getUpgradePreview($req);
-        $previewJson = ob_get_clean();
-        $preview = json_decode($previewJson, true);
+        // Build preview data using locked discount
+        $billingDays   = ($billingPeriod === 'monthly') ? 30 : 365;
+        $renewalTs     = $ws['renewalDate'] ? strtotime($ws['renewalDate']) : (time() + $billingDays * 86400);
+        $daysRemaining = max(0, (int)ceil(($renewalTs - time()) / 86400));
+        $lockedDisc    = (float)($ws['discount_percent'] ?? 0);
 
-        $amountINR = (float)($preview['upgradeTotal'] ?? 1);
+        $currentBase       = (float)($ws['baseAmountPaid'] ?? 0);
+        $currentBillingD   = ($ws['billingPeriod'] === 'monthly') ? 30 : 365;
+        $remainingValue    = $currentBase > 0 ? round(($currentBase / $currentBillingD) * $daysRemaining, 2) : 0;
+
+        $newPlanFull       = ($billingPeriod === 'monthly')
+            ? (float)($targetPlan['monthlyPrice'] ?? 0)
+            : (float)($targetPlan['yearlyPrice'] ?? 0) * 12;
+        $newPlanDiscounted = round($newPlanFull * (1 - $lockedDisc / 100), 2);
+        $newPlanRemaining  = round(($newPlanDiscounted / $billingDays) * $daysRemaining, 2);
+
+        $upgradeBase  = round($newPlanRemaining - $remainingValue, 2);
+        $upgradeGST   = round($upgradeBase * 0.18, 2);
+        $amountINR    = max(1.0, round($upgradeBase * 1.18, 2));
 
         // Create Zoho payment session
         $referenceNumber = 'WMD-UPG-' . strtoupper(bin2hex(random_bytes(4)));
@@ -669,15 +674,17 @@ class UserController
         $baseAmt = round($amountINR / 1.18, 2);
         $gstAmt  = round($amountINR - $baseAmt, 2);
         $orderId = Database::insert(
-            'INSERT INTO "Order" (userId, planId, amount, baseAmount, gstAmount, currency, status,
-             orderType, billingPeriod, promoCode, discountAmount, fromPlanId, gatewayTxId, createdAt, updatedAt)
+            'INSERT INTO `Order` (userId, planId, amount, baseAmount, gstAmount, currency, status,
+             orderType, billingPeriod, fromPlanId, gatewayTxId, createdAt, updatedAt)
              VALUES (:uid, :pid, :amt, :base, :gst, \'INR\', \'PENDING\',
-             \'UPGRADE\', :bp, :promo, :disc, :fpid, :sid, NOW(), NOW())',
+             \'UPGRADE\', :bp, :fpid, :sid, NOW(), NOW())',
             [':uid' => $userId, ':pid' => $targetPlanId, ':amt' => $amountINR,
              ':base' => $baseAmt, ':gst' => $gstAmt, ':bp' => $billingPeriod,
-             ':promo' => $promoCode ?: null, ':disc' => $preview['discountAmt'] ?? 0,
              ':fpid' => $ws['planId'], ':sid' => $zohoSessionId]
         );
+
+        $preview = ['upgradeBase' => $upgradeBase, 'upgradeGST' => $upgradeGST, 'upgradeTotal' => $amountINR,
+                    'lockedDiscountPct' => $lockedDisc, 'remainingValue' => $remainingValue, 'newPlanRemaining' => $newPlanRemaining];
 
         AuditService::log('PLAN_UPGRADE_INITIATED', $userId, $req->ip,
             ['fromPlanId' => $ws['planId'], 'toPlanId' => $targetPlanId, 'amount' => $amountINR]);
@@ -746,19 +753,19 @@ class UserController
             Logger::error("[Plans] confirmUpgrade: Plan {$targetPlan['id']} has no googleOrgUnit set — OU not changed");
         }
 
-        // Update Workspace
+        // Update Workspace — keep discount_percent and renewalDate unchanged (pro-rata model)
         $billingPeriod   = $order['billingPeriod'] ?? 'yearly';
-        $billingDays     = ($billingPeriod === 'monthly') ? 30 : 365;
-        $newRenewal      = date('Y-m-d H:i:s', time() + $billingDays * 86400);
+        $lockedDisc      = (float)($ws['discount_percent'] ?? 0);
         $newPeriodBase   = ($billingPeriod === 'monthly')
             ? (float)($targetPlan['monthlyPrice'] ?? 0)
             : (float)($targetPlan['yearlyPrice'] ?? 0) * 12;
+        $discountedBase  = round($newPeriodBase * (1 - $lockedDisc / 100), 2);
 
         Database::execute(
-            'UPDATE "Workspace" SET planId = :pid, billingPeriod = :bp, renewalDate = :rd,
+            'UPDATE `Workspace` SET planId = :pid, billingPeriod = :bp,
              baseAmountPaid = :base, nextPlanId = NULL, updatedAt = NOW() WHERE id = :wid',
-            [':pid' => $targetPlan['id'], ':bp' => $billingPeriod, ':rd' => $newRenewal,
-             ':base' => round($newPeriodBase, 2), ':wid' => $ws['id']]
+            [':pid' => $targetPlan['id'], ':bp' => $billingPeriod,
+             ':base' => $discountedBase, ':wid' => $ws['id']]
         );
 
         // Update Subscription
@@ -970,6 +977,93 @@ class UserController
 
         AuditService::log('AUTO_RENEWAL_DISABLED', $userId, $req->ip, []);
         Response::json(['success' => true]);
+    }
+
+    // ── Wallet: redeem voucher ────────────────────────────────────────────────
+
+    public function redeemVoucher(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $code = strtoupper(trim((string)($req->body['code'] ?? '')));
+        if (!$code) Response::error('Voucher code required', 400);
+
+        $now = date('Y-m-d H:i:s');
+
+        $voucher = Database::queryOne(
+            "SELECT * FROM `Voucher`
+             WHERE code = :code AND status = 'ACTIVE'
+             AND (expires_at IS NULL OR expires_at > :now)",
+            [':code' => $code, ':now' => $now]
+        );
+
+        if (!$voucher) Response::error('Invalid or expired voucher code', 404);
+        if ($voucher['used_by']) Response::error('This voucher has already been redeemed', 409);
+
+        $value       = (float) $voucher['value'];
+        $creditExpiry = date('Y-m-d H:i:s', strtotime('+24 months'));
+
+        Database::beginTransaction();
+        try {
+            Database::execute(
+                "UPDATE `Voucher` SET status='USED', used_by=:uid, used_at=:now WHERE id=:id",
+                [':uid' => $userId, ':now' => $now, ':id' => $voucher['id']]
+            );
+            Database::insert(
+                "INSERT INTO `WalletTransaction`
+                 (userId, amount, type, source, description, expires_at, createdAt)
+                 VALUES (:uid, :amt, 'CREDIT', 'VOUCHER', :desc, :exp, :now)",
+                [':uid' => $userId, ':amt' => $value,
+                 ':desc' => "Voucher redeemed: {$code}",
+                 ':exp' => $creditExpiry, ':now' => $now]
+            );
+            Database::execute(
+                'UPDATE `User` SET walletBalance = walletBalance + :amt WHERE id = :id',
+                [':amt' => $value, ':id' => $userId]
+            );
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollback();
+            Logger::error('[redeemVoucher] failed: ' . $e->getMessage());
+            Response::error('Could not redeem voucher. Please try again.', 500);
+        }
+
+        AuditService::log('VOUCHER_REDEEMED', $userId, $req->ip ?? '', [
+            'code' => $code, 'value' => $value, 'expiresAt' => $creditExpiry
+        ]);
+
+        $user = Database::queryOne('SELECT walletBalance FROM `User` WHERE id = :id', [':id' => $userId]);
+        Response::json([
+            'success'        => true,
+            'credited'       => $value,
+            'walletBalance'  => (float) $user['walletBalance'],
+            'expiresAt'      => $creditExpiry,
+        ]);
+    }
+
+    // ── Wallet: transaction history ───────────────────────────────────────────
+
+    public function getWalletTransactions(Request $req): void
+    {
+        $userId = $req->user['userId'] ?? null;
+        if (!$userId) Response::error('Unauthorized', 401);
+
+        $now = date('Y-m-d H:i:s');
+        $txs = Database::query(
+            "SELECT id, amount, type, source, description, expires_at, createdAt
+             FROM `WalletTransaction`
+             WHERE userId = :uid
+             ORDER BY createdAt DESC LIMIT 50",
+            [':uid' => $userId]
+        );
+
+        $user = Database::queryOne('SELECT walletBalance FROM `User` WHERE id = :id', [':id' => $userId]);
+
+        Response::json([
+            'walletBalance' => (float) ($user['walletBalance'] ?? 0),
+            'transactions'  => $txs,
+        ]);
     }
 
     public function updateReferralCode(Request $req): void

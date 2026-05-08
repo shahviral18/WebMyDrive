@@ -58,8 +58,15 @@ CREATE TABLE IF NOT EXISTS "Workspace" (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   userId            INTEGER NOT NULL,
   planId            INTEGER,
+  discount_percent  REAL NOT NULL DEFAULT 0,
+  referred_by       INTEGER NULL,
+  scheduled_plan_id INTEGER NULL,
   status            TEXT NOT NULL DEFAULT 'PENDING',
   renewalDate       TEXT,
+  billingPeriod     TEXT NOT NULL DEFAULT 'yearly',
+  autoRenew         INTEGER NOT NULL DEFAULT 0,
+  mandateId         TEXT NULL,
+  graceExpiry       TEXT NULL,
   googleCustomerId  TEXT,
   metadata          TEXT,
   createdAt         TEXT NOT NULL DEFAULT (datetime('now')),
@@ -146,16 +153,18 @@ CREATE TABLE IF NOT EXISTS "ReferralLink" (
 );
 
 CREATE TABLE IF NOT EXISTS "ReferralLog" (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  referrerId       INTEGER NOT NULL,
-  refereeId        INTEGER,
-  orderId          INTEGER,
-  amount           REAL NOT NULL,
-  commissionEarned REAL NOT NULL DEFAULT 0,
-  status           TEXT NOT NULL DEFAULT 'PENDING',
-  type             TEXT,
-  createdAt        TEXT NOT NULL DEFAULT (datetime('now')),
-  updatedAt        TEXT NOT NULL DEFAULT (datetime('now')),
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  referrerId        INTEGER NOT NULL,
+  refereeId         INTEGER,
+  orderId           INTEGER,
+  amount            REAL NOT NULL,
+  commissionEarned  REAL NOT NULL DEFAULT 0,
+  status            TEXT NOT NULL DEFAULT 'PENDING',
+  type              TEXT,
+  referralYear      INTEGER NOT NULL DEFAULT 1,
+  referrer_credited INTEGER NOT NULL DEFAULT 1,
+  createdAt         TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt         TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (referrerId) REFERENCES "User"(id),
   FOREIGN KEY (refereeId)  REFERENCES "User"(id),
   FOREIGN KEY (orderId)    REFERENCES "Order"(id)
@@ -231,6 +240,58 @@ CREATE TABLE IF NOT EXISTS "DistributorPromoCode" (
 );
 CREATE INDEX IF NOT EXISTS idx_dpc_distributor ON "DistributorPromoCode"(distributorId);
 CREATE INDEX IF NOT EXISTS idx_dpc_active      ON "DistributorPromoCode"(distributorId, isActive);
+
+CREATE TABLE IF NOT EXISTS "PendingCheckout" (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  referenceNumber  TEXT NOT NULL UNIQUE,
+  planId           INTEGER,
+  amount           REAL NOT NULL,
+  billingPeriod    TEXT NOT NULL DEFAULT 'yearly',
+  customerEmail    TEXT NOT NULL,
+  customerName     TEXT,
+  customerPhone    TEXT,
+  checkoutMeta     TEXT,
+  promoCode        TEXT NULL,
+  status           TEXT NOT NULL DEFAULT 'PENDING',
+  zohoPaymentId    TEXT,
+  createdUserId    INTEGER NULL,
+  createdAt        TEXT NOT NULL DEFAULT (datetime('now')),
+  updatedAt        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS "WalletTransaction" (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  userId      INTEGER NOT NULL,
+  amount      REAL NOT NULL,
+  type        TEXT NOT NULL,
+  source      TEXT NOT NULL DEFAULT 'ADMIN',
+  description TEXT,
+  orderId     INTEGER NULL,
+  expires_at  TEXT NULL,
+  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (userId) REFERENCES "User"(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wt_user    ON "WalletTransaction"(userId);
+CREATE INDEX IF NOT EXISTS idx_wt_expires ON "WalletTransaction"(expires_at);
+
+CREATE TABLE IF NOT EXISTS "Voucher" (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  code        TEXT NOT NULL UNIQUE,
+  value       REAL NOT NULL,
+  created_by  INTEGER NOT NULL,
+  used_by     INTEGER NULL,
+  used_at     TEXT NULL,
+  expires_at  TEXT NULL,
+  status      TEXT NOT NULL DEFAULT 'ACTIVE',
+  description TEXT,
+  createdAt   TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (created_by) REFERENCES "User"(id),
+  FOREIGN KEY (used_by)    REFERENCES "User"(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_voucher_code   ON "Voucher"(code);
+CREATE INDEX IF NOT EXISTS idx_voucher_status ON "Voucher"(status);
 
 CREATE TABLE IF NOT EXISTS "SecurityLink" (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,

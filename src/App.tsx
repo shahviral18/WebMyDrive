@@ -14,6 +14,7 @@ import Alerts from "./pages/admin/Alerts";
 import Billing from "./pages/admin/Billing";
 import Distributors from "./pages/admin/Distributors";
 import ReferralEngine from "./pages/admin/ReferralEngine";
+import Vouchers from "./pages/admin/Vouchers";
 import Settings from "./pages/admin/Settings";
 import PricingPage from "./pages/PricingPage";
 import Subscribe from "./pages/Subscribe";
@@ -190,6 +191,7 @@ const App = () => (
                   <Route path="plans" element={<Plans />} />
                   <Route path="orders" element={<Billing />} />
                   <Route path="referral-engine" element={<ReferralEngine />} />
+                  <Route path="vouchers" element={<Vouchers />} />
                   <Route path="distributors" element={<Distributors />} />
                   <Route path="distributor-applications" element={<DistributorApplications />} />
                   <Route path="change-plan" element={<ChangePlan />} />

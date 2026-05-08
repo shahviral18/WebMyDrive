@@ -1749,4 +1749,142 @@ class AdminController
             'message' => 'Distributor account created. Share the password — it will not be shown again.',
         ]);
     }
+
+    // ── Vouchers ──────────────────────────────────────────────────────────────
+
+    public function getVouchers(Request $req): void
+    {
+        $status = (string)($req->query['status'] ?? '');
+        $limit  = min(500, max(1, (int)($req->query['limit'] ?? 100)));
+        $skip   = max(0, (int)($req->query['skip']  ?? 0));
+
+        $where  = $status ? "WHERE v.status = :status" : '';
+        $params = $status ? [':status' => $status] : [];
+
+        $vouchers = Database::query(
+            "SELECT v.*, u.name AS usedByName, u.email AS usedByEmail,
+                    c.name AS createdByName
+             FROM `Voucher` v
+             LEFT JOIN `User` u ON u.id = v.used_by
+             LEFT JOIN `User` c ON c.id = v.created_by
+             $where
+             ORDER BY v.createdAt DESC LIMIT $limit OFFSET $skip",
+            $params
+        );
+
+        Response::json(['vouchers' => $vouchers]);
+    }
+
+    public function createVouchers(Request $req): void
+    {
+        $adminId     = $req->user['userId'] ?? null;
+        $value       = (float)($req->body['value'] ?? 0);
+        $count       = max(1, min(500, (int)($req->body['count'] ?? 1)));
+        $expiresAt   = !empty($req->body['expiresAt']) ? (string)$req->body['expiresAt'] : null;
+        $description = (string)($req->body['description'] ?? '');
+
+        if ($value <= 0) Response::error('value must be > 0', 400);
+
+        $now     = date('Y-m-d H:i:s');
+        $created = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $code = 'WMD' . strtoupper(bin2hex(random_bytes(4)));
+            // Ensure uniqueness
+            while (Database::queryOne('SELECT id FROM `Voucher` WHERE code = :c', [':c' => $code])) {
+                $code = 'WMD' . strtoupper(bin2hex(random_bytes(4)));
+            }
+            Database::insert(
+                "INSERT INTO `Voucher` (code, value, created_by, expires_at, description, status, createdAt)
+                 VALUES (:code, :val, :cb, :exp, :desc, 'ACTIVE', :now)",
+                [':code' => $code, ':val' => $value, ':cb' => $adminId,
+                 ':exp' => $expiresAt, ':desc' => $description, ':now' => $now]
+            );
+            $created[] = $code;
+        }
+
+        AuditService::log('VOUCHERS_CREATED', $adminId, $req->ip ?? '', [
+            'count' => $count, 'value' => $value, 'codes' => $created
+        ]);
+
+        Response::json(['success' => true, 'codes' => $created, 'count' => count($created)]);
+    }
+
+    public function deactivateVoucher(Request $req): void
+    {
+        $adminId   = $req->user['userId'] ?? null;
+        $voucherId = (int)($req->params['id'] ?? 0);
+        if (!$voucherId) Response::error('id required', 400);
+
+        $voucher = Database::queryOne('SELECT * FROM `Voucher` WHERE id = :id', [':id' => $voucherId]);
+        if (!$voucher) Response::error('Voucher not found', 404);
+        if ($voucher['status'] === 'USED') Response::error('Cannot deactivate an already-used voucher', 409);
+
+        Database::execute(
+            "UPDATE `Voucher` SET status = 'INACTIVE', used_at = NOW() WHERE id = :id",
+            [':id' => $voucherId]
+        );
+
+        AuditService::log('VOUCHER_DEACTIVATED', $adminId, $req->ip ?? '', ['voucherId' => $voucherId, 'code' => $voucher['code']]);
+        Response::json(['success' => true]);
+    }
+
+    // ── Price Revision Notice ─────────────────────────────────────────────────
+
+    public function setPriceRevision(Request $req): void
+    {
+        $adminId      = $req->user['userId'] ?? null;
+        $revisionDate = !empty($req->body['revisionDate']) ? (string)$req->body['revisionDate'] : null;
+        $message      = (string)($req->body['message'] ?? 'Prices are being revised. Renew before the date to lock current pricing.');
+
+        $globalConfig = ConfigService::getGlobalPlanConfig();
+        $globalConfig['priceRevisionDate']    = $revisionDate;
+        $globalConfig['priceRevisionMessage'] = $message;
+        ConfigService::setConfig('GLOBAL_PLAN_SETTINGS', $globalConfig);
+
+        AuditService::log('PRICE_REVISION_SET', $adminId, $req->ip ?? '', [
+            'revisionDate' => $revisionDate, 'message' => $message
+        ]);
+
+        // Send email notification to all active users (non-fatal)
+        if ($revisionDate) {
+            try {
+                $users = Database::query(
+                    "SELECT u.name, u.email, u.displayEmail
+                     FROM `User` u
+                     JOIN `Workspace` w ON w.userId = u.id AND w.status = 'ACTIVE'
+                     WHERE u.role = 'USER' AND u.isDisabled = 0"
+                );
+                $revisionShow = date('d M Y', strtotime($revisionDate));
+                $sentCount = 0;
+                foreach ($users as $u) {
+                    $toEmail    = $u['displayEmail'] ?: $u['email'];
+                    $firstName  = explode(' ', trim($u['name'] ?? ''))[0] ?: 'there';
+                    $subject    = "WebMyDrive: Price revision on {$revisionShow} — Renew now to lock current pricing";
+                    $htmlBody   = "<p>Hi {$firstName},</p>"
+                        . "<p>{$message}</p>"
+                        . "<p><strong>Renewal deadline: {$revisionShow}</strong></p>"
+                        . "<p><a href='https://webmydrive.com/demo1/user/billing'>Renew Now &rarr;</a></p>"
+                        . "<p>Team WebMyDrive</p>";
+                    mail($toEmail, $subject, $htmlBody,
+                        "From: WebMyDrive <support@webmydrive.com>\r\nContent-Type: text/html; charset=UTF-8\r\n");
+                    $sentCount++;
+                }
+                Logger::info("[PriceRevision] Notified $sentCount users");
+            } catch (Throwable $e) {
+                Logger::error('[PriceRevision] Email send failed (non-fatal): ' . $e->getMessage());
+            }
+        }
+
+        Response::json(['success' => true, 'revisionDate' => $revisionDate]);
+    }
+
+    public function getPriceRevision(Request $req): void
+    {
+        $config = ConfigService::getGlobalPlanConfig();
+        Response::json([
+            'revisionDate'    => $config['priceRevisionDate']    ?? null,
+            'revisionMessage' => $config['priceRevisionMessage'] ?? null,
+        ]);
+    }
 }

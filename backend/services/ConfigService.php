@@ -28,9 +28,18 @@ class ConfigService
     public static function defaultUserReferralConfig(): array
     {
         return [
+            'planDiscountSlabs' => [
+                'Basic'           => ['referredDiscount' => 0.10, 'referrerCredit' => 0.05],
+                'Professional'    => ['referredDiscount' => 0.20, 'referrerCredit' => 0.05],
+                'Premium'         => ['referredDiscount' => 0.40, 'referrerCredit' => 0.075],
+                'Enterprise'      => ['referredDiscount' => 0.40, 'referrerCredit' => 0.075],
+                'Enterprise Plus' => ['referredDiscount' => 0.10, 'referrerCredit' => 0.05],
+            ],
+            'paidAdsDiscountRate' => 0.20,
+            'creditExpiryMonths' => 24,
             'referrerCreditRate' => 0.05,
-            'referredDiscountRate' => 0.025,
-            'decaySchedule' => [0.05, 0.04, 0.03, 0.02, 0.01, 0],
+            'referredDiscountRate' => 0.10,
+            'decaySchedule' => [0, 0, 0, 0, 0, 0],
             'nudgeThreshold' => 5,
             'upgradeFeeDiscount' => 0,
             'allowNewReferrals' => true,
@@ -70,6 +79,26 @@ class ConfigService
             'distributorMinBalance' => 2000,
             'payoutThreshold' => 5000,
             'lapseWalletForfeit' => true,
+        ];
+    }
+
+    /**
+     * Returns ['referredDiscount' => float, 'referrerCredit' => float] for a plan name.
+     * Falls back to global referredDiscountRate / referrerCreditRate if plan not in slabs.
+     */
+    public static function getPlanReferralSlab(string $planName): array
+    {
+        $config = self::getUserReferralConfig();
+        $slabs  = $config['planDiscountSlabs'] ?? [];
+        if (isset($slabs[$planName])) {
+            return [
+                'referredDiscount' => (float) $slabs[$planName]['referredDiscount'],
+                'referrerCredit'   => (float) $slabs[$planName]['referrerCredit'],
+            ];
+        }
+        return [
+            'referredDiscount' => (float) ($config['referredDiscountRate'] ?? 0.10),
+            'referrerCredit'   => (float) ($config['referrerCreditRate']   ?? 0.05),
         ];
     }
 

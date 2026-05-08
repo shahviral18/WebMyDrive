@@ -18,7 +18,7 @@ class PaymentController
         $b = $req->body;
 
         $planId        = (int)   ($b['planId']        ?? 0);
-        $amount        = (float) ($b['amount']        ?? 0);   // post-GST total
+        $amount        = (float) ($b['amount']        ?? 0);   // post-GST total (pre-discount, frontend sends full price)
         $billingPeriod = (string)($b['billingPeriod'] ?? 'yearly');
         $planName      = (string)($b['planName']      ?? '');
         $username      = (string)($b['username']      ?? '');  // full email e.g. john@webmydrive.com
@@ -33,6 +33,9 @@ class PaymentController
         $gstNumber     = (string)($b['gstNumber']     ?? '');
         $billingAddr   = $b['billingAddress'] ?? [];
         $autoRenew     = !empty($b['autoRenew']);
+        $promoCode        = trim((string)($b['promoCode'] ?? ''))  ?: null;
+        $isPaidAd         = !empty($b['isPaidAd']);
+        $useWalletAmount  = max(0, (float)($b['useWalletAmount'] ?? 0));  // amount user wants to pay from wallet
 
         if (!$planId || $amount <= 0 || !$username || !$password || !$customerEmail) {
             Response::error('planId, amount, username, password and customerEmail are required', 400);
@@ -45,6 +48,53 @@ class PaymentController
         $taken = Database::queryOne('SELECT id FROM `User` WHERE email = :e', [':e' => $username]);
         if ($taken) Response::error('Username already taken. Please choose another.', 409);
 
+        // Calculate referral / paid-ads discount
+        $discountPercent = 0.0;
+        $resolvedReferrerId = null;
+
+        if ($isPaidAd) {
+            $globalCfg = ConfigService::getUserReferralConfig();
+            $discountPercent = (float) ($globalCfg['paidAdsDiscountRate'] ?? 0.20);
+        } elseif ($promoCode) {
+            // Validate code — must be a USER referral link
+            $validLink = ReferralLinkService::validateCode($promoCode);
+            $referrer  = null;
+            if ($validLink && $validLink['role'] === 'USER') {
+                $referrer = Database::queryOne('SELECT id FROM `User` WHERE id = :id', [':id' => $validLink['referrerId']]);
+            } else {
+                $referrer = Database::queryOne('SELECT id FROM `User` WHERE referralCode = :c', [':c' => $promoCode]);
+            }
+            if ($referrer) {
+                $slab            = ConfigService::getPlanReferralSlab($plan['name'] ?? '');
+                $discountPercent = $slab['referredDiscount'];
+                $resolvedReferrerId = (int) $referrer['id'];
+            }
+            // Invalid code: silently ignore discount (don't block purchase)
+        }
+
+        // Apply discount to base amount (ex-GST)
+        // Frontend passes full plan price; we recalculate final amount here
+        $planBasePrice = (float) ($plan['priceINR'] ?? $plan['yearlyPrice'] ?? $plan['price'] ?? $amount);
+        if ($billingPeriod === 'monthly') {
+            $planBasePrice = (float) ($plan['priceMonthlyINR'] ?? $plan['monthlyPrice'] ?? $planBasePrice / 12);
+        }
+        $discountedBase = round($planBasePrice * (1 - $discountPercent), 2);
+        $gstAmount      = round($discountedBase * 0.18, 2);
+        $finalAmount    = round($discountedBase + $gstAmount, 2);
+
+        // Wallet deduction — check existing user's balance
+        $walletDeduction  = 0.0;
+        $existingUserId   = null;
+        $existingUserRow  = Database::queryOne('SELECT id, walletBalance FROM `User` WHERE email = :e', [':e' => $username]);
+        if ($existingUserRow && $useWalletAmount > 0) {
+            $availableWallet = (float) $existingUserRow['walletBalance'];
+            $walletDeduction = min($useWalletAmount, $availableWallet, $finalAmount);
+            $existingUserId  = (int) $existingUserRow['id'];
+        }
+        $amountAfterWallet = round($finalAmount - $walletDeduction, 2);
+        // Minimum chargeable via Zoho is ₹1; if wallet covers everything charge ₹0 (free order)
+        $zohoChargeAmount = max(0, $amountAfterWallet);
+
         $passwordHash    = password_hash($password, PASSWORD_BCRYPT);
         $referenceNumber = 'WMD-' . strtoupper(bin2hex(random_bytes(5)));
         $now             = date('Y-m-d H:i:s');
@@ -52,33 +102,39 @@ class PaymentController
 
         // payments_session_id added after session creation below
         $checkoutMetaArr = [
-            'username'         => $username,
-            'passwordHash'     => $passwordHash,
-            'firstName'        => $firstName,
-            'lastName'         => $lastName,
-            'recoveryEmail'    => $recoveryEmail,
-            'whatsapp'         => $whatsapp,
-            'companyName'      => $companyName,
-            'gstNumber'        => $gstNumber,
-            'billingAddress'   => $billingAddr,
-            'autoRenew'        => $autoRenew,
+            'username'          => $username,
+            'passwordHash'      => $passwordHash,
+            'firstName'         => $firstName,
+            'lastName'          => $lastName,
+            'recoveryEmail'     => $recoveryEmail,
+            'whatsapp'          => $whatsapp,
+            'companyName'       => $companyName,
+            'gstNumber'         => $gstNumber,
+            'billingAddress'    => $billingAddr,
+            'autoRenew'         => $autoRenew,
+            'discountPercent'   => $discountPercent,
+            'resolvedReferrerId'=> $resolvedReferrerId,
+            'isPaidAd'          => $isPaidAd,
+            'walletDeduction'   => $walletDeduction,
+            'zohoChargeAmount'  => $zohoChargeAmount,
         ];
         $checkoutMeta = json_encode($checkoutMetaArr);
 
         // Store pending checkout
         Database::insert(
             'INSERT INTO `PendingCheckout`
-             (referenceNumber, planId, amount, billingPeriod, customerEmail, customerName, customerPhone, checkoutMeta, status, createdAt, updatedAt)
-             VALUES (:ref, :planId, :amount, :bp, :email, :name, :phone, :meta, \'PENDING\', :now1, :now2)',
+             (referenceNumber, planId, amount, billingPeriod, customerEmail, customerName, customerPhone, checkoutMeta, promoCode, status, createdAt, updatedAt)
+             VALUES (:ref, :planId, :amount, :bp, :email, :name, :phone, :meta, :promo, \'PENDING\', :now1, :now2)',
             [
                 ':ref'    => $referenceNumber,
                 ':planId' => $planId,
-                ':amount' => $amount,
+                ':amount' => $finalAmount,
                 ':bp'     => $billingPeriod,
                 ':email'  => $customerEmail,
                 ':name'   => $customerName,
                 ':phone'  => $customerPhone,
                 ':meta'   => $checkoutMeta,
+                ':promo'  => $promoCode,
                 ':now1'   => $now,
                 ':now2'   => $now,
             ]
@@ -92,8 +148,9 @@ class PaymentController
 
         // Create server-side Zoho payment session (required by widget)
         try {
-            $description = "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")";
-            $session     = ZohoPaymentService::createSession($amount, $referenceNumber, $description);
+            $description = "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")"
+                . ($discountPercent > 0 ? ' [' . round($discountPercent * 100) . '% off]' : '');
+            $session     = ZohoPaymentService::createSession(max(1.0, $zohoChargeAmount), $referenceNumber, $description);
         } catch (Throwable $e) {
             Logger::error('[PaymentController] ZohoPaymentService::createSession failed: ' . $e->getMessage());
             Response::error('Payment gateway error: ' . $e->getMessage(), 502);
@@ -114,9 +171,15 @@ class PaymentController
             'account_id'          => ZOHO_PAYMENTS_ACCOUNT_ID,
             'api_key'             => ZOHO_PAYMENTS_API_KEY,
             'payments_session_id' => $paymentsSessionId,
-            'amount'              => $amount,
+            'amount'              => $finalAmount,
+            'zohoChargeAmount'    => $zohoChargeAmount,
+            'walletDeduction'     => $walletDeduction,
+            'originalAmount'      => round($planBasePrice * 1.18, 2),
+            'discountPercent'     => $discountPercent,
+            'discountedBase'      => $discountedBase,
+            'gstAmount'           => $gstAmount,
             'referenceNumber'     => $referenceNumber,
-            'description'         => "WebMyDrive - {$planName} (" . ucfirst($billingPeriod) . ")",
+            'description'         => $description,
         ]);
     }
 
@@ -319,16 +382,23 @@ class PaymentController
             $autoRenew     = !empty($meta['autoRenew']) ? 1 : 0;
             $billingPeriodLower = strtolower($billingPeriod);
 
+            // Recover discount & referrer from checkout meta
+            $discountPercent    = (float) ($meta['discountPercent']    ?? 0);
+            $resolvedReferrerId = isset($meta['resolvedReferrerId']) && $meta['resolvedReferrerId']
+                                    ? (int) $meta['resolvedReferrerId'] : null;
+
             // Check if workspace exists
             $wsExists = Database::queryOne('SELECT id FROM `Workspace` WHERE userId = :uid', [':uid' => $userId]);
             if (!$wsExists) {
                 Database::insert(
                     'INSERT INTO `Workspace`
-                     (userId, planId, status, renewalDate, billingPeriod, autoRenew, createdAt, updatedAt)
-                     VALUES (:uid, :planId, \'ACTIVE\', :renewal, :bp, :ar, :now1, :now2)',
+                     (userId, planId, discount_percent, referred_by, status, renewalDate, billingPeriod, autoRenew, createdAt, updatedAt)
+                     VALUES (:uid, :planId, :disc, :refBy, \'ACTIVE\', :renewal, :bp, :ar, :now1, :now2)',
                     [
                         ':uid'     => $userId,
                         ':planId'  => (int) $checkout['planId'],
+                        ':disc'    => $discountPercent,
+                        ':refBy'   => $resolvedReferrerId,
                         ':renewal' => $renewalDate,
                         ':bp'      => $billingPeriodLower,
                         ':ar'      => $autoRenew,
@@ -377,6 +447,39 @@ class PaymentController
             );
 
             Database::commit();
+
+            // 6. Deduct wallet if used (non-fatal, after commit)
+            $walletDeduction = (float)($meta['walletDeduction'] ?? 0);
+            if ($walletDeduction > 0) {
+                try {
+                    $now2 = date('Y-m-d H:i:s');
+                    Database::insert(
+                        "INSERT INTO `WalletTransaction`
+                         (userId, amount, type, source, description, orderId, createdAt)
+                         VALUES (:uid, :amt, 'DEBIT', 'SPEND', :desc, :oid, :now)",
+                        [':uid' => $userId, ':amt' => $walletDeduction,
+                         ':desc' => "Wallet used for order #{$orderId}",
+                         ':oid' => $orderId, ':now' => $now2]
+                    );
+                    Database::execute(
+                        'UPDATE `User` SET walletBalance = GREATEST(0, walletBalance - :amt) WHERE id = :id',
+                        [':amt' => $walletDeduction, ':id' => $userId]
+                    );
+                    Logger::info("[ZohoWebhook] Wallet ₹{$walletDeduction} deducted from user {$userId}");
+                } catch (Throwable $we) {
+                    Logger::error('[ZohoWebhook] Wallet deduction failed (non-fatal): ' . $we->getMessage());
+                }
+            }
+
+            // 7. Process referral commission (non-fatal, after commit)
+            $promoCode = $checkout['promoCode'] ?? ($meta['promoCode'] ?? null);
+            if ($promoCode) {
+                try {
+                    ReferralService::processNewOrder($orderId, $userId, $promoCode);
+                } catch (Throwable $re) {
+                    Logger::error('[ZohoWebhook] ReferralService::processNewOrder failed (non-fatal): ' . $re->getMessage());
+                }
+            }
 
             AuditService::log('PAYMENT_COMPLETED', $userId, null, [
                 'referenceNumber' => $referenceNumber,

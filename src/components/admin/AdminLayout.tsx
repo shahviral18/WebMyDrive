@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
-  LogOut, Menu, X, Shield, CreditCard, Gift,
+  LogOut, Menu, X, Shield, CreditCard, Gift, Tag,
   FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight,
 } from "lucide-react";
 import {
@@ -37,6 +37,7 @@ const navGroups = [
       { label: "Plans", href: "/admin/plans", icon: CreditCard },
       { label: "Orders", href: "/admin/orders", icon: FileText },
       { label: "Referral Engine", href: "/admin/referral-engine", icon: Gift },
+      { label: "Vouchers", href: "/admin/vouchers", icon: Tag },
     ],
   },
   {

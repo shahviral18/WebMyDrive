@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock } from "lucide-react";
+import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock, Wallet, Tag, TrendingUp, TrendingDown } from "lucide-react";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,16 +59,33 @@ export default function UserBilling() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
     const [autoRenewal, setAutoRenewal] = useState<AutoRenewalStatus | null>(null);
+    const [walletBalance, setWalletBalance] = useState<number>(0);
+    const [walletTxs, setWalletTxs] = useState<any[]>([]);
+    const [voucherCode, setVoucherCode] = useState("");
+    const [redeemingVoucher, setRedeemingVoucher] = useState(false);
+
+    const fetchWallet = async () => {
+        try {
+            const data = await api.get("/user/wallet-transactions");
+            setWalletBalance(data.walletBalance ?? 0);
+            setWalletTxs(data.transactions ?? []);
+        } catch { /* non-fatal */ }
+    };
 
     useEffect(() => {
         Promise.all([
             api.get("/referral/my-orders"),
             api.get("/user/current-plan"),
             api.get("/user/autorenewal-status").catch(() => null),
-        ]).then(([ordersData, planData, arData]) => {
+            api.get("/user/wallet-transactions").catch(() => null),
+        ]).then(([ordersData, planData, arData, walletData]) => {
             setOrders(ordersData.orders || []);
             setCurrentPlan(planData);
             setAutoRenewal(arData);
+            if (walletData) {
+                setWalletBalance(walletData.walletBalance ?? 0);
+                setWalletTxs(walletData.transactions ?? []);
+            }
         }).catch(() => {
             setOrders([]);
             setCurrentPlan({ hasPlan: false });
@@ -74,6 +93,21 @@ export default function UserBilling() {
             setPageLoading(false);
         });
     }, []);
+
+    const handleRedeemVoucher = async () => {
+        if (!voucherCode.trim()) return toast.error("Enter a voucher code");
+        setRedeemingVoucher(true);
+        try {
+            const res = await api.post("/user/redeem-voucher", { code: voucherCode.trim().toUpperCase() });
+            toast.success(`₹${res.credited?.toLocaleString("en-IN")} credited to your wallet!`);
+            setVoucherCode("");
+            await fetchWallet();
+        } catch (e: any) {
+            toast.error(e?.message || "Invalid or expired voucher code");
+        } finally {
+            setRedeemingVoucher(false);
+        }
+    };
 
     return (
         <UserLayout>
@@ -196,6 +230,68 @@ export default function UserBilling() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Wallet Credits */}
+                <Card className="border-border shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Wallet className="w-5 h-5 text-primary" />
+                            Wallet Credits
+                        </CardTitle>
+                        <CardDescription>Your referral & voucher credits usable on renewals and plan purchases</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20">
+                            <div>
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Available Balance</p>
+                                <p className="text-3xl font-bold text-primary">₹{walletBalance.toLocaleString("en-IN")}</p>
+                            </div>
+                        </div>
+
+                        {/* Redeem voucher */}
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="Enter voucher code (e.g. WMDABCD1234)"
+                                value={voucherCode}
+                                onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                                className="font-mono uppercase"
+                                onKeyDown={e => e.key === "Enter" && handleRedeemVoucher()}
+                            />
+                            <Button onClick={handleRedeemVoucher} disabled={redeemingVoucher} className="shrink-0">
+                                {redeemingVoucher ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Tag className="w-4 h-4 mr-1" />Redeem</>}
+                            </Button>
+                        </div>
+
+                        {/* Transaction history */}
+                        {walletTxs.length > 0 && (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead>Expires</TableHead>
+                                        <TableHead className="text-right">Amount</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {walletTxs.slice(0, 10).map((tx: any) => (
+                                        <TableRow key={tx.id}>
+                                            <TableCell className="text-xs text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), "dd MMM yy") : "—"}</TableCell>
+                                            <TableCell className="text-xs text-foreground max-w-[200px] truncate">{tx.description || tx.source}</TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{tx.expires_at ? format(new Date(tx.expires_at), "dd MMM yy") : "—"}</TableCell>
+                                            <TableCell className="text-right font-semibold text-sm">
+                                                <span className={tx.type === "CREDIT" ? "text-success" : "text-destructive"}>
+                                                    {tx.type === "CREDIT" ? <TrendingUp className="inline w-3 h-3 mr-1" /> : <TrendingDown className="inline w-3 h-3 mr-1" />}
+                                                    {tx.type === "CREDIT" ? "+" : "−"}₹{Number(tx.amount).toLocaleString("en-IN")}
+                                                </span>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Invoice History */}
                 <Card className="border-border shadow-sm">

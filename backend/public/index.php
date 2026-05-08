@@ -154,6 +154,11 @@ $router->post('/api/admin/existing-users/sync-google', [AdminController::class, 
 $router->get('/api/admin/existing-users', [AdminController::class, 'getExistingUsers'], $adminOnly);
 $router->post('/api/admin/existing-users/:id/import', [AdminController::class, 'importExistingUser'], $adminOnly);
 $router->post('/api/admin/existing-users/bulk-import', [AdminController::class, 'bulkImportExistingUsers'], $adminOnly);
+$router->get('/api/admin/vouchers',            [AdminController::class, 'getVouchers'],       $adminOnly);
+$router->post('/api/admin/vouchers',           [AdminController::class, 'createVouchers'],    $adminOnly);
+$router->delete('/api/admin/vouchers/:id',     [AdminController::class, 'deactivateVoucher'], $adminOnly);
+$router->get('/api/admin/price-revision',      [AdminController::class, 'getPriceRevision'],  $adminOnly);
+$router->post('/api/admin/price-revision',     [AdminController::class, 'setPriceRevision'],  $adminOnly);
 
 // ── Super-admin only ──────────────────────────────────────────────────────────
 $superAdminOnly = [
@@ -191,6 +196,8 @@ $router->post('/api/user/enable-autorenewal',    [UserController::class, 'enable
 $router->post('/api/user/confirm-mandate',       [UserController::class, 'confirmMandate'],       $auth);
 $router->post('/api/user/disable-autorenewal',   [UserController::class, 'disableAutoRenewal'],   $auth);
 $router->patch('/api/user/referral-code',        [UserController::class, 'updateReferralCode'],   $auth);
+$router->post('/api/user/redeem-voucher',        [UserController::class, 'redeemVoucher'],         $auth);
+$router->get('/api/user/wallet-transactions',    [UserController::class, 'getWalletTransactions'], $auth);
 
 // ── Referral ──────────────────────────────────────────────────────────────────
 $router->get('/api/referral/dashboard', [ReferralController::class, 'getDashboard'], $auth);
