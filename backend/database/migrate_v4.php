@@ -183,4 +183,39 @@ foreach ($users as $u) {
 }
 echo "  ✅ Migrated $migrated user wallet balances\n";
 
+// ── 7. Distributor bank details ───────────────────────────────────────────────
+echo "\n7. DistributorApplication bank detail columns...\n";
+addColumnIfMissing($pdo, 'DistributorApplication', 'bankAccountHolder', 'VARCHAR(255) NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'bankName',          'VARCHAR(255) NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'bankAccountNumber', 'VARCHAR(50)  NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'bankIfscCode',      'VARCHAR(11)  NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'bankAccountType',   "VARCHAR(20)  NULL DEFAULT 'SAVINGS'");
+addColumnIfMissing($pdo, 'DistributorApplication', 'upiId',             'VARCHAR(100) NULL');
+
+echo "\n7b. Distributor bank detail columns...\n";
+addColumnIfMissing($pdo, 'Distributor', 'bankAccountHolder', 'VARCHAR(255) NULL');
+addColumnIfMissing($pdo, 'Distributor', 'bankName',          'VARCHAR(255) NULL');
+addColumnIfMissing($pdo, 'Distributor', 'bankAccountNumber', 'VARCHAR(50)  NULL');
+addColumnIfMissing($pdo, 'Distributor', 'bankIfscCode',      'VARCHAR(11)  NULL');
+addColumnIfMissing($pdo, 'Distributor', 'bankAccountType',   "VARCHAR(20)  NULL DEFAULT 'SAVINGS'");
+addColumnIfMissing($pdo, 'Distributor', 'upiId',             'VARCHAR(100) NULL');
+
+// ── 8. Distributor: linkedUserId, entityType, PAN, GST ───────────────────────
+echo "\n8. Distributor KYC + link columns...\n";
+addColumnIfMissing($pdo, 'Distributor', 'linkedUserId', 'INT NULL');
+addColumnIfMissing($pdo, 'Distributor', 'entityType',   'VARCHAR(50) NULL');
+addColumnIfMissing($pdo, 'Distributor', 'panNumber',    'VARCHAR(20) NULL');
+addColumnIfMissing($pdo, 'Distributor', 'gstin',        'VARCHAR(20) NULL');
+
+echo "\n8b. DistributorApplication: entityType, GST columns...\n";
+addColumnIfMissing($pdo, 'DistributorApplication', 'entityType',  'VARCHAR(50)  NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'gstin',       'VARCHAR(20)  NULL');
+addColumnIfMissing($pdo, 'DistributorApplication', 'gstFilePath', 'VARCHAR(500) NULL');
+
+// ── 9. DistributorWalletTx: payout invoice + UTR tracking ────────────────────
+echo "\n9. DistributorWalletTx payout tracking columns...\n";
+addColumnIfMissing($pdo, 'DistributorWalletTx', 'invoicePath', 'VARCHAR(500) NULL');
+addColumnIfMissing($pdo, 'DistributorWalletTx', 'utrNumber',   'VARCHAR(100) NULL');
+addColumnIfMissing($pdo, 'DistributorWalletTx', 'adminNote',   'TEXT NULL');
+
 echo "\n=== migrate_v4 complete ===\n\n";
