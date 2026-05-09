@@ -79,6 +79,8 @@ export default function UserDashboard() {
 
     const rawName = user.name || (user.email ? user.email.split("@")[0] : "User");
     const displayName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    const currentPlanName = user.workspace?.plan?.name ?? "";
+    const isHighestPlan = currentPlanName.toLowerCase().includes("enterprise plus");
 
     // ── WMD ID setup dialog ───────────────────────────────────────────────────
     type IdCheckStatus = "idle" | "checking" | "available" | "taken";
@@ -243,9 +245,11 @@ export default function UserDashboard() {
                                     Your WebMyDrive workspace is ready. Manage your files and plan below.
                                 </p>
                                 <div className="flex gap-3 flex-wrap">
+                                    {!isHighestPlan && (
                                     <Link to="/user/plans" className="bg-card text-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors">
                                         Upgrade Plan
                                     </Link>
+                                    )}
                                     <a
                                         href="https://drive.google.com/drive/home"
                                         target="_blank"
