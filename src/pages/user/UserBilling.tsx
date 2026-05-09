@@ -64,7 +64,7 @@ export default function UserBilling() {
         localStorage.setItem("wmd_user_token", localStorage.getItem("token") || "");
         localStorage.setItem("token", distToken);
         sessionStorage.setItem("wmd_user_role", "distributor");
-        window.location.href = destination;
+        window.location.href = import.meta.env.BASE_URL.replace(/\/$/, "") + destination;
     };
     const [pageLoading, setPageLoading] = useState(true);
     const [orders, setOrders] = useState<Order[]>([]);
