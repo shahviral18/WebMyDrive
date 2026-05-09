@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
+import { PanelSwitcher } from "@/components/PanelSwitcher";
 
 interface DistributorLayoutProps {
     children: React.ReactNode;
@@ -198,8 +199,10 @@ export default function DistributorLayout({ children }: DistributorLayoutProps) 
             {/* Main */}
             <main className="flex-1 flex flex-col min-h-screen min-w-0">
 
-                {/* Desktop Top Bar — SINGLE theme toggle lives here */}
+                {/* Desktop Top Bar */}
                 <header className="hidden lg:flex items-center justify-end h-14 px-6 border-b border-border bg-card sticky top-0 z-20 gap-3">
+
+                    <PanelSwitcher currentPanel="distributor" />
 
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                         <Bell className="w-5 h-5" />
