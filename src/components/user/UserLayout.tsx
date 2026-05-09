@@ -137,9 +137,6 @@ export default function UserLayout({ children }: UserLayoutProps) {
                 {/* User footer */}
                 <div className={cn("p-3 border-t border-border", collapsed && !mobile ? "flex flex-col items-center gap-2" : "space-y-2")}>
 
-                    {/* Panel Switcher */}
-                    <PanelSwitcher currentPanel="user" collapsed={collapsed && !mobile} />
-
                     {/* Theme Toggle */}
                     <div className={cn("flex items-center", collapsed && !mobile ? "justify-center" : "justify-between px-3 py-1.5")}>
                         {(!collapsed || mobile) && <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Theme</span>}
@@ -201,6 +198,8 @@ export default function UserLayout({ children }: UserLayoutProps) {
 
                 {/* Desktop Top Bar */}
                 <header className="hidden lg:flex items-center justify-end h-14 px-6 border-b border-border bg-card sticky top-0 z-20 gap-3">
+
+                    <PanelSwitcher currentPanel="user" />
 
                     <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                         <Bell className="w-5 h-5" />

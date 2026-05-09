@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
-import { PanelSwitcher } from "@/components/PanelSwitcher";
 
 interface DistributorLayoutProps {
     children: React.ReactNode;
@@ -139,9 +138,6 @@ export default function DistributorLayout({ children }: DistributorLayoutProps) 
 
                 {/* User footer */}
                 <div className={cn("p-3 border-t border-border", collapsed && !mobile ? "flex flex-col items-center gap-2" : "space-y-2")}>
-
-                    {/* Panel Switcher */}
-                    <PanelSwitcher currentPanel="distributor" collapsed={collapsed && !mobile} />
 
                     {/* Theme Toggle */}
                     <div className={cn("flex items-center", collapsed && !mobile ? "justify-center" : "justify-between px-3 py-1.5")}>
