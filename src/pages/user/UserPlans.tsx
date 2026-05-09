@@ -276,7 +276,7 @@ export default function UserPlans() {
 
     const originalPriceFor = (plan: Plan) => {
         const shortName = getShortPlanName(plan.name);
-        const monthlyBase = MONTHLY_BASE_PRICES[shortName] ?? MONTHLY_BASE_PRICES[plan.name] ?? plan.price;
+        const monthlyBase = plan.priceMonthlyINR ?? MONTHLY_BASE_PRICES[shortName] ?? MONTHLY_BASE_PRICES[plan.name] ?? plan.price;
         return isYearly ? roundDiscountedPrice(monthlyBase as number) : monthlyBase;
     };
 
@@ -398,8 +398,12 @@ export default function UserPlans() {
     const getPlanAction = (plan: Plan): "current" | "upgrade" | "downgrade" => {
         if (!currentPlan?.hasPlan || !currentPlan.planId) return "upgrade";
         if (plan.id === currentPlan.planId) return "current";
-        const currentMonthly = currentPlan.monthlyPrice ?? 0;
-        const planMonthly = plan.monthlyPrice ?? 0;
+        const currentPlanData = plans.find(p => p.id === currentPlan.planId);
+        const currentSort = currentPlanData?.sortOrder ?? 0;
+        const planSort = plan.sortOrder ?? 0;
+        if (currentSort > 0 && planSort > 0) return planSort > currentSort ? "upgrade" : "downgrade";
+        const currentMonthly = currentPlanData?.priceMonthlyINR ?? currentPlan.monthlyPrice ?? 0;
+        const planMonthly = plan.priceMonthlyINR ?? plan.monthlyPrice ?? 0;
         return planMonthly > currentMonthly ? "upgrade" : "downgrade";
     };
 
@@ -701,7 +705,7 @@ export default function UserPlans() {
                             const isCurrentPlan = action === "current";
                             const isDowngradeScheduled = currentPlan?.nextPlanId === plan.id;
                             const shortName = getShortPlanName(plan.name);
-                            const monthlyBase = MONTHLY_BASE_PRICES[shortName] ?? MONTHLY_BASE_PRICES[plan.name] ?? plan.price;
+                            const monthlyBase = plan.priceMonthlyINR ?? MONTHLY_BASE_PRICES[shortName] ?? MONTHLY_BASE_PRICES[plan.name] ?? plan.price;
                             const displayPrice = isYearly ? roundDiscountedPrice(monthlyBase as number) : monthlyBase;
 
                             return (
