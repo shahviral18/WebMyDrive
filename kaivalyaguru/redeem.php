@@ -134,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $mail->Username = SMTP_USER; $mail->Password = SMTP_PASS;
             $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = SMTP_PORT;
+            $mail->CharSet = 'UTF-8';
             $mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
             $mail->addReplyTo(SMTP_REPLY_TO, SMTP_FROM_NAME);
             $mail->addAddress($entry['email'], $entry['first_name'] . ' ' . $entry['last_name']);

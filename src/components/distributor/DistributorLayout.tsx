@@ -9,6 +9,7 @@ import {
     Briefcase,
     Wallet,
     Megaphone,
+    Settings,
     LogOut,
     Bell,
     Sun,
@@ -38,6 +39,7 @@ const navItems = [
     { label: "Customers", href: "/distributor/customers", icon: Users },
     { label: "Payouts", href: "/distributor/payouts", icon: CreditCard },
     { label: "Marketing Tools", href: "/distributor/marketing", icon: Megaphone },
+    { label: "Settings", href: "/distributor/settings", icon: Settings },
 ];
 
 export default function DistributorLayout({ children }: DistributorLayoutProps) {

@@ -261,7 +261,7 @@ class DistributorService
      * Request a payout from distributor wallet.
      * Enforces minimum balance retention and payout threshold.
      */
-    public static function requestPayout(int $distributorId, float $reqAmount): array
+    public static function requestPayout(int $distributorId, float $reqAmount, ?string $invoicePath = null): array
     {
         if ($reqAmount <= 0) {
             throw new RuntimeException('Invalid payout amount.');
@@ -311,12 +311,13 @@ class DistributorService
 
             $txId = Database::insert(
                 'INSERT INTO "DistributorWalletTx"
-                 (distributorId, amount, type, status, description, createdAt)
-                 VALUES (:did, :amt, \'PAYOUT\', \'PENDING\', :desc, :now)',
+                 (distributorId, amount, type, status, description, invoicePath, createdAt)
+                 VALUES (:did, :amt, \'PAYOUT\', \'PENDING\', :desc, :inv, :now)',
                 [
                     ':did' => $distributorId,
                     ':amt' => -$reqAmount,
                     ':desc' => "Payout request — Rs $reqAmount",
+                    ':inv' => $invoicePath,
                     ':now' => $now,
                 ]
             );

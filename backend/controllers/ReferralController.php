@@ -137,7 +137,15 @@ class ReferralController
             Response::error('Code not valid', 400);
         }
 
-        Response::json(['success' => true, 'discountPct' => 0]);
+        if ($validLink['role'] === 'DISTRIBUTOR') {
+            $distCfg = ConfigService::getDistributorConfig();
+            $discountPct = (float)($distCfg['promoDiscounts'][$planName] ?? 0);
+            Response::json(['success' => true, 'discountPct' => $discountPct, 'type' => 'DISTRIBUTOR_REF']);
+        }
+
+        // USER referral link — discount from plan slab
+        $slab = ConfigService::getPlanReferralSlab($planName);
+        Response::json(['success' => true, 'discountPct' => $slab['referredDiscount'] * 100, 'type' => 'USER_REF']);
     }
 
     public function createCheckoutSession(Request $req): void
@@ -241,6 +249,11 @@ class ReferralController
                     }
 
                     if ($validLink['role'] === 'DISTRIBUTOR') {
+                        $distConfig = ConfigService::getDistributorConfig();
+                        $discountPct = (float)($distConfig['promoDiscounts'][$plan['name']] ?? 0);
+                        if ($discountPct > 0) {
+                            $discountedAmount = round($amountINR * (1 - $discountPct / 100), 2);
+                        }
                         $finalReferralKey = "DIST_{$validLink['referrerId']}:{$validLink['code']}";
                     } else {
                         if ((int) $validLink['referrerId'] === $userId) {

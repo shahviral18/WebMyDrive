@@ -23,13 +23,19 @@ export default function ResellPage() {
   const [elig, setElig] = useState<Eligibility>({ status: "idle" });
   const [f, setF] = useState({
     firstName: "", lastName: "", whatsapp: "", recoveryEmail: "", companyName: "",
+    entityType: "INDIVIDUAL",
+    gstin: "",
     panNumber: "", aadharNumber: "",
     addressLine1: "", addressLine2: "", area: "", city: "", state: "",
     teamSize: "1-5",
     accountantName: "", accountantPhone: "", accountantEmail: "",
+    bankAccountHolder: "", bankName: "", bankAccountNumber: "", bankAccountNumberConfirm: "",
+    bankIfscCode: "", bankAccountType: "SAVINGS", upiId: "",
   });
+  const [isGstRegistered, setIsGstRegistered] = useState(false);
   const [panFile, setPanFile] = useState<File | null>(null);
   const [aadharFile, setAadharFile] = useState<File | null>(null);
+  const [gstFile, setGstFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function checkEligibility() {
@@ -55,13 +61,34 @@ export default function ResellPage() {
     if (panFile.size > 5 * 1024 * 1024 || aadharFile.size > 5 * 1024 * 1024) {
       toast.error("Each document must be 5 MB or less."); return;
     }
+    if (isGstRegistered) {
+      const gstin = f.gstin.trim().toUpperCase();
+      if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
+        toast.error("Please enter a valid GSTIN (e.g. 27AAPFU0939F1ZV)."); return;
+      }
+      if (!gstFile) { toast.error("GST certificate upload is required when GST registered."); return; }
+      if (gstFile.size > 5 * 1024 * 1024) { toast.error("GST certificate must be 5 MB or less."); return; }
+    }
+    if (f.bankAccountNumber !== f.bankAccountNumberConfirm) {
+      toast.error("Account numbers do not match."); return;
+    }
+    const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscPattern.test(f.bankIfscCode.toUpperCase())) {
+      toast.error("Please enter a valid IFSC code (e.g. HDFC0001234)."); return;
+    }
     setIsSubmitting(true);
     try {
       const fd = new FormData();
       fd.append("accountEmail", accountEmail.trim().toLowerCase());
-      Object.entries(f).forEach(([k, v]) => fd.append(k, v));
+      Object.entries(f).forEach(([k, v]) => {
+        if (k === "bankAccountNumberConfirm") return; // UI-only field
+        if (k === "bankIfscCode") { fd.append(k, v.toUpperCase()); return; }
+        if (k === "gstin") { fd.append(k, isGstRegistered ? v.trim().toUpperCase() : ""); return; }
+        fd.append(k, v);
+      });
       fd.append("panFile", panFile);
       fd.append("aadharFile", aadharFile);
+      if (isGstRegistered && gstFile) fd.append("gstFile", gstFile);
       const res = await fetch(getApiUrl("/distributor/apply"), { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Submission failed");
@@ -134,7 +161,24 @@ export default function ResellPage() {
 
               <Card title="3. Company">
                 <div className="space-y-6">
-                  <Input required placeholder="Company Name" value={f.companyName} onChange={(e) => setF({ ...f, companyName: e.target.value })} className="h-11 border-slate-200 rounded" />
+                  <Grid2>
+                    <Input required placeholder="Company Name" value={f.companyName} onChange={(e) => setF({ ...f, companyName: e.target.value })} className="h-11 border-slate-200 rounded" />
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">Entity Type *</label>
+                      <select
+                        required
+                        className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={f.entityType}
+                        onChange={(e) => setF({ ...f, entityType: e.target.value })}
+                      >
+                        <option value="INDIVIDUAL">Individual / Freelancer</option>
+                        <option value="PROPRIETOR">Sole Proprietor</option>
+                        <option value="PARTNERSHIP">Partnership Firm</option>
+                        <option value="LLP">LLP</option>
+                        <option value="PVT_LTD">Private Limited / OPC</option>
+                      </select>
+                    </div>
+                  </Grid2>
                   <Grid2>
                     <Input required placeholder="PAN Number" value={f.panNumber} onChange={(e) => setF({ ...f, panNumber: e.target.value.toUpperCase() })} className="h-11 border-slate-200 rounded uppercase" />
                     <Input required placeholder="Aadhar Number" value={f.aadharNumber} onChange={(e) => setF({ ...f, aadharNumber: e.target.value })} className="h-11 border-slate-200 rounded" />
@@ -143,6 +187,30 @@ export default function ResellPage() {
                     <FileInput label="PAN Document (PDF/JPG/PNG, ≤ 5 MB)" file={panFile} onChange={setPanFile} />
                     <FileInput label="Aadhar Document (PDF/JPG/PNG, ≤ 5 MB)" file={aadharFile} onChange={setAadharFile} />
                   </Grid2>
+                  {/* GST Section */}
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isGstRegistered}
+                        onChange={(e) => setIsGstRegistered(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700 font-medium">I am GST registered</span>
+                    </label>
+                    {isGstRegistered && (
+                      <Grid2>
+                        <Input
+                          placeholder="GSTIN (e.g. 27AAPFU0939F1ZV)"
+                          value={f.gstin}
+                          onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })}
+                          maxLength={15}
+                          className="h-11 border-slate-200 rounded uppercase"
+                        />
+                        <FileInput label="GST Certificate (PDF/JPG/PNG, ≤ 5 MB)" file={gstFile} onChange={setGstFile} />
+                      </Grid2>
+                    )}
+                  </div>
                 </div>
               </Card>
 
@@ -177,6 +245,28 @@ export default function ResellPage() {
                   <Phone value={f.accountantPhone} onChange={(v) => setF({ ...f, accountantPhone: v })} label="Accountant Phone" />
                   <Input type="email" placeholder="Accountant Email" value={f.accountantEmail} onChange={(e) => setF({ ...f, accountantEmail: e.target.value })} className="h-11 border-slate-200 rounded md:col-span-2" />
                 </Grid2>
+              </Card>
+
+              <Card title="7. Bank details">
+                <p className="text-sm text-slate-500 mb-6">Used for commission payouts. All details are stored securely and reviewed manually.</p>
+                <div className="space-y-6">
+                  <Grid2>
+                    <Input required placeholder="Account Holder Name" value={f.bankAccountHolder} onChange={(e) => setF({ ...f, bankAccountHolder: e.target.value })} className="h-11 border-slate-200 rounded" />
+                    <Input required placeholder="Bank Name" value={f.bankName} onChange={(e) => setF({ ...f, bankName: e.target.value })} className="h-11 border-slate-200 rounded" />
+                    <Input required placeholder="Account Number" value={f.bankAccountNumber} onChange={(e) => setF({ ...f, bankAccountNumber: e.target.value.replace(/\D/g, "") })} className="h-11 border-slate-200 rounded" />
+                    <Input required placeholder="Confirm Account Number" value={f.bankAccountNumberConfirm} onChange={(e) => setF({ ...f, bankAccountNumberConfirm: e.target.value.replace(/\D/g, "") })} className="h-11 border-slate-200 rounded" />
+                    <Input required placeholder="IFSC Code (e.g. HDFC0001234)" value={f.bankIfscCode} onChange={(e) => setF({ ...f, bankIfscCode: e.target.value.toUpperCase() })} maxLength={11} className="h-11 border-slate-200 rounded uppercase" />
+                    <select
+                      className="flex h-11 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={f.bankAccountType}
+                      onChange={(e) => setF({ ...f, bankAccountType: e.target.value })}
+                    >
+                      <option value="SAVINGS">Savings Account</option>
+                      <option value="CURRENT">Current Account</option>
+                    </select>
+                  </Grid2>
+                  <Input placeholder="UPI ID (optional, e.g. name@bank)" value={f.upiId} onChange={(e) => setF({ ...f, upiId: e.target.value })} className="h-11 border-slate-200 rounded" />
+                </div>
               </Card>
             </div>
           </fieldset>

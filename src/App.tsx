@@ -22,6 +22,7 @@ import SubscribeUsername from "./pages/SubscribeUsername";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import Resell from "./pages/Resell";
 import DistributorApplications from "./pages/admin/DistributorApplications";
+import DistributorPayoutsAdmin from "./pages/admin/DistributorPayoutsAdmin";
 import ChangePlan from "./pages/admin/ChangePlan";
 import AssignDistributor from "./pages/admin/AssignDistributor";
 import ImportUsers from "./pages/admin/ImportUsers";
@@ -39,6 +40,7 @@ import DistributorWallet from "./pages/distributor/DistributorWallet";
 import DistributorCustomers from "./pages/distributor/DistributorCustomers";
 import DistributorPayouts from "./pages/distributor/DistributorPayouts";
 import DistributorMarketing from "./pages/distributor/DistributorMarketing";
+import DistributorSettings from "./pages/distributor/DistributorSettings";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -179,6 +181,11 @@ const App = () => (
                     <DistributorMarketing />
                   </AuthGuard>
                 } />
+                <Route path="/distributor/settings" element={
+                  <AuthGuard requiredRole="distributor" redirectTo="/login">
+                    <DistributorSettings />
+                  </AuthGuard>
+                } />
                 {/* Catch-all for unknown /distributor/* paths */}
                 <Route path="/distributor/*" element={<Navigate to="/login" replace />} />
 
@@ -194,6 +201,7 @@ const App = () => (
                   <Route path="vouchers" element={<Vouchers />} />
                   <Route path="distributors" element={<Distributors />} />
                   <Route path="distributor-applications" element={<DistributorApplications />} />
+                  <Route path="distributor-payouts" element={<DistributorPayoutsAdmin />} />
                   <Route path="change-plan" element={<ChangePlan />} />
                   <Route path="assign-distributor" element={<AssignDistributor />} />
                   <Route path="import-users" element={<ImportUsers />} />

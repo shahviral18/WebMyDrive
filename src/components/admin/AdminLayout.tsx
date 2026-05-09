@@ -47,6 +47,7 @@ const navGroups = [
       { label: "Distributors", href: "/admin/distributors", icon: Handshake },
       { label: "Assign Distributor", href: "/admin/assign-distributor", icon: Users },
       { label: "Distributor Applications", href: "/admin/distributor-applications", icon: Briefcase },
+      { label: "Distributor Payouts", href: "/admin/distributor-payouts", icon: Briefcase },
       { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
     ],
   },

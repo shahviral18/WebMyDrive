@@ -70,6 +70,11 @@ class ConfigService
                 'Enterprise'      => 40,
                 'Enterprise Plus' => 0,
             ],
+            'payoutConfig' => [
+                'tdsEnabled'      => false,
+                'tdsRate'         => 10,
+                'minPayoutAmount' => 5000,
+            ],
         ];
     }
 

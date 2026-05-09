@@ -183,6 +183,21 @@ class InternalController
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
+        // ── v5: Distributor bank details ──────────────────────────────────────
+        $addCol('DistributorApplication', 'bankAccountHolder', 'VARCHAR(255) NULL');
+        $addCol('DistributorApplication', 'bankName',          'VARCHAR(255) NULL');
+        $addCol('DistributorApplication', 'bankAccountNumber', 'VARCHAR(50)  NULL');
+        $addCol('DistributorApplication', 'bankIfscCode',      'VARCHAR(11)  NULL');
+        $addCol('DistributorApplication', 'bankAccountType',   "VARCHAR(20)  NULL DEFAULT 'SAVINGS'");
+        $addCol('DistributorApplication', 'upiId',             'VARCHAR(100) NULL');
+
+        $addCol('Distributor', 'bankAccountHolder', 'VARCHAR(255) NULL');
+        $addCol('Distributor', 'bankName',          'VARCHAR(255) NULL');
+        $addCol('Distributor', 'bankAccountNumber', 'VARCHAR(50)  NULL');
+        $addCol('Distributor', 'bankIfscCode',      'VARCHAR(11)  NULL');
+        $addCol('Distributor', 'bankAccountType',   "VARCHAR(20)  NULL DEFAULT 'SAVINGS'");
+        $addCol('Distributor', 'upiId',             'VARCHAR(100) NULL');
+
         Logger::info('[Internal/Migration] v4 completed: ' . json_encode($results));
         http_response_code(200);
         header('Content-Type: application/json');

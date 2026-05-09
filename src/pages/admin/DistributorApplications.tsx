@@ -34,6 +34,12 @@ type AppDetail = AppRow & {
   hasAadharFile?: boolean;
   reviewNotes?: string;
   updatedAt?: string;
+  bankAccountHolder?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
+  bankAccountType?: string;
+  upiId?: string;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -204,6 +210,18 @@ function DetailDrawer({
           <Field label="Accountant Name" value={app.accountantName || "—"} />
           <Field label="Accountant Phone" value={app.accountantPhone || "—"} />
           <Field label="Accountant Email" value={app.accountantEmail || "—"} full />
+        </div>
+
+        <div className="mt-6 border-t pt-5">
+          <h3 className="text-sm font-semibold mb-4">Bank Details</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <Field label="Account Holder" value={app.bankAccountHolder || "—"} />
+            <Field label="Bank Name" value={app.bankName || "—"} />
+            <Field label="Account Number" value={app.bankAccountNumber ? `****${app.bankAccountNumber.slice(-4)}` : "—"} />
+            <Field label="IFSC Code" value={app.bankIfscCode || "—"} />
+            <Field label="Account Type" value={app.bankAccountType || "—"} />
+            <Field label="UPI ID" value={app.upiId || "—"} />
+          </div>
         </div>
 
         <div className="mt-6 flex gap-3">

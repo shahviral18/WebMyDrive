@@ -234,6 +234,13 @@ $router->get('/api/distributor/wallet', [DistributorController::class, 'getWalle
 $router->get('/api/distributor/customers', [DistributorController::class, 'getCustomers'], $auth);
 $router->get('/api/distributor/earnings', [DistributorController::class, 'getEarningsStats'], $auth);
 $router->get('/api/distributor/promo-codes', [DistributorController::class, 'getPromoCodeHistory'], $auth);
+$router->get('/api/distributor/settings', [DistributorController::class, 'getSettings'], $auth);
+$router->patch('/api/distributor/settings', [DistributorController::class, 'updateSettings'], $auth);
+
+// ── Admin: Distributor payouts ────────────────────────────────────────────────
+$router->get('/api/admin/distributor-payouts', [DistributorController::class, 'adminListPayouts'], $adminAuth);
+$router->patch('/api/admin/distributor-payouts/:id', [DistributorController::class, 'adminUpdatePayout'], $adminAuth);
+$router->get('/api/admin/distributor-payouts/:id/invoice', [DistributorController::class, 'adminDownloadInvoice'], $adminAuth);
 
 // ── Internal (called by GitHub Actions cron — token-authenticated, no JWT) ────
 $router->get('/api/cron/run-migration', [InternalController::class, 'runMigration']);

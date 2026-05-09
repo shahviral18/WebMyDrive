@@ -64,6 +64,7 @@ try {
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
     $mail->Port       = SMTP_PORT;
 
+    $mail->CharSet = 'UTF-8';
     $mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
     $mail->addReplyTo(SMTP_REPLY_TO, SMTP_FROM_NAME);
     $mail->addAddress($entry['email'], $entry['first_name'] . ' ' . $entry['last_name']);

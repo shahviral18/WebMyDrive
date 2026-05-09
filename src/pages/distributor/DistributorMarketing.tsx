@@ -104,50 +104,50 @@ export default function DistributorMarketing() {
                             <CardTitle className="text-base">Promo Code</CardTitle>
                         </div>
                         <CardDescription>
-                            Customers enter this code at checkout to get a plan discount.
-                            Different from your referral link — this is a typed code, not a URL.
+                            Share this code — customers enter it at checkout for a plan discount and you earn commission.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {loading ? (
                             <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-                        ) : promoCode ? (
-                            <>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-1 bg-muted rounded-lg px-5 py-3 font-mono text-2xl font-bold tracking-widest text-foreground border border-border select-all">
-                                        {promoCode}
-                                    </div>
-                                    <Button variant="outline" size="icon" className="h-12 w-12 shrink-0"
-                                        onClick={() => copyLink(promoCode, "Promo code")}
-                                        title="Copy promo code">
-                                        {copied === "Promo code" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                                    </Button>
+                        ) : (() => {
+                            const displayCode = promoCode ?? refCode;
+                            if (!displayCode) return (
+                                <div className="py-6 text-center text-sm text-muted-foreground">
+                                    Code not loaded — contact support.
                                 </div>
-                                {Object.keys(promoDiscounts).length > 0 && (
-                                    <div>
-                                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                            Customer discounts by plan:
-                                        </p>
-                                        <div className="flex flex-wrap gap-2">
-                                            {Object.entries(promoDiscounts).map(([plan, pct]) => (
-                                                <span key={plan}
-                                                    className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs font-medium bg-muted">
-                                                    <span className="text-foreground">{plan}</span>
-                                                    <span className="text-primary font-bold">{pct}% off</span>
-                                                </span>
-                                            ))}
+                            );
+                            return (
+                                <>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-1 bg-muted rounded-lg px-5 py-3 font-mono text-2xl font-bold tracking-widest text-foreground border border-border select-all">
+                                            {displayCode}
                                         </div>
+                                        <Button variant="outline" size="icon" className="h-12 w-12 shrink-0"
+                                            onClick={() => copyLink(displayCode, "Promo code")}
+                                            title="Copy promo code">
+                                            {copied === "Promo code" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                        </Button>
                                     </div>
-                                )}
-                            </>
-                        ) : (
-                            <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                                <Tag className="w-5 h-5 text-amber-600 shrink-0" />
-                                <p className="text-sm text-amber-700 dark:text-amber-400">
-                                    No promo code assigned yet. Contact your account manager to get one set up.
-                                </p>
-                            </div>
-                        )}
+                                    {Object.keys(promoDiscounts).length > 0 && (
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                                                Customer discounts by plan:
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {Object.entries(promoDiscounts).map(([plan, pct]) => (
+                                                    <span key={plan}
+                                                        className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs font-medium bg-muted">
+                                                        <span className="text-foreground">{plan}</span>
+                                                        <span className="text-primary font-bold">{pct}% off</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
                     </CardContent>
                 </Card>
 

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { CreditCard, CheckCircle, Clock, XCircle, Download, Building, Banknote } from "lucide-react";
+import { CreditCard, CheckCircle, Clock, XCircle, Download, Building, Banknote, Upload, FileText, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import DistributorLayout from "@/components/distributor/DistributorLayout";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
-import { useEffect } from "react";
+import { api, getApiUrl } from "@/lib/api";
 
 const statusConfig = {
     completed: { label: "Completed", icon: CheckCircle, cls: "text-success", bg: "bg-success/10 text-success border-success/30" },
@@ -21,9 +20,17 @@ const statusConfig = {
 export default function DistributorPayouts() {
     const [showForm, setShowForm] = useState(false);
     const [amount, setAmount] = useState("");
+    const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [payouts, setPayouts] = useState<any[]>([]);
     const [availableBalance, setAvailableBalance] = useState(0);
+    const [payoutConfig, setPayoutConfig] = useState<{ tdsEnabled: boolean; tdsRate: number; minPayoutAmount: number }>(
+        { tdsEnabled: false, tdsRate: 10, minPayoutAmount: 5000 }
+    );
+    const [bankInfo, setBankInfo] = useState<{
+        bankName?: string; bankAccountNumber?: string; bankAccountType?: string; upiId?: string;
+    } | null>(null);
+    const invoiceInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         Promise.all([
@@ -33,41 +40,62 @@ export default function DistributorPayouts() {
             .then(([dash, payData]) => {
                 if (dash?.distributor) {
                     setAvailableBalance(dash.distributor.walletBalance);
+                    const d = dash.distributor;
+                    if (d.bankName || d.bankAccountNumber) {
+                        setBankInfo({
+                            bankName: d.bankName,
+                            bankAccountNumber: d.bankAccountNumber,
+                            bankAccountType: d.bankAccountType,
+                            upiId: d.upiId,
+                        });
+                    }
                 }
+                if (dash?.payoutConfig) setPayoutConfig(dash.payoutConfig);
                 setPayouts(payData?.payouts ?? []);
             })
             .catch(console.error);
     }, []);
 
+    const minPayout = payoutConfig.minPayoutAmount ?? 5000;
+
     const handleRequest = async () => {
         const amt = parseFloat(amount);
-        if (!amt || amt < 5000) { toast.error("Minimum payout is ₹5,000"); return; }
+        if (!amt || amt < minPayout) { toast.error(`Minimum payout is ₹${minPayout.toLocaleString()}`); return; }
         if (amt > availableBalance) { toast.error(`Exceeds available balance of ₹${availableBalance.toLocaleString()}`); return; }
+        if (!invoiceFile) { toast.error("Please upload your invoice PDF."); return; }
+        if (invoiceFile.size > 5 * 1024 * 1024) { toast.error("Invoice must be 5 MB or less."); return; }
 
         setSubmitting(true);
         try {
-            const result = await api.post("/distributor/request-payout", {
-                amount: amt
+            const fd = new FormData();
+            fd.append("amount", String(amt));
+            fd.append("invoiceFile", invoiceFile);
+            const token = localStorage.getItem("token") || "";
+            const res = await fetch(getApiUrl("/distributor/request-payout"), {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: fd,
             });
+            const result = await res.json();
             if (result.success) {
-                toast.success(`Payout request for ₹${amt.toLocaleString()} submitted successfully!`);
+                toast.success(`Payout request for ₹${amt.toLocaleString()} submitted!`);
                 setShowForm(false);
                 setAmount("");
+                setInvoiceFile(null);
                 setAvailableBalance(prev => prev - amt);
-                setPayouts([{
-                    id: `PAY-REQ-NEW`, date: new Date().toLocaleDateString(),
-                    amount: `₹${amt.toLocaleString()}`, method: "Bank Transfer",
-                    status: "pending", txRef: "—"
-                }, ...payouts]);
+                setPayouts(prev => [{ id: `PAY-NEW`, date: new Date().toLocaleDateString(), amount: `₹${amt.toLocaleString()}`, method: "Bank Transfer", status: "pending", utrNumber: null }, ...prev]);
             } else {
                 toast.error(result.error || "Payout failed");
             }
-        } catch (e) {
+        } catch {
             toast.error("Error submitting request");
         } finally {
             setSubmitting(false);
         }
     };
+
+    const tdsAmount = payoutConfig.tdsEnabled ? Math.round(parseFloat(amount || "0") * payoutConfig.tdsRate / 100) : 0;
+    const netAmount = parseFloat(amount || "0") - tdsAmount;
 
     const totalPaid = payouts.filter(p => p.status === "completed").reduce((s, p) => s + parseInt(p.amount.replace(/[^0-9]/g, "")), 0);
 
@@ -115,25 +143,48 @@ export default function DistributorPayouts() {
                         <Card className="border-primary/30 bg-primary/5">
                             <CardHeader>
                                 <CardTitle>New Payout Request</CardTitle>
-                                <CardDescription>Minimum ₹500 · Processes within 2–3 business days to your registered bank account.</CardDescription>
+                                <CardDescription>Minimum ₹{minPayout.toLocaleString()} · Processes within 2–3 business days to your registered bank account.</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Bank Account</Label>
-                                    <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-surface-2 text-sm text-muted-foreground">
-                                        <Building className="w-4 h-4" /> HDFC Bank ****4821
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Bank Account</Label>
+                                        <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-surface-2 text-sm text-muted-foreground">
+                                            <Building className="w-4 h-4" />
+                                            {bankInfo
+                                                ? `${bankInfo.bankName ?? "Bank"} ****${(bankInfo.bankAccountNumber ?? "").slice(-4)}`
+                                                : "No bank account on file"}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="payamt">Amount (₹)</Label>
+                                        <Input id="payamt" type="number" min={minPayout} max={availableBalance} placeholder={`e.g. ${minPayout}`} value={amount} onChange={e => setAmount(e.target.value)} className="bg-surface-2 border-border" />
+                                        <p className="text-xs text-muted-foreground">Available: ₹{availableBalance.toLocaleString()}</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Invoice (PDF, required)</Label>
+                                        <label className="flex h-10 items-center gap-2 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground cursor-pointer hover:border-primary hover:text-primary transition-colors bg-surface-2">
+                                            {invoiceFile ? <FileText className="w-4 h-4 shrink-0 text-primary" /> : <Upload className="w-4 h-4 shrink-0" />}
+                                            <span className="truncate">{invoiceFile ? invoiceFile.name : "Upload invoice PDF"}</span>
+                                            <input ref={invoiceInputRef} type="file" accept="application/pdf" className="hidden" onChange={e => setInvoiceFile(e.target.files?.[0] ?? null)} />
+                                        </label>
                                     </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="payamt">Amount (₹)</Label>
-                                    <Input id="payamt" type="number" min={5000} max={availableBalance} placeholder="e.g. 5000" value={amount} onChange={e => setAmount(e.target.value)} className="bg-surface-2 border-border" />
-                                    <p className="text-xs text-muted-foreground">Available: ₹{availableBalance.toLocaleString()}</p>
-                                </div>
-                                <div className="flex items-end gap-2">
-                                    <Button className="flex-1 bg-success hover:bg-success/90 text-white" onClick={handleRequest} disabled={submitting}>
+                                {/* TDS Breakdown */}
+                                {payoutConfig.tdsEnabled && parseFloat(amount) > 0 && (
+                                    <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm">
+                                        <Info className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+                                        <div className="space-y-1">
+                                            <p className="font-semibold text-foreground">TDS Deduction (Sec 194J — {payoutConfig.tdsRate}%)</p>
+                                            <p className="text-muted-foreground">Gross: ₹{parseFloat(amount).toLocaleString()} &nbsp;–&nbsp; TDS: ₹{tdsAmount.toLocaleString()} &nbsp;=&nbsp; <span className="font-bold text-foreground">Net: ₹{netAmount.toLocaleString()}</span></p>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex gap-2 justify-end">
+                                    <Button variant="outline" onClick={() => { setShowForm(false); setInvoiceFile(null); }}>Cancel</Button>
+                                    <Button className="bg-success hover:bg-success/90 text-white gap-2" onClick={handleRequest} disabled={submitting}>
                                         {submitting ? "Submitting..." : "Confirm Request"}
                                     </Button>
-                                    <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -167,7 +218,7 @@ export default function DistributorPayouts() {
                                             <TableCell className="font-mono text-xs text-muted-foreground">{p.id}</TableCell>
                                             <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
                                             <TableCell className="text-sm text-muted-foreground">{p.method}</TableCell>
-                                            <TableCell className="font-mono text-xs text-muted-foreground">{p.txRef}</TableCell>
+                                            <TableCell className="font-mono text-xs text-muted-foreground">{p.utrNumber ?? p.txRef ?? "—"}</TableCell>
                                             <TableCell className="font-semibold text-foreground">{p.amount}</TableCell>
                                             <TableCell>
                                                 <Badge variant="outline" className={cfg.bg}>{cfg.label}</Badge>
