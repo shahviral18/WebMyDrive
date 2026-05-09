@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Users, Copy, Check, Loader2, ShieldCheck, DollarSign, TrendingUp, UserPlus, RefreshCw, AlertTriangle, Sparkles, EyeOff } from "lucide-react";
+import { Users, Copy, Check, Loader2, ShieldCheck, Wallet, TrendingUp, UserPlus, RefreshCw, AlertTriangle, Sparkles, EyeOff } from "lucide-react";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/contexts/UserContext";
@@ -147,7 +147,7 @@ export default function UserReferrals() {
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {[
-                        { label: "Total Wallet Credits", value: `₹${walletBalance.toFixed(2)}`, icon: DollarSign, color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
+                        { label: "Total Wallet Credits", value: `₹${walletBalance.toFixed(2)}`, icon: Wallet, color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
                         { label: "Successful Referrals", value: `${totalReferrals}`, icon: Users, color: "text-primary", bg: "bg-primary/10" },
                         { label: "Credit Rate", value: "5%", icon: TrendingUp, color: "text-indigo-500", bg: "bg-indigo-100 dark:bg-indigo-900/30" }
                     ].map((stat, i) => (
