@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { copyToClipboard } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
-import { PanelSwitcher } from "@/components/PanelSwitcher";
 
 export default function DistributorDashboard() {
     const [data, setData] = useState<any>(null);
@@ -105,11 +104,6 @@ export default function DistributorDashboard() {
     return (
         <DistributorLayout>
             <div className="space-y-6">
-
-                {/* Panel Switcher */}
-                <div className="flex justify-end">
-                    <PanelSwitcher currentPanel="distributor" />
-                </div>
 
                 {/* Welcome Banner */}
                 <motion.div
