@@ -121,50 +121,88 @@ class DistributorApplicationController
             Response::error('Your account does not have a qualifying plan (50 TB+).', 400);
         }
 
+        // Validate bank details server-side
+        $bankAccountHolder = trim((string) ($post['bankAccountHolder'] ?? ''));
+        $bankName          = trim((string) ($post['bankName']          ?? ''));
+        $bankAccountNumber = trim((string) ($post['bankAccountNumber'] ?? ''));
+        $bankIfscCode      = strtoupper(trim((string) ($post['bankIfscCode'] ?? '')));
+        $bankAccountType   = in_array($post['bankAccountType'] ?? '', ['SAVINGS', 'CURRENT'], true)
+                             ? $post['bankAccountType'] : 'SAVINGS';
+        $upiId             = trim((string) ($post['upiId'] ?? '')) ?: null;
+
+        if (!$bankAccountHolder || !$bankName || !$bankAccountNumber) {
+            Response::error('Bank account holder, bank name, and account number are required.', 400);
+        }
+        if (!preg_match('/^[A-Z]{4}0[A-Z0-9]{6}$/', $bankIfscCode)) {
+            Response::error('Invalid IFSC code format.', 400);
+        }
+
+        // Entity type + GST
+        $validEntityTypes = ['INDIVIDUAL','PROPRIETOR','PARTNERSHIP','LLP','PVT_LTD'];
+        $entityType = strtoupper(trim((string)($post['entityType'] ?? '')));
+        if (!in_array($entityType, $validEntityTypes, true)) $entityType = null;
+        $gstin = strtoupper(trim((string)($post['gstin'] ?? ''))) ?: null;
+        if ($gstin && !preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', $gstin)) {
+            Response::error('Invalid GSTIN format.', 400);
+        }
+
         // Insert row first so we have an id for the folder
         $id = Database::insert(
             'INSERT INTO "DistributorApplication"
                  (accountEmail, linkedUserId, firstName, lastName, whatsapp, recoveryEmail,
-                  companyName, panNumber, aadharNumber,
+                  companyName, panNumber, aadharNumber, entityType, gstin,
                   addressLine1, addressLine2, area, city, state,
-                  teamSize, accountantName, accountantPhone, accountantEmail, status)
+                  teamSize, accountantName, accountantPhone, accountantEmail,
+                  bankAccountHolder, bankName, bankAccountNumber, bankIfscCode, bankAccountType, upiId,
+                  status)
              VALUES
                  (:accountEmail, :linkedUserId, :firstName, :lastName, :whatsapp, :recoveryEmail,
-                  :companyName, :panNumber, :aadharNumber,
+                  :companyName, :panNumber, :aadharNumber, :entityType, :gstin,
                   :addressLine1, :addressLine2, :area, :city, :state,
-                  :teamSize, :accountantName, :accountantPhone, :accountantEmail, :status)',
+                  :teamSize, :accountantName, :accountantPhone, :accountantEmail,
+                  :bankAccountHolder, :bankName, :bankAccountNumber, :bankIfscCode, :bankAccountType, :upiId,
+                  :status)',
             [
-                ':accountEmail'    => $email,
-                ':linkedUserId'    => (int) $user['id'],
-                ':firstName'       => $post['firstName']      ?? null,
-                ':lastName'        => $post['lastName']       ?? null,
-                ':whatsapp'        => $post['whatsapp']       ?? null,
-                ':recoveryEmail'   => $post['recoveryEmail']  ?? null,
-                ':companyName'     => $post['companyName']    ?? null,
-                ':panNumber'       => strtoupper(trim((string)($post['panNumber']    ?? ''))) ?: null,
-                ':aadharNumber'    => preg_replace('/\s+/', '', (string)($post['aadharNumber'] ?? '')) ?: null,
-                ':addressLine1'    => $post['addressLine1']   ?? null,
-                ':addressLine2'    => $post['addressLine2']   ?? null,
-                ':area'            => $post['area']           ?? null,
-                ':city'            => $post['city']           ?? null,
-                ':state'           => $post['state']          ?? null,
-                ':teamSize'        => $post['teamSize']       ?? null,
-                ':accountantName'  => $post['accountantName'] ?? null,
-                ':accountantPhone' => $post['accountantPhone']?? null,
-                ':accountantEmail' => $post['accountantEmail']?? null,
-                ':status'          => 'PENDING',
+                ':accountEmail'       => $email,
+                ':linkedUserId'       => (int) $user['id'],
+                ':firstName'          => $post['firstName']      ?? null,
+                ':lastName'           => $post['lastName']       ?? null,
+                ':whatsapp'           => $post['whatsapp']       ?? null,
+                ':recoveryEmail'      => $post['recoveryEmail']  ?? null,
+                ':companyName'        => $post['companyName']    ?? null,
+                ':panNumber'          => strtoupper(trim((string)($post['panNumber']    ?? ''))) ?: null,
+                ':aadharNumber'       => preg_replace('/\s+/', '', (string)($post['aadharNumber'] ?? '')) ?: null,
+                ':entityType'         => $entityType,
+                ':gstin'              => $gstin,
+                ':addressLine1'       => $post['addressLine1']   ?? null,
+                ':addressLine2'       => $post['addressLine2']   ?? null,
+                ':area'               => $post['area']           ?? null,
+                ':city'               => $post['city']           ?? null,
+                ':state'              => $post['state']          ?? null,
+                ':teamSize'           => $post['teamSize']       ?? null,
+                ':accountantName'     => $post['accountantName'] ?? null,
+                ':accountantPhone'    => $post['accountantPhone']?? null,
+                ':accountantEmail'    => $post['accountantEmail']?? null,
+                ':bankAccountHolder'  => $bankAccountHolder,
+                ':bankName'           => $bankName,
+                ':bankAccountNumber'  => $bankAccountNumber,
+                ':bankIfscCode'       => $bankIfscCode,
+                ':bankAccountType'    => $bankAccountType,
+                ':upiId'              => $upiId,
+                ':status'             => 'PENDING',
             ]
         );
 
         // Save uploaded files
         $dir = self::uploadBase() . "/$id";
         if (!is_dir($dir)) @mkdir($dir, 0755, true);
-        $panPath = self::saveUpload($_FILES['panFile'] ?? null, $dir, "pan");
+        $panPath    = self::saveUpload($_FILES['panFile']    ?? null, $dir, "pan");
         $aadharPath = self::saveUpload($_FILES['aadharFile'] ?? null, $dir, "aadhar");
+        $gstPath    = self::saveUpload($_FILES['gstFile']    ?? null, $dir, "gst");
 
         Database::execute(
-            'UPDATE "DistributorApplication" SET panFilePath = :p, aadharFilePath = :a WHERE id = :id',
-            [':p' => $panPath, ':a' => $aadharPath, ':id' => $id]
+            'UPDATE "DistributorApplication" SET panFilePath = :p, aadharFilePath = :a, gstFilePath = :g WHERE id = :id',
+            [':p' => $panPath, ':a' => $aadharPath, ':g' => $gstPath, ':id' => $id]
         );
 
         Logger::info("[DistributorApp] submitted id=$id email=$email");
@@ -253,23 +291,40 @@ class DistributorApplicationController
                         $refCode = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', strtoupper($name)), 0, 6)) . rand(10, 99);
                         $now = date('Y-m-d H:i:s');
 
-                        Database::insert(
-                            'INSERT INTO "Distributor" (name, email, displayEmail, passwordHash, referralCode, walletBalance, status, passwordResetRequired, linkedUserId, createdAt, updatedAt)
-                             VALUES (:name, :email, :display, :hash, :ref, 0, \'ACTIVE\', 0, :uid, :now1, :now2)',
+                        $newDistId = Database::insert(
+                            'INSERT INTO "Distributor"
+                                 (name, email, displayEmail, passwordHash, referralCode, walletBalance, status,
+                                  passwordResetRequired, linkedUserId,
+                                  entityType, panNumber, gstin,
+                                  bankAccountHolder, bankName, bankAccountNumber, bankIfscCode, bankAccountType, upiId,
+                                  createdAt, updatedAt)
+                             VALUES
+                                 (:name, :email, :display, :hash, :ref, 0, \'ACTIVE\', 0, :uid,
+                                  :entityType, :panNumber, :gstin,
+                                  :bankAccountHolder, :bankName, :bankAccountNumber, :bankIfscCode, :bankAccountType, :upiId,
+                                  :now1, :now2)',
                             [
-                                ':name'    => $name,
-                                ':email'   => $app['accountEmail'],
-                                ':display' => $app['accountEmail'],
-                                ':hash'    => $user['passwordHash'],
-                                ':ref'     => $refCode,
-                                ':uid'     => $linkedUserId,
-                                ':now1'    => $now,
-                                ':now2'    => $now,
+                                ':name'               => $name,
+                                ':email'              => $app['accountEmail'],
+                                ':display'            => $app['accountEmail'],
+                                ':hash'               => $user['passwordHash'],
+                                ':ref'                => $refCode,
+                                ':uid'                => $linkedUserId,
+                                ':entityType'         => $app['entityType']        ?? null,
+                                ':panNumber'          => $app['panNumber']         ?? null,
+                                ':gstin'              => $app['gstin']             ?? null,
+                                ':bankAccountHolder'  => $app['bankAccountHolder'] ?? null,
+                                ':bankName'           => $app['bankName']          ?? null,
+                                ':bankAccountNumber'  => $app['bankAccountNumber'] ?? null,
+                                ':bankIfscCode'       => $app['bankIfscCode']      ?? null,
+                                ':bankAccountType'    => $app['bankAccountType']   ?? 'SAVINGS',
+                                ':upiId'              => $app['upiId']             ?? null,
+                                ':now1'               => $now,
+                                ':now2'               => $now,
                             ]
                         );
 
                         // Create ReferralLink for the new distributor
-                        $newDistId = Database::scalar('SELECT id FROM "Distributor" WHERE linkedUserId = :uid', [':uid' => $linkedUserId]);
                         if ($newDistId) {
                             ReferralLinkService::getActiveLink((int) $newDistId, 'DISTRIBUTOR');
                         }
