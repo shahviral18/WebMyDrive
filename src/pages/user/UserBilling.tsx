@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock, Wallet, Tag, TrendingUp, TrendingDown } from "lucide-react";
+import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock, Wallet, Tag, TrendingUp, TrendingDown, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import UserLayout from "@/components/user/UserLayout";
@@ -55,6 +55,17 @@ interface Order {
 
 export default function UserBilling() {
     const navigate = useNavigate();
+
+    const isAlsoDistributor = !!localStorage.getItem("wmd_dist_token");
+
+    const switchToDistributor = (destination: string) => {
+        const distToken = localStorage.getItem("wmd_dist_token");
+        if (!distToken) return;
+        localStorage.setItem("wmd_user_token", localStorage.getItem("token") || "");
+        localStorage.setItem("token", distToken);
+        sessionStorage.setItem("wmd_user_role", "distributor");
+        window.location.href = destination;
+    };
     const [pageLoading, setPageLoading] = useState(true);
     const [orders, setOrders] = useState<Order[]>([]);
     const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null);
@@ -241,7 +252,22 @@ export default function UserBilling() {
                         <CardDescription>Your referral & voucher credits usable on renewals and plan purchases</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20">
+                        {isAlsoDistributor ? (
+                            <div className="flex flex-col items-center text-center gap-4 py-6">
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                                    <Wallet className="w-6 h-6 text-primary" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-foreground">Your earnings wallet is in the Distributor panel</p>
+                                    <p className="text-sm text-muted-foreground mt-1">Commission credits and withdrawals are managed there.</p>
+                                </div>
+                                <Button onClick={() => switchToDistributor("/distributor/wallet")} className="gap-2">
+                                    <ArrowRightLeft className="w-4 h-4" />
+                                    Switch to Distributor Panel
+                                </Button>
+                            </div>
+                        ) : (
+                        <><div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20">
                             <div>
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Available Balance</p>
                                 <p className="text-3xl font-bold text-primary">₹{walletBalance.toLocaleString("en-IN")}</p>
@@ -289,6 +315,8 @@ export default function UserBilling() {
                                     ))}
                                 </TableBody>
                             </Table>
+                        )}
+                        </>
                         )}
                     </CardContent>
                 </Card>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
-import { Users, Copy, Check, Loader2, ShieldCheck, Wallet, TrendingUp, UserPlus, RefreshCw, AlertTriangle, Sparkles, EyeOff } from "lucide-react";
+import { Users, Copy, Check, Loader2, ShieldCheck, Wallet, TrendingUp, UserPlus, RefreshCw, AlertTriangle, Sparkles, EyeOff, ArrowRightLeft } from "lucide-react";
 import UserLayout from "@/components/user/UserLayout";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/contexts/UserContext";
@@ -18,6 +18,39 @@ function randomCode(): string {
 
 export default function UserReferrals() {
     const { user } = useUser();
+
+    const isAlsoDistributor = !!localStorage.getItem("wmd_dist_token");
+
+    const switchToDistributor = (destination: string) => {
+        const distToken = localStorage.getItem("wmd_dist_token");
+        if (!distToken) return;
+        localStorage.setItem("wmd_user_token", localStorage.getItem("token") || "");
+        localStorage.setItem("token", distToken);
+        sessionStorage.setItem("wmd_user_role", "distributor");
+        window.location.href = destination;
+    };
+
+    if (isAlsoDistributor) {
+        return (
+            <UserLayout>
+                <div className="max-w-xl mx-auto py-16 px-4 flex flex-col items-center text-center gap-6">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                        <Users className="w-8 h-8 text-primary" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-foreground mb-2">You're a Distributor</h2>
+                        <p className="text-sm text-muted-foreground max-w-sm">
+                            Your referral network, commission history, and referral link are managed in your Distributor panel — not here.
+                        </p>
+                    </div>
+                    <Button onClick={() => switchToDistributor("/distributor/referrals")} className="gap-2">
+                        <ArrowRightLeft className="w-4 h-4" />
+                        Switch to Distributor Panel
+                    </Button>
+                </div>
+            </UserLayout>
+        );
+    }
     const [copied, setCopied] = useState(false);
     const linkRef = useRef<HTMLInputElement>(null);
 
