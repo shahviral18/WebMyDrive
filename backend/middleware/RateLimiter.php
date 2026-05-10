@@ -15,12 +15,17 @@ class RateLimiter
      */
     public static function check(string $ip, string $action, int $maxAttempts = 10, int $windowSeconds = 900): bool
     {
-        $since = date('Y-m-d H:i:s', time() - $windowSeconds);
-        $count = Database::scalar(
-            'SELECT COUNT(*) FROM "AuditLog" WHERE ip = :ip AND action = :action AND createdAt > :since',
-            [':ip' => $ip, ':action' => $action, ':since' => $since]
-        );
-        return (int) $count < $maxAttempts;
+        try {
+            $since = date('Y-m-d H:i:s', time() - $windowSeconds);
+            $count = Database::scalar(
+                'SELECT COUNT(*) FROM `AuditLog` WHERE ip = :ip AND action = :action AND createdAt > :since',
+                [':ip' => $ip, ':action' => $action, ':since' => $since]
+            );
+            return (int) $count < $maxAttempts;
+        } catch (\Throwable $e) {
+            // AuditLog table may not exist yet — allow request through
+            return true;
+        }
     }
 
     /**

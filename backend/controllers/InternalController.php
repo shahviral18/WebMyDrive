@@ -198,6 +198,46 @@ class InternalController
         $addCol('Distributor', 'bankAccountType',   "VARCHAR(20)  NULL DEFAULT 'SAVINGS'");
         $addCol('Distributor', 'upiId',             'VARCHAR(100) NULL');
 
+        // ── v6: Distributor KYC + link + payout tracking ──────────────────────
+        $addCol('Distributor', 'linkedUserId', 'INT NULL');
+        $addCol('Distributor', 'entityType',   'VARCHAR(50) NULL');
+        $addCol('Distributor', 'panNumber',    'VARCHAR(20) NULL');
+        $addCol('Distributor', 'gstin',        'VARCHAR(20) NULL');
+
+        $addCol('DistributorApplication', 'entityType',  'VARCHAR(50)  NULL');
+        $addCol('DistributorApplication', 'gstin',       'VARCHAR(20)  NULL');
+        $addCol('DistributorApplication', 'gstFilePath', 'VARCHAR(500) NULL');
+
+        $addCol('DistributorWalletTx', 'invoicePath', 'VARCHAR(500) NULL');
+        $addCol('DistributorWalletTx', 'utrNumber',   'VARCHAR(100) NULL');
+        $addCol('DistributorWalletTx', 'adminNote',   'TEXT NULL');
+
+        // ── v7: AuditLog + UserSession (required by RateLimiter + AuthController) ─
+        $createTable('AuditLog', "
+            CREATE TABLE IF NOT EXISTS `AuditLog` (
+              id        INT AUTO_INCREMENT PRIMARY KEY,
+              action    VARCHAR(100) NOT NULL,
+              userId    INT NULL,
+              ip        VARCHAR(50)  NULL,
+              details   TEXT         NULL,
+              createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_al_ip_action (ip, action, createdAt),
+              INDEX idx_al_userId    (userId),
+              INDEX idx_al_action    (action)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        $createTable('UserSession', "
+            CREATE TABLE IF NOT EXISTS `UserSession` (
+              id          INT AUTO_INCREMENT PRIMARY KEY,
+              userId      INT NOT NULL,
+              ipAddress   VARCHAR(50)  NULL,
+              userAgent   VARCHAR(500) NULL,
+              createdAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_us_userId (userId)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
         Logger::info('[Internal/Migration] v4 completed: ' . json_encode($results));
         http_response_code(200);
         header('Content-Type: application/json');

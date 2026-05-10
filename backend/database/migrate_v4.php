@@ -218,4 +218,35 @@ addColumnIfMissing($pdo, 'DistributorWalletTx', 'invoicePath', 'VARCHAR(500) NUL
 addColumnIfMissing($pdo, 'DistributorWalletTx', 'utrNumber',   'VARCHAR(100) NULL');
 addColumnIfMissing($pdo, 'DistributorWalletTx', 'adminNote',   'TEXT NULL');
 
+// ── 10. AuditLog table (used by RateLimiter + AuditService) ──────────────────
+echo "\n10. AuditLog table...\n";
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `AuditLog` (
+      id        INT AUTO_INCREMENT PRIMARY KEY,
+      action    VARCHAR(100) NOT NULL,
+      userId    INT NULL,
+      ip        VARCHAR(50)  NULL,
+      details   TEXT         NULL,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_al_ip_action (ip, action, createdAt),
+      INDEX idx_al_userId    (userId),
+      INDEX idx_al_action    (action)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+echo "  ✅ AuditLog table ready\n";
+
+// ── 11. UserSession table (login history) ────────────────────────────────────
+echo "\n11. UserSession table...\n";
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `UserSession` (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      userId      INT NOT NULL,
+      ipAddress   VARCHAR(50)  NULL,
+      userAgent   VARCHAR(500) NULL,
+      createdAt   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_us_userId (userId)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+echo "  ✅ UserSession table ready\n";
+
 echo "\n=== migrate_v4 complete ===\n\n";
