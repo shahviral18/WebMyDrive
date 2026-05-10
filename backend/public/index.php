@@ -128,7 +128,11 @@ $router->post('/api/admin/users/:id/reset-password', [AdminController::class, 'r
 $router->delete('/api/admin/users/:id', [AdminController::class, 'deleteUser'], $adminOnly);
 $router->post('/api/admin/users/:id/adjust-wallet', [AdminController::class, 'adjustWallet'], $adminOnly);
 $router->post('/api/admin/users/:id/toggle-status', [AdminController::class, 'toggleUserStatus'], $adminOnly);
-$router->post('/api/admin/users/:id/reactivate',    [AdminController::class, 'reactivateUser'],    $adminOnly);
+$router->post('/api/admin/users/:id/reactivate',              [AdminController::class, 'reactivateUser'],           $adminOnly);
+$router->post('/api/admin/users/:id/send-reactivation-link', [AdminController::class, 'sendReactivationLink'],   $adminOnly);
+// Public reactivation endpoints (no auth)
+$router->get('/api/public/reactivate',       [PaymentController::class, 'getReactivationInfo'],        []);
+$router->post('/api/public/reactivate/pay',  [PaymentController::class, 'createReactivationSession'],  []);
 $router->get('/api/admin/orders', [AdminController::class, 'getOrders'], $adminOnly);
 $router->get('/api/admin/distributors', [AdminController::class, 'getDistributors'], $adminOnly);
 $router->post('/api/admin/distributors', [AdminController::class, 'createDistributor'], $adminOnly);

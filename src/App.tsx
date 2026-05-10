@@ -28,6 +28,7 @@ import AssignDistributor from "./pages/admin/AssignDistributor";
 import ImportUsers from "./pages/admin/ImportUsers";
 import RolePermissions from "./pages/admin/RolePermissions";
 import PortalUsers from "./pages/admin/PortalUsers";
+import ReactivateAccount from "./pages/ReactivateAccount";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
@@ -93,6 +94,7 @@ const App = () => (
                 <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/resell" element={<Resell />} />
                 <Route path="/activate" element={<AccountActivate />} />
+                <Route path="/reactivate" element={<ReactivateAccount />} />
                 <Route path="/plans" element={<UserPlans />} />
                 <Route path="/ref/:code" element={<ReferralRedirect />} />
 

@@ -261,7 +261,15 @@ class PaymentController
 
         switch ($eventType) {
             case 'payment.succeeded':
-                $this->handlePaymentSucceeded($payload);
+                // Route to reactivation handler if this is a reactivation checkout
+                $ref = $payload['event_object']['payment']['reference_number'] ?? '';
+                $co  = $ref ? Database::queryOne('SELECT checkoutMeta FROM `PendingCheckout` WHERE referenceNumber=:r', [':r' => $ref]) : null;
+                $coMeta = $co ? (json_decode($co['checkoutMeta'] ?? '{}', true) ?? []) : [];
+                if (($coMeta['type'] ?? '') === 'REACTIVATION') {
+                    $this->handleReactivationPaymentSucceeded($payload, $coMeta);
+                } else {
+                    $this->handlePaymentSucceeded($payload);
+                }
                 break;
             case 'payment.failed':
                 $this->handlePaymentFailed($payload);
@@ -643,6 +651,232 @@ class PaymentController
 
         mail($toEmail, $subject, $body, $headers);
         Logger::info("[WelcomeEmail] Sent to {$toEmail}");
+    }
+
+    // ── Public: Reactivation Info (public, token-authenticated) ──────────────
+
+    public function getReactivationInfo(Request $req): void
+    {
+        $token = trim($_GET['token'] ?? '');
+        if (!$token) Response::error('Token required', 400);
+
+        $link = Database::queryOne(
+            "SELECT sl.*, u.name, u.email, u.deletedAt
+             FROM `SecurityLink` sl
+             JOIN `User` u ON u.id = sl.userId
+             WHERE sl.token = :tok AND sl.type = 'REACTIVATION' AND sl.status = 'ACTIVE'",
+            [':tok' => $token]
+        );
+
+        if (!$link)                              Response::error('Invalid or expired link', 404);
+        if (strtotime($link['expiresAt']) < time()) Response::error('This reactivation link has expired', 410);
+
+        // Get current plan info
+        $ws = Database::queryOne(
+            'SELECT w.planId, p.name AS planName, p.priceINR, p.price
+             FROM `Workspace` w LEFT JOIN `Plan` p ON p.id = w.planId
+             WHERE w.userId = :uid ORDER BY w.createdAt DESC LIMIT 1',
+            [':uid' => $link['userId']]
+        );
+
+        $basePrice   = (float)($ws['priceINR'] ?? $ws['price'] ?? 0);
+        $gstAmount   = round($basePrice * 0.18, 2);
+        $totalAmount = round($basePrice + $gstAmount, 2);
+
+        $daysLeft    = max(0, ceil((strtotime($link['expiresAt']) - time()) / 86400));
+
+        Response::json([
+            'name'       => $link['name'] ?? explode('@', $link['email'])[0],
+            'email'      => $link['email'],
+            'planName'   => $ws['planName'] ?? 'Unknown',
+            'baseAmount' => $basePrice,
+            'gstAmount'  => $gstAmount,
+            'total'      => $totalAmount,
+            'daysLeft'   => $daysLeft,
+            'tokenId'    => (int)$link['id'],
+            'userId'     => (int)$link['userId'],
+        ]);
+    }
+
+    // ── Public: Create Reactivation Payment Session ───────────────────────────
+
+    public function createReactivationSession(Request $req): void
+    {
+        $token = trim($req->body['token'] ?? '');
+        if (!$token) Response::error('Token required', 400);
+
+        $link = Database::queryOne(
+            "SELECT sl.*, u.name, u.email
+             FROM `SecurityLink` sl JOIN `User` u ON u.id = sl.userId
+             WHERE sl.token = :tok AND sl.type = 'REACTIVATION' AND sl.status = 'ACTIVE'",
+            [':tok' => $token]
+        );
+        if (!$link || strtotime($link['expiresAt']) < time())
+            Response::error('Invalid or expired token', 404);
+
+        $ws = Database::queryOne(
+            'SELECT w.planId, p.name AS planName, p.priceINR, p.price
+             FROM `Workspace` w LEFT JOIN `Plan` p ON p.id = w.planId
+             WHERE w.userId = :uid ORDER BY w.createdAt DESC LIMIT 1',
+            [':uid' => $link['userId']]
+        );
+
+        $basePrice   = (float)($ws['priceINR'] ?? $ws['price'] ?? 0);
+        $totalAmount = round($basePrice * 1.18, 2);
+
+        $referenceNumber = 'WMD-REACT-' . strtoupper(bin2hex(random_bytes(6)));
+        $now             = date('Y-m-d H:i:s');
+
+        $checkoutMeta = json_encode([
+            'type'    => 'REACTIVATION',
+            'userId'  => (int)$link['userId'],
+            'tokenId' => (int)$link['id'],
+            'planId'  => (int)($ws['planId'] ?? 0),
+        ]);
+
+        Database::insert(
+            'INSERT INTO `PendingCheckout`
+             (referenceNumber, planId, amount, billingPeriod, customerEmail, customerName, customerPhone, checkoutMeta, status, createdAt, updatedAt)
+             VALUES (:ref, :planId, :amount, \'monthly\', :email, :name, \'\', :meta, \'PENDING\', :now1, :now2)',
+            [
+                ':ref'    => $referenceNumber,
+                ':planId' => (int)($ws['planId'] ?? 0),
+                ':amount' => $totalAmount,
+                ':email'  => $link['email'],
+                ':name'   => $link['name'] ?? '',
+                ':meta'   => $checkoutMeta,
+                ':now1'   => $now,
+                ':now2'   => $now,
+            ]
+        );
+
+        $description = 'WebMyDrive Reactivation — ' . ($ws['planName'] ?? 'Plan');
+        $session     = ZohoPaymentService::createSession(max(1.0, $totalAmount), $referenceNumber, $description);
+
+        // Store session ID for fallback polling
+        $paymentsSessionId = $session['payments_session_id'] ?? '';
+        if ($paymentsSessionId) {
+            $metaArr = json_decode($checkoutMeta, true);
+            $metaArr['paymentsSessionId'] = $paymentsSessionId;
+            Database::execute(
+                'UPDATE `PendingCheckout` SET checkoutMeta=:meta WHERE referenceNumber=:ref',
+                [':meta' => json_encode($metaArr), ':ref' => $referenceNumber]
+            );
+        }
+
+        AuditService::log('REACTIVATION_SESSION_CREATED', (int)$link['userId'], $req->ip, [
+            'referenceNumber' => $referenceNumber,
+            'amount'          => $totalAmount,
+        ]);
+
+        Response::json([
+            'account_id'         => ZOHO_PAYMENTS_ACCOUNT_ID,
+            'api_key'            => ZOHO_PAYMENTS_API_KEY ?? '',
+            'payments_session_id'=> $paymentsSessionId,
+            'amount'             => $totalAmount,
+            'referenceNumber'    => $referenceNumber,
+        ]);
+    }
+
+    // ── Private: Reactivation Payment Succeeded ───────────────────────────────
+
+    private function handleReactivationPaymentSucceeded(array $payload, array $meta): void
+    {
+        $payment         = $payload['event_object']['payment'] ?? [];
+        $referenceNumber = $payment['reference_number'] ?? '';
+        $zohoPaymentId   = $payment['payment_id']       ?? '';
+        $paidAmount      = (float)($payment['amount']   ?? 0);
+
+        $checkout = Database::queryOne(
+            'SELECT * FROM `PendingCheckout` WHERE referenceNumber = :ref',
+            [':ref' => $referenceNumber]
+        );
+        if (!$checkout || $checkout['status'] === 'COMPLETED') return;
+
+        $userId  = (int)($meta['userId']  ?? 0);
+        $tokenId = (int)($meta['tokenId'] ?? 0);
+        $planId  = (int)($meta['planId']  ?? $checkout['planId'] ?? 0);
+        $now     = date('Y-m-d H:i:s');
+        $renewal = date('Y-m-d H:i:s', strtotime('+1 month'));
+
+        $user = Database::queryOne('SELECT * FROM `User` WHERE id = :id', [':id' => $userId]);
+        if (!$user) { Logger::error("[Reactivation] User {$userId} not found"); return; }
+
+        Database::beginTransaction();
+        try {
+            Database::execute(
+                'UPDATE `PendingCheckout` SET status=\'PROCESSING\', zohoPaymentId=:zpid, updatedAt=:now WHERE referenceNumber=:ref',
+                [':zpid' => $zohoPaymentId, ':now' => $now, ':ref' => $referenceNumber]
+            );
+
+            // Restore portal account
+            Database::execute(
+                'UPDATE `User` SET isDisabled=0, deletedAt=NULL, scheduledGwsDeleteAt=NULL, updatedAt=:now WHERE id=:id',
+                [':now' => $now, ':id' => $userId]
+            );
+
+            // Restore workspace + extend renewal
+            Database::execute(
+                "UPDATE `Workspace` SET status='ACTIVE', planId=:pid, renewalDate=:renewal, updatedAt=:now WHERE userId=:uid",
+                [':pid' => $planId, ':renewal' => $renewal, ':now' => $now, ':uid' => $userId]
+            );
+
+            // Create order record
+            $orderId = Database::insert(
+                'INSERT INTO `Order` (userId, planId, amount, currency, status, paymentId, gatewayTxId, createdAt, updatedAt)
+                 VALUES (:uid, :pid, :amt, \'INR\', \'PAID\', :payId, :ref, :now1, :now2)',
+                [':uid' => $userId, ':pid' => $planId,
+                 ':amt' => $paidAmount ?: (float)$checkout['amount'],
+                 ':payId' => $zohoPaymentId, ':ref' => $referenceNumber,
+                 ':now1' => $now, ':now2' => $now]
+            );
+
+            // Mark SecurityLink token as used
+            if ($tokenId) {
+                Database::execute(
+                    "UPDATE `SecurityLink` SET status='USED', usedAt=:now WHERE id=:id",
+                    [':now' => $now, ':id' => $tokenId]
+                );
+            }
+
+            Database::execute(
+                'UPDATE `PendingCheckout` SET status=\'COMPLETED\', createdUserId=:uid, updatedAt=:now WHERE referenceNumber=:ref',
+                [':uid' => $userId, ':now' => $now, ':ref' => $referenceNumber]
+            );
+
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollback();
+            Database::execute(
+                'UPDATE `PendingCheckout` SET status=\'FAILED\', updatedAt=:now WHERE referenceNumber=:ref',
+                [':now' => $now, ':ref' => $referenceNumber]
+            );
+            Logger::error('[Reactivation] handleReactivationPaymentSucceeded failed: ' . $e->getMessage());
+            return;
+        }
+
+        // Unsuspend GWS (non-fatal)
+        GoogleWorkspaceService::unsuspendUser($user['email']);
+
+        // Confirmation email
+        $name    = $user['name'] ?? explode('@', $user['email'])[0];
+        $subject = "Your WebMyDrive account has been reactivated";
+        $body    = "Hi {$name},\r\n\r\n"
+                 . "Great news — your WebMyDrive account has been successfully reactivated.\r\n\r\n"
+                 . "Your Google Workspace login: {$user['email']}\r\n"
+                 . "Next renewal: " . date('d M Y', strtotime($renewal)) . "\r\n\r\n"
+                 . "Login at: " . SITE_URL . "\r\n\r\n"
+                 . "WebMyDrive Team\r\nsupport@webmydrive.com";
+        $headers = "From: WebMyDrive <support@webmydrive.com>\r\nReply-To: support@webmydrive.com\r\nX-Mailer: PHP/" . PHP_VERSION;
+        @mail($user['email'], $subject, $body, $headers);
+
+        AuditService::log('[Payment] REACTIVATION_COMPLETE', $userId, null, [
+            'referenceNumber' => $referenceNumber,
+            'orderId'         => $orderId,
+            'amount'          => $paidAmount,
+        ]);
+
+        Logger::info("[Reactivation] Account restored for userId={$userId} ref={$referenceNumber}");
     }
 
     // ── Private: Payment Failed ───────────────────────────────────────────────

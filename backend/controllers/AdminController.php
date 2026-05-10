@@ -388,6 +388,56 @@ class AdminController
         Response::json(['success' => true]);
     }
 
+    public function sendReactivationLink(Request $req): void
+    {
+        $id = (int) ($req->params['id'] ?? 0);
+        if (!$id) Response::error('User ID required', 400);
+
+        $user = Database::queryOne('SELECT * FROM `User` WHERE id = :id', [':id' => $id]);
+        if (!$user)           Response::error('User not found', 404);
+        if (empty($user['deletedAt'])) Response::error('User is not pending deletion', 400);
+
+        $deadline = strtotime($user['deletedAt']) + (30 * 86400);
+        if (time() > $deadline) Response::error('Reactivation window has expired', 403);
+
+        // Invalidate any previous reactivation tokens for this user
+        Database::execute(
+            "UPDATE `SecurityLink` SET status='EXPIRED' WHERE userId = :uid AND type = 'REACTIVATION' AND status = 'ACTIVE'",
+            [':uid' => $id]
+        );
+
+        $token     = bin2hex(random_bytes(32));
+        $expiresAt = date('Y-m-d H:i:s', min($deadline, strtotime('+30 days')));
+
+        Database::insert(
+            "INSERT INTO `SecurityLink` (userId, token, role, type, status, expiresAt, createdAt)
+             VALUES (:uid, :tok, 'REACTIVATION', 'REACTIVATION', 'ACTIVE', :exp, NOW())",
+            [':uid' => $id, ':tok' => $token, ':exp' => $expiresAt]
+        );
+
+        $link      = SITE_URL . '/reactivate?token=' . $token;
+        $name      = $user['name'] ?? explode('@', $user['email'])[0];
+        $daysLeft  = max(1, ceil(($deadline - time()) / 86400));
+        $subject   = "Reactivate your WebMyDrive account";
+        $body      = "Hi {$name},\r\n\r\n"
+                   . "Your WebMyDrive account is pending deletion. You can reactivate it by paying for your next subscription period.\r\n\r\n"
+                   . "Click the link below to restore your account (valid for {$daysLeft} more days):\r\n"
+                   . $link . "\r\n\r\n"
+                   . "If you did not request this or no longer wish to reactivate, simply ignore this email.\r\n\r\n"
+                   . "WebMyDrive Team\r\nsupport@webmydrive.com";
+        $headers   = "From: WebMyDrive <support@webmydrive.com>\r\nReply-To: support@webmydrive.com\r\nX-Mailer: PHP/" . PHP_VERSION;
+
+        @mail($user['email'], $subject, $body, $headers);
+
+        AuditService::log('[Admin] SENT_REACTIVATION_LINK', $req->user['userId'] ?? null, $req->ip, [
+            'targetUserId' => $id,
+            'email'        => $user['email'],
+            'expiresAt'    => $expiresAt,
+        ]);
+
+        Response::json(['success' => true]);
+    }
+
     public function adjustWallet(Request $req): void
     {
         $id = (int) ($req->params['id'] ?? 0);

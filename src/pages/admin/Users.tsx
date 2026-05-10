@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Wallet, UserX, UserCheck, ShieldAlert, RefreshCw,
   LogOut, Trash2, MoreHorizontal, UserCircle2, ChevronLeft,
-  ChevronRight, Filter, UserPlus, X, Loader2, Download,
+  ChevronRight, Filter, UserPlus, X, Loader2, Download, Mail,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ interface User {
   distributorId?: number | null;
 }
 
-type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete" | "reactivate";
+type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete" | "reactivate" | "send-reactivation-link";
 interface Confirm { user: User; action: Action }
 type PlatformUserRole = "distributor" | "customer";
 
@@ -292,6 +292,9 @@ export default function UsersPage() {
         await api.post(`/admin/users/${user.id}/reactivate`, {});
         setUsers(prev => prev.map(u => u.id === user.id ? { ...u, deletedAt: null } : u));
         toast.success(`${user.name || user.email} reactivated successfully.`);
+      } else if (action === "send-reactivation-link") {
+        await api.post(`/admin/users/${user.id}/send-reactivation-link`, {});
+        toast.success(`Reactivation link sent to ${user.email}`, { duration: 5000 });
       } else {
         toast.info(`Action "${action}" recorded`);
       }
@@ -303,6 +306,8 @@ export default function UsersPage() {
   const handleAction = (user: User, action: Action) => {
     if (["suspend", "force-logout", "delete", "reset-password"].includes(action)) {
       setConfirm({ user, action });
+    } else if (action === "send-reactivation-link") {
+      executeAction(user, action);
     } else {
       toast.info(`Action "${action}" noted`);
     }
@@ -503,10 +508,16 @@ export default function UsersPage() {
                                 <DropdownMenuSeparator />
                                 {user.deletedAt ? (
                                   daysLeft(user) > 0 ? (
-                                    <DropdownMenuItem className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50 gap-2 text-xs"
-                                      onClick={() => handleAction(user, "reactivate")}>
-                                      <UserCheck className="w-3 h-3" /> Reactivate ({daysLeft(user)}d left)
-                                    </DropdownMenuItem>
+                                    <>
+                                      <DropdownMenuItem className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50 gap-2 text-xs"
+                                        onClick={() => handleAction(user, "reactivate")}>
+                                        <UserCheck className="w-3 h-3" /> Reactivate ({daysLeft(user)}d left)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="gap-2 text-xs"
+                                        onClick={() => handleAction(user, "send-reactivation-link")}>
+                                        <Mail className="w-3 h-3" /> Send Reactivation Link
+                                      </DropdownMenuItem>
+                                    </>
                                   ) : (
                                     <DropdownMenuItem disabled className="gap-2 text-xs text-muted-foreground">
                                       <Trash2 className="w-3 h-3" /> Reactivation Expired
