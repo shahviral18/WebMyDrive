@@ -60,7 +60,7 @@ const emptyForm = {
 };
 
 export default function AdminInvoices() {
-    const [searchEmail, setSearchEmail] = useState("");
+    const [searchUsername, setSearchUsername] = useState("");
     const [searching, setSearching] = useState(false);
     const [selectedUser, setSelectedUser] = useState<UserResult | null>(null);
     const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -77,14 +77,14 @@ export default function AdminInvoices() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const searchUser = async () => {
-        const q = searchEmail.trim();
-        if (!q) return;
+        const q = (searchUsername.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + "@webmydrive.com");
+        if (q === "@webmydrive.com") return;
         setSearching(true);
         try {
             const data = await api.get("/admin/users", { search: q, limit: 5 });
             const users: UserResult[] = data.users || [];
             if (users.length === 0) {
-                toast.error("No user found with that email");
+                toast.error("No user found with that username");
                 return;
             }
             // Auto-select if exact match, otherwise pick first
@@ -246,16 +246,22 @@ export default function AdminInvoices() {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-base">Find User</CardTitle>
-                        <CardDescription>Search by email address</CardDescription>
+                        <CardDescription>Enter the WebMyDrive username</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="flex gap-2 max-w-lg">
-                            <Input
-                                placeholder="user@example.com"
-                                value={searchEmail}
-                                onChange={e => setSearchEmail(e.target.value)}
-                                onKeyDown={e => e.key === "Enter" && searchUser()}
-                            />
+                            <div className="flex flex-1">
+                                <Input
+                                    placeholder="username"
+                                    value={searchUsername}
+                                    onChange={e => setSearchUsername(e.target.value)}
+                                    onKeyDown={e => e.key === "Enter" && searchUser()}
+                                    className="rounded-r-none"
+                                />
+                                <div className="h-10 flex items-center px-3 rounded-r border border-l-0 border-input bg-muted text-muted-foreground text-sm shrink-0">
+                                    @webmydrive.com
+                                </div>
+                            </div>
                             <Button onClick={searchUser} disabled={searching} className="shrink-0">
                                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-1" />}
                                 Search
