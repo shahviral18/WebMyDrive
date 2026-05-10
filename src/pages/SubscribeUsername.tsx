@@ -144,6 +144,7 @@ export default function SubscribeUsernamePage() {
           address: state.billing.address,
           zipCode: state.billing.zipCode,
         },
+        promoCode: state.couponInput || undefined,
       });
 
       if (!sessionData.success) {
@@ -373,6 +374,7 @@ export default function SubscribeUsernamePage() {
             <Row label="Account Phone" value={`+91 ${state.mobile}`} />
             {state.companyName && <Row label="Company" value={state.companyName} />}
             {state.gstNumber && <Row label="GST" value={state.gstNumber} />}
+            {state.couponInput && <Row label="Promo Code" value={state.couponInput} />}
             <Row
               label="Billing Address"
               value={[
