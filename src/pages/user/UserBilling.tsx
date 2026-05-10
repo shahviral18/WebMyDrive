@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock, Wallet, Tag, TrendingUp, TrendingDown, ArrowRightLeft } from "lucide-react";
+import { Loader2, Zap, AlertCircle, CalendarClock, ShieldCheck, CheckCircle2, Clock, Wallet, Tag, TrendingUp, TrendingDown, ArrowRightLeft, FileText, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import UserLayout from "@/components/user/UserLayout";
@@ -53,6 +53,25 @@ interface Order {
     createdAt: string;
 }
 
+interface Invoice {
+    id: number;
+    invoiceNumber: string;
+    invoiceDate: string;
+    paymentDate?: string;
+    expiryDate?: string;
+    renewalDate?: string;
+    planName?: string;
+    itemDetails?: string;
+    baseAmount?: number;
+    gstAmount?: number;
+    totalAmount?: number;
+    currency: string;
+    status: string;
+    source: string;
+    hasPdf: number;
+    createdAt: string;
+}
+
 export default function UserBilling() {
     const navigate = useNavigate();
 
@@ -74,6 +93,8 @@ export default function UserBilling() {
     const [walletTxs, setWalletTxs] = useState<any[]>([]);
     const [voucherCode, setVoucherCode] = useState("");
     const [redeemingVoucher, setRedeemingVoucher] = useState(false);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
     const fetchWallet = async () => {
         try {
@@ -89,7 +110,8 @@ export default function UserBilling() {
             api.get("/user/current-plan"),
             api.get("/user/autorenewal-status").catch(() => null),
             api.get("/user/wallet-transactions").catch(() => null),
-        ]).then(([ordersData, planData, arData, walletData]) => {
+            api.get("/invoices/my").catch(() => null),
+        ]).then(([ordersData, planData, arData, walletData, invoiceData]) => {
             setOrders(ordersData.orders || []);
             setCurrentPlan(planData);
             setAutoRenewal(arData);
@@ -97,6 +119,7 @@ export default function UserBilling() {
                 setWalletBalance(walletData.walletBalance ?? 0);
                 setWalletTxs(walletData.transactions ?? []);
             }
+            if (invoiceData) setInvoices(invoiceData.invoices || []);
         }).catch(() => {
             setOrders([]);
             setCurrentPlan({ hasPlan: false });
@@ -104,6 +127,31 @@ export default function UserBilling() {
             setPageLoading(false);
         });
     }, []);
+
+    const handleDownloadInvoice = async (invoice: Invoice) => {
+        setDownloadingId(invoice.id);
+        try {
+            const token = localStorage.getItem("token") || "";
+            const base = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+            const res = await fetch(`${base}/invoices/download/${invoice.id}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error("Download failed");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Invoice_${invoice.invoiceNumber}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch {
+            toast.error("Could not download the invoice PDF");
+        } finally {
+            setDownloadingId(null);
+        }
+    };
 
     const handleRedeemVoucher = async () => {
         if (!voucherCode.trim()) return toast.error("Enter a voucher code");
@@ -321,10 +369,10 @@ export default function UserBilling() {
                     </CardContent>
                 </Card>
 
-                {/* Invoice History */}
+                {/* Order History */}
                 <Card className="border-border shadow-sm">
                     <CardHeader>
-                        <CardTitle>Invoice History</CardTitle>
+                        <CardTitle>Order History</CardTitle>
                         <CardDescription>Your past orders and payments</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -360,6 +408,92 @@ export default function UserBilling() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right text-xs font-mono text-muted-foreground truncate max-w-[100px]">{order.gatewayTxId || "—"}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Invoice History */}
+                <Card className="border-border shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-primary" />
+                            Invoice History
+                        </CardTitle>
+                        <CardDescription>Download your GST invoices — including historical records</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {pageLoading ? (
+                            <div className="flex justify-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : invoices.length === 0 ? (
+                            <div className="flex flex-col items-center gap-2 py-10 text-center">
+                                <FileText className="w-8 h-8 text-muted-foreground" />
+                                <p className="text-sm text-muted-foreground">No invoices yet.</p>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Invoice #</TableHead>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Plan</TableHead>
+                                        <TableHead>Amount</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">PDF</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {invoices.map((inv) => (
+                                        <TableRow key={inv.id}>
+                                            <TableCell className="font-mono text-sm text-foreground">
+                                                {inv.invoiceNumber}
+                                                {inv.source === "MANUAL" && (
+                                                    <Badge variant="secondary" className="ml-2 text-[10px] py-0 px-1.5 bg-muted text-muted-foreground">Historical</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">
+                                                {inv.invoiceDate ? format(new Date(inv.invoiceDate), "dd MMM yyyy") : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-foreground max-w-[140px] truncate">
+                                                {inv.planName || "—"}
+                                            </TableCell>
+                                            <TableCell className="font-semibold text-sm">
+                                                {inv.totalAmount != null
+                                                    ? `₹${Number(inv.totalAmount).toLocaleString("en-IN")}`
+                                                    : "—"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant="secondary" className={
+                                                    inv.status === "PAID" ? "bg-success/10 text-success" :
+                                                    inv.status === "CANCELLED" ? "bg-destructive/10 text-destructive" :
+                                                    "bg-muted text-muted-foreground"
+                                                }>
+                                                    {inv.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {inv.hasPdf ? (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="gap-1"
+                                                        disabled={downloadingId === inv.id}
+                                                        onClick={() => handleDownloadInvoice(inv)}
+                                                    >
+                                                        {downloadingId === inv.id
+                                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                            : <Download className="w-3 h-3" />}
+                                                        PDF
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">—</span>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>

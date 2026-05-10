@@ -160,6 +160,7 @@ class ConfigService
                 'auditLogs'               => 'read',
                 'settings'                => 'none',
                 'changePlan'              => 'none',
+                'invoices'                => 'full',
             ],
         ];
     }

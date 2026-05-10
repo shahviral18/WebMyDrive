@@ -103,8 +103,8 @@ export default function AdminInvoices() {
         try {
             const data = await api.get(`/admin/invoices/user/${user.id}`);
             setInvoices(data.invoices || []);
-        } catch {
-            toast.error("Failed to load invoices");
+        } catch (err: any) {
+            toast.error(err?.message || "Failed to load invoices");
         } finally {
             setLoadingInvoices(false);
         }

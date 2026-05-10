@@ -242,6 +242,35 @@ class InternalController
         $addCol('User', 'deletedAt',            'DATETIME NULL DEFAULT NULL');
         $addCol('User', 'scheduledGwsDeleteAt', 'DATETIME NULL DEFAULT NULL');
 
+        // ── v9: Historical invoice attachment system ──────────────────────────
+        $createTable('invoices', "
+            CREATE TABLE IF NOT EXISTS `invoices` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `userId`        INT NOT NULL,
+                `orderId`       INT NULL,
+                `invoiceNumber` VARCHAR(100) NOT NULL,
+                `invoiceDate`   DATE NOT NULL,
+                `dueDate`       DATE NULL,
+                `paymentDate`   DATE NULL,
+                `expiryDate`    DATE NULL,
+                `renewalDate`   DATE NULL,
+                `planName`      VARCHAR(255) NULL,
+                `itemDetails`   TEXT NULL,
+                `baseAmount`    DECIMAL(12,2) NULL,
+                `gstAmount`     DECIMAL(12,2) NULL,
+                `totalAmount`   DECIMAL(12,2) NULL,
+                `currency`      VARCHAR(10) NOT NULL DEFAULT 'INR',
+                `status`        VARCHAR(20) NOT NULL DEFAULT 'PAID',
+                `pdfPath`       VARCHAR(500) NULL,
+                `source`        VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+                `notes`         TEXT NULL,
+                `createdBy`     INT NULL,
+                `createdAt`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updatedAt`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                CONSTRAINT fk_invoices_user FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
         Logger::info('[Internal/Migration] v4 completed: ' . json_encode($results));
         http_response_code(200);
         header('Content-Type: application/json');
@@ -329,7 +358,7 @@ class InternalController
                 );
 
                 try {
-                    ZohoBooksService::createAndSendInvoice([
+                    $rnwInvoiceResult = ZohoBooksService::createAndSendInvoice([
                         'planName'        => $ws['planName'],
                         'username'        => explode('@', $ws['email'])[0],
                         'customerName'    => $ws['name'],
@@ -345,6 +374,34 @@ class InternalController
                         'referenceNumber' => $referenceNumber,
                         'orderId'         => $orderId,
                     ]);
+                    $rnwInvNumber = $rnwInvoiceResult['invoice_number'] ?? '';
+                    if ($rnwInvNumber) {
+                        $rnwBaseNet = round($amount / 1.18, 2);
+                        $rnwGst     = round($amount - $rnwBaseNet, 2);
+                        Database::insert(
+                            "INSERT INTO `invoices`
+                             (userId, orderId, invoiceNumber, invoiceDate, renewalDate,
+                              planName, baseAmount, gstAmount, totalAmount, currency,
+                              status, source, createdAt, updatedAt)
+                             VALUES
+                             (:uid, :oid, :num, :idate, :rdate,
+                              :plan, :base, :gst, :total, 'INR',
+                              'PAID', 'SYSTEM', :now, :now)",
+                            [
+                                ':uid'   => (int) $ws['userId'],
+                                ':oid'   => $orderId,
+                                ':num'   => $rnwInvNumber,
+                                ':idate' => $today,
+                                ':rdate' => date('Y-m-d', strtotime($newRenewal)),
+                                ':plan'  => $ws['planName'],
+                                ':base'  => $rnwBaseNet,
+                                ':gst'   => $rnwGst,
+                                ':total' => $amount,
+                                ':now'   => $now,
+                            ]
+                        );
+                        Logger::info("[Internal/Renewals] Invoice {$rnwInvNumber} stored locally for orderId={$orderId}");
+                    }
                 } catch (Throwable $ie) {
                     Logger::error("[Internal/Renewals] Invoice failed workspace={$workspaceId}: " . $ie->getMessage());
                 }

@@ -541,8 +541,12 @@ class PaymentController
                 $billingAddr = $meta['billingAddress'] ?? [];
                 if (!is_array($billingAddr)) $billingAddr = [];
 
-                ZohoBooksService::createAndSendInvoice([
-                    'planName'       => $checkout['planId'] ? Database::queryOne('SELECT name FROM `Plan` WHERE id = :id', [':id' => $checkout['planId']])['name'] ?? '' : '',
+                $invPlanName = $checkout['planId'] ? Database::queryOne('SELECT name FROM `Plan` WHERE id = :id', [':id' => $checkout['planId']])['name'] ?? '' : '';
+                $invBase     = (float) $checkout['amount'];
+                $invGst      = round($invBase * 0.18 / 1.18, 2);
+
+                $invoiceResult = ZohoBooksService::createAndSendInvoice([
+                    'planName'       => $invPlanName,
                     'username'       => $meta['username'] ?? '',
                     'customerName'   => $checkout['customerName'] ?? '',
                     'customerEmail'  => $checkout['customerEmail'] ?? '',
@@ -553,10 +557,39 @@ class PaymentController
                     'billingPeriod'  => $checkout['billingPeriod'] ?? 'yearly',
                     'activationDate' => $now,
                     'renewalDate'    => $renewalDate,
-                    'baseAmount'     => (float) $checkout['amount'],
+                    'baseAmount'     => $invBase,
                     'referenceNumber'=> $referenceNumber,
                     'orderId'        => $orderId,
                 ]);
+
+                $zohoInvNumber = $invoiceResult['invoice_number'] ?? '';
+                if ($zohoInvNumber) {
+                    $invBaseNet = round($invBase / 1.18, 2);
+                    $invGstAmt  = round($invBase - $invBaseNet, 2);
+                    Database::insert(
+                        "INSERT INTO `invoices`
+                         (userId, orderId, invoiceNumber, invoiceDate, renewalDate,
+                          planName, baseAmount, gstAmount, totalAmount, currency,
+                          status, source, createdAt, updatedAt)
+                         VALUES
+                         (:uid, :oid, :num, :idate, :rdate,
+                          :plan, :base, :gst, :total, 'INR',
+                          'PAID', 'SYSTEM', :now, :now)",
+                        [
+                            ':uid'   => $userId,
+                            ':oid'   => $orderId,
+                            ':num'   => $zohoInvNumber,
+                            ':idate' => date('Y-m-d'),
+                            ':rdate' => date('Y-m-d', strtotime($renewalDate)),
+                            ':plan'  => $invPlanName,
+                            ':base'  => $invBaseNet,
+                            ':gst'   => $invGstAmt,
+                            ':total' => $invBase,
+                            ':now'   => $now,
+                        ]
+                    );
+                    Logger::info("[ZohoWebhook] Invoice {$zohoInvNumber} stored locally for orderId={$orderId}");
+                }
             } catch (Throwable $ie) {
                 Logger::error('[ZohoWebhook] Invoice creation failed (non-fatal): ' . $ie->getMessage());
             }

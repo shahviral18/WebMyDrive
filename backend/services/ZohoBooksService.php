@@ -225,6 +225,9 @@ class ZohoBooksService
         ]);
 
         Logger::info("[ZohoBooks] Invoice {$invoiceId} created and sent to {$data['customerEmail']}");
-        return $invoiceId;
+        return [
+            'invoice_id'     => $invoiceId,
+            'invoice_number' => $created['invoice']['invoice_number'] ?? '',
+        ];
     }
 }

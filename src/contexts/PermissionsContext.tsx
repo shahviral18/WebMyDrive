@@ -8,7 +8,7 @@ export type ModuleKey =
   | "dashboard" | "users" | "googleUsers" | "plans" | "orders"
   | "referralEngine" | "vouchers" | "distributors" | "distributorApplications"
   | "distributorPayouts" | "importUsers" | "assignDistributor"
-  | "auditLogs" | "settings" | "changePlan";
+  | "auditLogs" | "settings" | "changePlan" | "invoices";
 
 type RolePerms = Record<ModuleKey, PermLevel>;
 

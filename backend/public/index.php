@@ -72,6 +72,7 @@ require BASE_PATH . '/controllers/SubscriptionController.php';
 require BASE_PATH . '/controllers/DistributorApplicationController.php';
 require BASE_PATH . '/controllers/PaymentController.php';
 require BASE_PATH . '/controllers/InternalController.php';
+require BASE_PATH . '/controllers/InvoiceController.php';
 
 // ── Global error handler ──────────────────────────────────────────────────────
 set_exception_handler(function (Throwable $e) {
@@ -250,6 +251,14 @@ $router->get('/api/admin/distributor-payouts/:id/invoice', [DistributorControlle
 // ── Internal (called by GitHub Actions cron — token-authenticated, no JWT) ────
 $router->get('/api/cron/run-migration', [InternalController::class, 'runMigration']);
 $router->get('/api/cron/run-renewals',  [InternalController::class, 'runRenewals']);
+
+// ── Invoices ──────────────────────────────────────────────────────────────────
+$router->get('/api/invoices/my',                        [InvoiceController::class, 'myInvoices'],       $auth);
+$router->get('/api/invoices/download/:id',              [InvoiceController::class, 'downloadPdf'],      $auth);
+$router->get('/api/admin/invoices/user/:userId',        [InvoiceController::class, 'adminListForUser'], $adminOnly);
+$router->post('/api/admin/invoices',                    [InvoiceController::class, 'adminCreate'],      $adminOnly);
+$router->put('/api/admin/invoices/:id',                 [InvoiceController::class, 'adminUpdate'],      $adminOnly);
+$router->delete('/api/admin/invoices/:id',              [InvoiceController::class, 'adminDelete'],      $adminOnly);
 
 // ── Zoho Payments ─────────────────────────────────────────────────────────────
 $router->post('/api/payment/create-session', [PaymentController::class, 'createSession']);

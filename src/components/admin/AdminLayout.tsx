@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
   LogOut, Menu, X, Shield, CreditCard, Gift, Tag,
-  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight, ShieldCheck,
+  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight, ShieldCheck, Receipt,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -39,6 +39,7 @@ const navGroups = [
       { label: "Orders",          href: "/admin/orders",          icon: FileText,   module: "orders"        as ModuleKey },
       { label: "Referral Engine", href: "/admin/referral-engine", icon: Gift,       module: "referralEngine" as ModuleKey },
       { label: "Vouchers",        href: "/admin/vouchers",        icon: Tag,        module: "vouchers"      as ModuleKey },
+      { label: "Invoices",        href: "/admin/invoices",        icon: Receipt,    module: "invoices"      as ModuleKey },
     ],
   },
   {
