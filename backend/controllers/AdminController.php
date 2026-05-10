@@ -321,34 +321,69 @@ class AdminController
         if (!$id)
             Response::error('User ID required', 400);
 
-        $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $id]);
+        $user = Database::queryOne('SELECT * FROM `User` WHERE id = :id', [':id' => $id]);
         if (!$user)
             Response::error('User not found', 404);
         if ($user['role'] === 'SUPERADMIN')
             Response::error('Cannot delete a SUPERADMIN account', 403);
+        if (!empty($user['deletedAt']))
+            Response::error('User is already pending deletion', 409);
 
-        // Remove from Google Workspace first (non-fatal if not provisioned)
-        GoogleWorkspaceService::deleteUser($user['email']);
+        // Suspend Google Workspace account immediately (non-fatal)
+        GoogleWorkspaceService::suspendUser($user['email']);
 
-        Database::beginTransaction();
-        try {
-            Database::execute('DELETE FROM `UserSession` WHERE userId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `AuditLog` WHERE userId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `DistributorSale` WHERE purchasingUserId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `Workspace` WHERE userId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `ReferralLog` WHERE referrerId = :rid OR refereeId = :eid', [':rid' => $id, ':eid' => $id]);
-            Database::execute('DELETE FROM `Order` WHERE userId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `User` WHERE id = :id', [':id' => $id]);
-            Database::commit();
-        } catch (Throwable $e) {
-            Database::rollback();
-            Logger::error('[Admin] deleteUser failed: ' . $e->getMessage());
-            Response::error('Failed to delete user: ' . $e->getMessage(), 500);
-        }
+        // Soft-delete: disable portal account + schedule GWS hard-delete in 32 days
+        $schedDate = date('Y-m-d H:i:s', strtotime('+32 days'));
+        Database::execute(
+            'UPDATE `User` SET isDisabled = 1, deletedAt = NOW(), scheduledGwsDeleteAt = :sd WHERE id = :id',
+            [':sd' => $schedDate, ':id' => $id]
+        );
+        Database::execute(
+            "UPDATE `Workspace` SET status = 'SUSPENDED' WHERE userId = :id",
+            [':id' => $id]
+        );
 
-        AuditService::log('[Admin] DELETE_USER', $req->user['userId'] ?? null, $req->ip, [
-            'deletedUserId' => $id,
-            'email' => $user['email'],
+        AuditService::log('[Admin] SOFT_DELETE_USER', $req->user['userId'] ?? null, $req->ip, [
+            'targetUserId'       => $id,
+            'email'              => $user['email'],
+            'scheduledGwsDelete' => $schedDate,
+        ]);
+        Response::json(['success' => true, 'scheduledDeleteAt' => $schedDate]);
+    }
+
+    public function reactivateUser(Request $req): void
+    {
+        $id = (int) ($req->params['id'] ?? 0);
+        if (!$id)
+            Response::error('User ID required', 400);
+
+        $user = Database::queryOne('SELECT * FROM `User` WHERE id = :id', [':id' => $id]);
+        if (!$user)
+            Response::error('User not found', 404);
+        if (empty($user['deletedAt']))
+            Response::error('User is not pending deletion', 400);
+
+        // Enforce 30-day reactivation window
+        $deadline = strtotime($user['deletedAt']) + (30 * 86400);
+        if (time() > $deadline)
+            Response::error('Reactivation window has expired. This account cannot be restored.', 403);
+
+        // Unsuspend Google Workspace account (non-fatal)
+        GoogleWorkspaceService::unsuspendUser($user['email']);
+
+        // Re-enable portal account
+        Database::execute(
+            'UPDATE `User` SET isDisabled = 0, deletedAt = NULL, scheduledGwsDeleteAt = NULL WHERE id = :id',
+            [':id' => $id]
+        );
+        Database::execute(
+            "UPDATE `Workspace` SET status = 'ACTIVE' WHERE userId = :id AND status = 'SUSPENDED'",
+            [':id' => $id]
+        );
+
+        AuditService::log('[Admin] REACTIVATE_USER', $req->user['userId'] ?? null, $req->ip, [
+            'targetUserId' => $id,
+            'email'        => $user['email'],
         ]);
         Response::json(['success' => true]);
     }

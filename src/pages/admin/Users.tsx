@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Wallet, UserX, UserCheck, ShieldAlert,
+  Search, Wallet, UserX, UserCheck, ShieldAlert, RefreshCw,
   LogOut, Trash2, MoreHorizontal, UserCircle2, ChevronLeft,
   ChevronRight, Filter, UserPlus, X, Loader2, Download,
 } from "lucide-react";
@@ -32,13 +32,14 @@ interface User {
   walletBalance: number;
   referralCode: string | null;
   createdAt: string;
+  deletedAt?: string | null;
   source?: string;
   plan?: string;
   planMismatch?: boolean;
   distributorId?: number | null;
 }
 
-type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete";
+type Action = "suspend" | "activate" | "reset-password" | "force-logout" | "delete" | "reactivate";
 interface Confirm { user: User; action: Action }
 type PlatformUserRole = "distributor" | "customer";
 
@@ -284,8 +285,13 @@ export default function UsersPage() {
           endpoint = `/admin/distributors/${actualId}`;
         }
         await api.delete(endpoint);
-        setUsers(prev => prev.filter(u => u.id !== user.id));
-        toast.success(`${user.email} deleted`);
+        const now = new Date().toISOString();
+        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, deletedAt: now } : u));
+        toast.success(`${user.name || user.email} suspended. Google Workspace account will be permanently deleted in 32 days.`, { duration: 6000 });
+      } else if (action === "reactivate") {
+        await api.post(`/admin/users/${user.id}/reactivate`, {});
+        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, deletedAt: null } : u));
+        toast.success(`${user.name || user.email} reactivated successfully.`);
       } else {
         toast.info(`Action "${action}" recorded`);
       }
@@ -307,12 +313,31 @@ export default function UsersPage() {
     return acc;
   }, {});
 
-  const confirmConfig: Record<Action, { title: string; desc: string; btnCls: string; btnLabel: string }> = {
-    "suspend": { title: "Suspend User", desc: `Suspend ${confirm?.user.email}?`, btnCls: "bg-danger hover:bg-danger/90 text-white", btnLabel: "Yes, Suspend" },
-    "activate": { title: "Activate User", desc: `Re-activate ${confirm?.user.email}?`, btnCls: "bg-success hover:bg-success/90 text-white", btnLabel: "Yes, Activate" },
-    "force-logout": { title: "Force Logout", desc: `Revoke all sessions for ${confirm?.user.email}?`, btnCls: "bg-danger hover:bg-danger/90 text-white", btnLabel: "Yes, Force Logout" },
-    "delete": { title: "Delete User", desc: `Permanently delete ${confirm?.user.email}?`, btnCls: "bg-red-700 text-white", btnLabel: "Yes, Delete" },
-    "reset-password": { title: "Reset Password", desc: `Send reset link to ${confirm?.user.email}?`, btnCls: "bg-primary text-white", btnLabel: "Send Reset Email" },
+  const daysLeft = (u: User | undefined) => {
+    if (!u?.deletedAt) return 30;
+    return Math.max(0, 30 - Math.floor((Date.now() - new Date(u.deletedAt).getTime()) / 86400000));
+  };
+
+  const confirmConfig: Record<Action, { title: string; desc: React.ReactNode; btnCls: string; btnLabel: string }> = {
+    "suspend":        { title: "Suspend User",    desc: `Suspend ${confirm?.user.email}?`, btnCls: "bg-danger hover:bg-danger/90 text-white", btnLabel: "Yes, Suspend" },
+    "activate":       { title: "Activate User",   desc: `Re-activate ${confirm?.user.email}?`, btnCls: "bg-success hover:bg-success/90 text-white", btnLabel: "Yes, Activate" },
+    "force-logout":   { title: "Force Logout",    desc: `Revoke all sessions for ${confirm?.user.email}?`, btnCls: "bg-danger hover:bg-danger/90 text-white", btnLabel: "Yes, Force Logout" },
+    "reset-password": { title: "Reset Password",  desc: `Send reset link to ${confirm?.user.email}?`, btnCls: "bg-primary text-white", btnLabel: "Send Reset Email" },
+    "reactivate":     { title: "Reactivate User", desc: `Restore ${confirm?.user.name || confirm?.user.email} and unsuspend their Google Workspace account?`, btnCls: "bg-emerald-600 hover:bg-emerald-700 text-white", btnLabel: "Yes, Reactivate" },
+    "delete": {
+      title: `Delete User: ${confirm?.user.name || confirm?.user.email}`,
+      desc: (
+        <div className="space-y-3">
+          <p>This user will be suspended from the portal and their Google Workspace account will be locked immediately.</p>
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-amber-700 text-xs font-medium">
+            ⚠️ You can reactivate this account within <strong>30 days</strong>. After that, the Google Workspace account will be permanently deleted and cannot be restored.
+          </div>
+          <p className="text-xs">Are you sure you want to delete <strong>{confirm?.user.email}</strong>?</p>
+        </div>
+      ),
+      btnCls: "bg-red-700 hover:bg-red-800 text-white",
+      btnLabel: "Yes, Delete User",
+    },
   };
   const cc = confirm ? confirmConfig[confirm.action] : null;
 
@@ -410,10 +435,15 @@ export default function UsersPage() {
                           {(user.name ?? user.email).charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm font-semibold text-foreground truncate max-w-[150px]">{user.name ?? "—"}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-semibold text-foreground truncate max-w-[140px]">{user.name ?? "—"}</p>
                             {user.role === "ADMIN" && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-500/15 text-violet-600 border border-violet-500/30 shrink-0">Admin</span>
+                            )}
+                            {user.deletedAt && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30 shrink-0" title={`${daysLeft(user)} days to reactivate`}>
+                                Pending Deletion · {daysLeft(user)}d left
+                              </span>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground truncate max-w-[160px]">{user.email}</p>
@@ -471,10 +501,23 @@ export default function UsersPage() {
                             {can("users", "delete") && (
                               <>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-danger focus:text-red-500 focus:bg-red-50 gap-2 text-xs"
-                                  onClick={() => handleAction(user, "delete")}>
-                                  <Trash2 className="w-3 h-3" /> Delete User
-                                </DropdownMenuItem>
+                                {user.deletedAt ? (
+                                  daysLeft(user) > 0 ? (
+                                    <DropdownMenuItem className="text-emerald-600 focus:text-emerald-600 focus:bg-emerald-50 gap-2 text-xs"
+                                      onClick={() => handleAction(user, "reactivate")}>
+                                      <UserCheck className="w-3 h-3" /> Reactivate ({daysLeft(user)}d left)
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="gap-2 text-xs text-muted-foreground">
+                                      <Trash2 className="w-3 h-3" /> Reactivation Expired
+                                    </DropdownMenuItem>
+                                  )
+                                ) : (
+                                  <DropdownMenuItem className="text-danger focus:text-red-500 focus:bg-red-50 gap-2 text-xs"
+                                    onClick={() => handleAction(user, "delete")}>
+                                    <Trash2 className="w-3 h-3" /> Delete User
+                                  </DropdownMenuItem>
+                                )}
                               </>
                             )}
                           </DropdownMenuContent>

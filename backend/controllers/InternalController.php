@@ -238,6 +238,10 @@ class InternalController
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
+        // ── v8: Soft-delete columns on User ──────────────────────────────────
+        $addCol('User', 'deletedAt',            'DATETIME NULL DEFAULT NULL');
+        $addCol('User', 'scheduledGwsDeleteAt', 'DATETIME NULL DEFAULT NULL');
+
         Logger::info('[Internal/Migration] v4 completed: ' . json_encode($results));
         http_response_code(200);
         header('Content-Type: application/json');
@@ -449,6 +453,25 @@ class InternalController
                      . "WebMyDrive Team";
             @mail($ws['email'], $subject, $body, "From: noreply@webmydrive.com");
             $stats['reminders_7']++;
+        }
+
+        // ── Phase 4: Hard-delete GWS accounts past their scheduled date ─────
+        $pendingGwsDelete = Database::query(
+            'SELECT id, email FROM `User`
+             WHERE isDisabled = 1
+               AND scheduledGwsDeleteAt IS NOT NULL
+               AND scheduledGwsDeleteAt <= :now',
+            [':now' => $now]
+        );
+        $stats['gws_hard_deleted'] = 0;
+        foreach ($pendingGwsDelete as $u) {
+            GoogleWorkspaceService::deleteUser($u['email']);
+            Database::execute(
+                'UPDATE `User` SET scheduledGwsDeleteAt = NULL WHERE id = :id',
+                [':id' => $u['id']]
+            );
+            AuditService::log('[Cron] GWS_HARD_DELETE', null, 'cron', ['email' => $u['email']]);
+            $stats['gws_hard_deleted']++;
         }
 
         Logger::info('[Internal/Renewals] Completed. Stats: ' . json_encode($stats));

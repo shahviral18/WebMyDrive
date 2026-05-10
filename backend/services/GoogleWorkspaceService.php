@@ -450,6 +450,44 @@ class GoogleWorkspaceService
     }
 
     /**
+     * Suspend a user in Google Workspace (account disabled, login blocked).
+     */
+    public static function suspendUser(string $workspaceEmail): bool
+    {
+        if (!self::isProvisioned($workspaceEmail)) return false;
+        try {
+            $service = self::getService();
+            $patch = new Google_Service_Directory_User();
+            $patch->setSuspended(true);
+            $service->users->patch($workspaceEmail, $patch);
+            Logger::info("[GWS] suspendUser OK → $workspaceEmail");
+            return true;
+        } catch (Throwable $e) {
+            Logger::error("[GWS] suspendUser FAILED → $workspaceEmail: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Unsuspend (re-enable) a previously suspended Google Workspace user.
+     */
+    public static function unsuspendUser(string $workspaceEmail): bool
+    {
+        if (!self::isProvisioned($workspaceEmail)) return false;
+        try {
+            $service = self::getService();
+            $patch = new Google_Service_Directory_User();
+            $patch->setSuspended(false);
+            $service->users->patch($workspaceEmail, $patch);
+            Logger::info("[GWS] unsuspendUser OK → $workspaceEmail");
+            return true;
+        } catch (Throwable $e) {
+            Logger::error("[GWS] unsuspendUser FAILED → $workspaceEmail: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Permanently delete a user from Google Workspace.
      * Returns true on success, false if not provisioned or already gone.
      */
