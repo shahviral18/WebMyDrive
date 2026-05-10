@@ -213,7 +213,7 @@ export default function PortalUsers() {
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </div>
                 <div className="px-4 py-3.5 text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(user.createdAt), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(user.createdAt.replace(' ', 'T') + 'Z'), { addSuffix: true })}
                 </div>
                 <div className="px-4 py-3.5 flex items-center justify-end gap-2">
                   <Button
