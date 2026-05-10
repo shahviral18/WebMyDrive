@@ -53,12 +53,16 @@ class AdminController
             case 'GLOBAL_PLAN_SETTINGS':
                 Response::json(ConfigService::getGlobalPlanConfig());
                 break;
+            case 'ROLE_PERMISSIONS':
+                Response::json(ConfigService::getRolePermissions());
+                break;
             default:
                 Response::json([
                     'USER_REFERRAL_SETTINGS' => ConfigService::getUserReferralConfig(),
-                    'DISTRIBUTOR_SETTINGS' => ConfigService::getDistributorConfig(),
-                    'WALLET_SETTINGS' => ConfigService::getWalletConfig(),
-                    'GLOBAL_PLAN_SETTINGS' => ConfigService::getGlobalPlanConfig(),
+                    'DISTRIBUTOR_SETTINGS'   => ConfigService::getDistributorConfig(),
+                    'WALLET_SETTINGS'        => ConfigService::getWalletConfig(),
+                    'GLOBAL_PLAN_SETTINGS'   => ConfigService::getGlobalPlanConfig(),
+                    'ROLE_PERMISSIONS'       => ConfigService::getRolePermissions(),
                 ]);
         }
     }
@@ -239,7 +243,15 @@ class AdminController
         $name = (string) ($req->body['name'] ?? '');
         $email = strtolower(trim((string) ($req->body['email'] ?? '')));
         $password = (string) ($req->body['password'] ?? '');
-        $role = (string) ($req->body['role'] ?? 'USER');
+        $requestedRole = strtoupper((string) ($req->body['role'] ?? 'USER'));
+        $callerRole = strtoupper((string) ($req->user['role'] ?? ''));
+
+        // Only SUPERADMIN may create ADMIN-role (support) users
+        if ($requestedRole === 'ADMIN' && $callerRole !== 'SUPERADMIN') {
+            Response::error('Only SUPERADMIN can create support users', 403);
+        }
+        // Never allow creating another SUPERADMIN via this endpoint
+        $role = in_array($requestedRole, ['USER', 'ADMIN'], true) ? $requestedRole : 'USER';
 
         if (!$email)
             Response::error('Email is required', 400);
@@ -317,6 +329,9 @@ class AdminController
 
         Database::beginTransaction();
         try {
+            Database::execute('DELETE FROM `UserSession` WHERE userId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `AuditLog` WHERE userId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `DistributorWalletTx` WHERE userId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `DistributorSale` WHERE purchasingUserId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `Workspace` WHERE userId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `ReferralLog` WHERE referrerId = :id OR refereeId = :id', [':id' => $id]);
@@ -326,7 +341,7 @@ class AdminController
         } catch (Throwable $e) {
             Database::rollback();
             Logger::error('[Admin] deleteUser failed: ' . $e->getMessage());
-            Response::error('Failed to delete user', 500);
+            Response::error('Failed to delete user: ' . $e->getMessage(), 500);
         }
 
         AuditService::log('[Admin] DELETE_USER', $req->user['userId'] ?? null, $req->ip, [

@@ -410,7 +410,12 @@ export default function UsersPage() {
                           {(user.name ?? user.email).charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground truncate max-w-[160px]">{user.name ?? "—"}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-semibold text-foreground truncate max-w-[150px]">{user.name ?? "—"}</p>
+                            {user.role === "ADMIN" && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-500/15 text-violet-600 border border-violet-500/30 shrink-0">Admin</span>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground truncate max-w-[160px]">{user.email}</p>
                         </div>
                       </div>

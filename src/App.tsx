@@ -27,6 +27,7 @@ import ChangePlan from "./pages/admin/ChangePlan";
 import AssignDistributor from "./pages/admin/AssignDistributor";
 import ImportUsers from "./pages/admin/ImportUsers";
 import RolePermissions from "./pages/admin/RolePermissions";
+import PortalUsers from "./pages/admin/PortalUsers";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
@@ -211,6 +212,7 @@ const App = () => (
                   <Route path="alerts" element={<Alerts />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="permissions" element={<RolePermissions />} />
+                  <Route path="portal-users" element={<PortalUsers />} />
                   {/* Legacy redirects */}
                   <Route path="promo" element={<Navigate to="/admin/referral-engine" replace />} />
                   <Route path="referrals-engine" element={<Navigate to="/admin/referral-engine" replace />} />

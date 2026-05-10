@@ -56,6 +56,7 @@ const navGroups = [
     label: "SETTINGS",
     items: [
       { label: "Settings",         href: "/admin/settings",     icon: Settings,     module: "settings" as ModuleKey },
+      { label: "Portal Users",     href: "/admin/portal-users", icon: Shield,       superAdminOnly: true },
       { label: "Role Permissions", href: "/admin/permissions",  icon: ShieldCheck,  superAdminOnly: true },
     ],
   },
