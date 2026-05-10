@@ -80,7 +80,7 @@ const App = () => (
       <Toaster />
       <Sonner richColors position="top-right" />
       <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "337424619711-d1c8p7gkvn2d61h72o91l24t12j6v2n7.apps.googleusercontent.com"}>
-        <BrowserRouter basename="/demo1">
+        <BrowserRouter basename="/">
           <ThemeProvider>
             <UserProvider>
               <Routes>

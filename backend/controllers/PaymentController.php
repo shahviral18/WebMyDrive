@@ -608,7 +608,7 @@ class PaymentController
     <tr><td><a href='https://mail.google.com' style='display:block;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;text-decoration:none;color:#dc2626;font-size:13px;font-weight:600;'>Gmail &rarr;</a></td></tr>
     <tr><td><a href='https://drive.google.com' style='display:block;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;text-decoration:none;color:#2563eb;font-size:13px;font-weight:600;'>Google Drive &rarr;</a></td></tr>
     <tr><td><a href='https://photos.google.com' style='display:block;padding:12px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;text-decoration:none;color:#16a34a;font-size:13px;font-weight:600;'>Google Photos &rarr;</a></td></tr>
-    <tr><td><a href='https://webmydrive.com/demo1/user/dashboard' style='display:block;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;color:#475569;font-size:13px;font-weight:600;'>WebMyDrive Portal &rarr;</a></td></tr>
+    <tr><td><a href='https://webmydrive.com/user/dashboard' style='display:block;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-decoration:none;color:#475569;font-size:13px;font-weight:600;'>WebMyDrive Portal &rarr;</a></td></tr>
   </table>
 
   <h2 style='font-size:15px;color:#1e293b;margin:0 0 12px;'>Subscription Details</h2>
@@ -631,7 +631,7 @@ class PaymentController
             . "  Gmail:         https://mail.google.com\n"
             . "  Google Drive:  https://drive.google.com\n"
             . "  Google Photos: https://photos.google.com\n"
-            . "  Portal:        https://webmydrive.com/demo1/user/dashboard\n\n"
+            . "  Portal:        https://webmydrive.com/user/dashboard\n\n"
             . "PLAN: {$planName} | {$renewalLabel} | Renewal: {$renewalShow}\n\n"
             . "Team WebMyDrive | support@webmydrive.com";
 

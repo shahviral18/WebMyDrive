@@ -119,8 +119,8 @@ class UserController
         $now = date('Y-m-d H:i:s');
         $orderId = Database::insert(
             'INSERT INTO "Order" (userId, planId, amount, currency, status, createdAt, updatedAt)
-             VALUES (:uid, :pid, :amt, \'INR\', \'PENDING\', :now, :now)',
-            [':uid' => $userId, ':pid' => $planId, ':amt' => (float) $plan['price'], ':now' => $now]
+             VALUES (:uid, :pid, :amt, \'INR\', \'PENDING\', :now1, :now2)',
+            [':uid' => $userId, ':pid' => $planId, ':amt' => (float) $plan['price'], ':now1' => $now, ':now2' => $now]
         );
 
         AuditService::log('PLAN_PURCHASE_REQUEST', $userId, $req->ip, [

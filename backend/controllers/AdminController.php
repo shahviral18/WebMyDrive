@@ -266,20 +266,25 @@ class AdminController
         $defaultPass = ucfirst(strtolower($basePass)) . date('Y');
         $plainPassword = $password ?: $defaultPass;
         $passwordHash = password_hash($plainPassword, PASSWORD_BCRYPT);
-        $baseRef = strtoupper(preg_replace('/[^a-z0-9]/i', '', $basePass));
-        $referralCode = substr($baseRef, 0, 12) . date('Y');
+        // ADMIN portal users don't participate in referrals — use NULL to avoid UNIQUE collisions
+        $referralCode = null;
+        if ($role === 'USER') {
+            $baseRef = strtoupper(preg_replace('/[^a-z0-9]/i', '', $basePass));
+            $referralCode = substr($baseRef, 0, 12) . date('Y');
+        }
         $now = date('Y-m-d H:i:s');
 
         $id = Database::insert(
             'INSERT INTO "User" (name, email, passwordHash, role, referralCode, walletBalance, createdAt, updatedAt)
-             VALUES (:name, :email, :hash, :role, :code, 0, :now, :now)',
+             VALUES (:name, :email, :hash, :role, :code, 0, :now1, :now2)',
             [
                 ':name' => $name,
                 ':email' => $email,
                 ':hash' => $passwordHash,
                 ':role' => $role,
                 ':code' => $referralCode,
-                ':now' => $now,
+                ':now1' => $now,
+                ':now2' => $now,
             ]
         );
 
@@ -637,13 +642,14 @@ class AdminController
         $now = date('Y-m-d H:i:s');
         $id = Database::insert(
             'INSERT INTO "Distributor" (name, email, passwordHash, tier, status, walletBalance, revenueThisYear, referralCode, createdAt, updatedAt)
-             VALUES (:name, :email, :hash, \'Starter\', \'ACTIVE\', 0, 0, :code, :now, :now)',
+             VALUES (:name, :email, :hash, \'Starter\', \'ACTIVE\', 0, 0, :code, :now1, :now2)',
             [
                 ':name' => $name,
                 ':email' => $email,
                 ':hash' => $passwordHash,
                 ':code' => $referralCode,
-                ':now' => $now,
+                ':now1' => $now,
+                ':now2' => $now,
             ]
         );
 
@@ -1615,13 +1621,14 @@ class AdminController
         $wsStatus = (strtoupper($eu['status'] ?? 'ACTIVE') === 'SUSPENDED') ? 'SUSPENDED' : 'ACTIVE';
         Database::insert(
             'INSERT INTO `Workspace` (userId, planId, status, renewalDate, createdAt, updatedAt)
-             VALUES (:uid, :pid, :status, :renewal, :now, :now)',
+             VALUES (:uid, :pid, :status, :renewal, :now1, :now2)',
             [
                 ':uid'     => $userId,
                 ':pid'     => $planId,
                 ':status'  => $wsStatus,
                 ':renewal' => $renewalDate . ' 00:00:00',
-                ':now'     => $now,
+                ':now1'    => $now,
+                ':now2'    => $now,
             ]
         );
 
@@ -1714,7 +1721,7 @@ class AdminController
                 $now = date('Y-m-d H:i:s');
                 $userId = Database::insert(
                     'INSERT INTO `User` (name, email, recoveryEmail, recoveryPhone, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
-                     VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :now, :now)',
+                     VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :now1, :now2)',
                     [
                         ':name'     => $fullName,
                         ':email'    => $email,
@@ -1722,15 +1729,16 @@ class AdminController
                         ':recPhone' => $eu['recoveryPhone'] ?? null,
                         ':hash'     => $passwordHash,
                         ':code'     => $referralCode,
-                        ':now'      => $now,
+                        ':now1'     => $now,
+                        ':now2'     => $now,
                     ]
                 );
 
                 $wsStatus = (strtoupper($eu['status'] ?? 'ACTIVE') === 'SUSPENDED') ? 'SUSPENDED' : 'ACTIVE';
                 Database::insert(
                     'INSERT INTO `Workspace` (userId, planId, status, createdAt, updatedAt)
-                     VALUES (:uid, :pid, :status, :now, :now)',
-                    [':uid' => $userId, ':pid' => $eu['activePlanId'] ?: null, ':status' => $wsStatus, ':now' => $now]
+                     VALUES (:uid, :pid, :status, :now1, :now2)',
+                    [':uid' => $userId, ':pid' => $eu['activePlanId'] ?: null, ':status' => $wsStatus, ':now1' => $now, ':now2' => $now]
                 );
 
                 Database::execute(
@@ -1829,7 +1837,7 @@ class AdminController
 
         $distId = Database::insert(
             'INSERT INTO "Distributor" (name, email, passwordHash, tier, status, commissionPct, walletBalance, revenueThisYear, referralCode, createdAt, updatedAt)
-             VALUES (:name, :email, :hash, :tier, \'ACTIVE\', :pct, 0, 0, :code, :now, :now)',
+             VALUES (:name, :email, :hash, :tier, \'ACTIVE\', :pct, 0, 0, :code, :now1, :now2)',
             [
                 ':name' => $user['name'] ?? $user['email'],
                 ':email' => $user['email'],
@@ -1837,7 +1845,8 @@ class AdminController
                 ':tier' => $tier,
                 ':pct' => $commissionPct,
                 ':code' => $referralCode,
-                ':now' => $now,
+                ':now1' => $now,
+                ':now2' => $now,
             ]
         );
 
@@ -1966,7 +1975,7 @@ class AdminController
                     $htmlBody   = "<p>Hi {$firstName},</p>"
                         . "<p>{$message}</p>"
                         . "<p><strong>Renewal deadline: {$revisionShow}</strong></p>"
-                        . "<p><a href='https://webmydrive.com/demo1/user/billing'>Renew Now &rarr;</a></p>"
+                        . "<p><a href='https://webmydrive.com/user/billing'>Renew Now &rarr;</a></p>"
                         . "<p>Team WebMyDrive</p>";
                     mail($toEmail, $subject, $htmlBody,
                         "From: WebMyDrive <support@webmydrive.com>\r\nContent-Type: text/html; charset=UTF-8\r\n");

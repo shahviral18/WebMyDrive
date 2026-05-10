@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 
-const BASE_URL = import.meta.env.BASE_URL ?? "/demo1/";
+const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
 async function publicGet(path: string) {
   const res = await fetch(`${BASE_URL}api/public${path}`, { method: "GET", headers: { "Content-Type": "application/json" } });

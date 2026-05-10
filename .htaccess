@@ -1,6 +1,6 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /demo1/
+  RewriteBase /
 
   # If the requested file or directory exists, serve it directly
   RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -8,7 +8,7 @@
   RewriteRule ^ - [L]
 
   # Don't rewrite backend API requests
-  RewriteCond %{REQUEST_URI} !^/demo1/backend/
+  RewriteCond %{REQUEST_URI} !^/backend/
 
   # Fallback rule for React Router to index.html
   RewriteRule ^ index.html [QSA,L]

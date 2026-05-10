@@ -136,14 +136,15 @@ class ReferralService
             Database::insert(
                 'INSERT INTO `ReferralLog`
                  (referrerId, refereeId, orderId, amount, commissionEarned, referralYear, referrer_credited, status, type, createdAt, updatedAt)
-                 VALUES (:rr, :re, :oid, :baseAmt, :commission, 1, 1, \'VESTED\', \'INITIAL\', :now, :now)',
+                 VALUES (:rr, :re, :oid, :baseAmt, :commission, 1, 1, \'VESTED\', \'INITIAL\', :now1, :now2)',
                 [
                     ':rr'         => $referrer['id'],
                     ':re'         => $purchasingUserId,
                     ':oid'        => $orderId,
                     ':baseAmt'    => $baseAmount,
                     ':commission' => $commission,
-                    ':now'        => $now,
+                    ':now1'       => $now,
+                    ':now2'       => $now,
                 ]
             );
 

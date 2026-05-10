@@ -51,7 +51,7 @@ class SubscriptionService
             // Create new subscription
             Database::execute(
                 'INSERT INTO "Subscription" (user_id, plan_name, payment_id, status, start_date, end_date, created_at, updated_at)
-                 VALUES (:uid, :pname, :payid, :status, :sdate, :edate, :now, :now)',
+                 VALUES (:uid, :pname, :payid, :status, :sdate, :edate, :now1, :now2)',
                 [
                     ':uid' => $userId,
                     ':pname' => $planName,
@@ -59,7 +59,8 @@ class SubscriptionService
                     ':status' => 'active',
                     ':sdate' => $now,
                     ':edate' => $endDate,
-                    ':now' => $now,
+                    ':now1' => $now,
+                    ':now2' => $now,
                 ]
             );
         }
