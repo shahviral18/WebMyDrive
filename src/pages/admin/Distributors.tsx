@@ -4,7 +4,7 @@ import {
     Users, TrendingUp, Wallet, CheckCircle2, Clock, XCircle,
     MoreHorizontal, Copy, ExternalLink, UserPlus, Search,
     ChevronRight, BarChart3, ArrowUpRight, ChevronLeft, Loader2,
-    Tag, Plus, X
+    Tag, Plus, X, Link
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -358,40 +358,35 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                     ))}
                 </div>
 
-                {/* Referral code */}
-                <div className="p-6 border-b border-border">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Referral Link Code</p>
-                    <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
-                        <span className="font-mono text-primary font-bold flex-1">{dist.referralCode}</span>
-                        <button onClick={() => { copyToClipboard(`https://webmydrive.com/?ref=${dist.referralCode}`).then(() => toast.success("Link copied!")); }}
-                            className="text-primary hover:text-primary/80 transition-colors">
-                            <Copy className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Promo Code */}
+                {/* Promo / Referral Code — unified */}
                 <div className="p-6 border-b border-border">
                     <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Promo Code</p>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Promo / Referral Code</p>
                         <button onClick={() => setShowPromoDialog(true)}
                             className="text-xs text-primary hover:underline flex items-center gap-1">
                             <Tag className="w-3 h-3" /> Manage
                         </button>
                     </div>
-                    {currentPromoCode ? (
-                        <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
-                            <span className="font-mono text-primary font-bold flex-1 text-lg tracking-widest">{currentPromoCode}</span>
-                            <button onClick={() => copyToClipboard(currentPromoCode).then(() => toast.success("Promo code copied!"))}
-                                className="text-primary hover:text-primary/80 transition-colors">
-                                <Copy className="w-4 h-4" />
-                            </button>
-                        </div>
-                    ) : (
-                        <button onClick={() => setShowPromoDialog(true)}
-                            className="w-full text-sm text-muted-foreground border border-dashed border-border rounded-lg py-3 hover:bg-muted/30 transition-colors flex items-center justify-center gap-2">
-                            <Plus className="w-4 h-4" /> Assign promo code
+                    <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
+                        <span className="font-mono text-primary font-bold flex-1 text-lg tracking-widest">
+                            {currentPromoCode ?? dist.referralCode}
+                        </span>
+                        <button
+                            onClick={() => copyToClipboard(currentPromoCode ?? dist.referralCode).then(() => toast.success("Code copied!"))}
+                            className="text-primary hover:text-primary/80 transition-colors" title="Copy code">
+                            <Copy className="w-4 h-4" />
                         </button>
+                        <button
+                            onClick={() => copyToClipboard(`https://webmydrive.com/?ref=${dist.referralCode}`).then(() => toast.success("Referral link copied!"))}
+                            className="text-primary hover:text-primary/80 transition-colors" title="Copy referral link">
+                            <Link className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1.5">
+                        Customers type this at checkout for a discount · distributor earns commission
+                    </p>
+                    {currentPromoCode && (
+                        <p className="text-[10px] text-amber-500 mt-1 font-medium uppercase tracking-wide">Custom override active</p>
                     )}
                     {showPromoDialog && (
                         <PromoCodeDialog
