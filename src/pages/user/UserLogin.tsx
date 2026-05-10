@@ -121,7 +121,12 @@ export default function Login() {
             }
             finishLoginProcessing(data.token, data.user, data.user.role || "", data.userToken);
         } catch (err: any) {
-            setError(err.message || "Invalid credentials");
+            const msg = err.message || "";
+            setError(
+                msg.toLowerCase().includes("internal server") || msg.toLowerCase().includes("500")
+                    ? "Something went wrong on our end. Please try again in a moment."
+                    : msg || "Invalid credentials"
+            );
             triggerShake();
         } finally {
             setLoading(false);

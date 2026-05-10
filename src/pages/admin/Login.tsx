@@ -48,7 +48,12 @@ export default function AdminLogin() {
       const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       window.location.href = `${base}/admin/dashboard`;
     } catch (err: any) {
-      setError(err.message);
+      const msg = (err.message || "").toLowerCase();
+      setError(
+        msg.includes("internal server") || msg.includes("500")
+          ? "Something went wrong on our end. Please try again in a moment."
+          : err.message || "Invalid credentials"
+      );
       setLoading(false);
     }
   };
