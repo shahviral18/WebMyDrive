@@ -336,7 +336,7 @@ class AdminController
             Database::execute('DELETE FROM `AuditLog` WHERE userId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `DistributorSale` WHERE purchasingUserId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `Workspace` WHERE userId = :id', [':id' => $id]);
-            Database::execute('DELETE FROM `ReferralLog` WHERE referrerId = :id OR refereeId = :id', [':id' => $id]);
+            Database::execute('DELETE FROM `ReferralLog` WHERE referrerId = :rid OR refereeId = :eid', [':rid' => $id, ':eid' => $id]);
             Database::execute('DELETE FROM `Order` WHERE userId = :id', [':id' => $id]);
             Database::execute('DELETE FROM `User` WHERE id = :id', [':id' => $id]);
             Database::commit();
