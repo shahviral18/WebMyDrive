@@ -141,6 +141,34 @@ class ConfigService
         return self::getConfig('WALLET_SETTINGS', self::defaultWalletConfig());
     }
 
+    public static function defaultRolePermissions(): array
+    {
+        return [
+            'ADMIN' => [
+                'dashboard'               => 'full',
+                'users'                   => 'limited',
+                'googleUsers'             => 'limited',
+                'plans'                   => 'read',
+                'orders'                  => 'read',
+                'referralEngine'          => 'read',
+                'vouchers'                => 'full',
+                'distributors'            => 'limited',
+                'distributorApplications' => 'full',
+                'distributorPayouts'      => 'full',
+                'importUsers'             => 'limited',
+                'assignDistributor'       => 'full',
+                'auditLogs'               => 'read',
+                'settings'                => 'none',
+                'changePlan'              => 'none',
+            ],
+        ];
+    }
+
+    public static function getRolePermissions(): array
+    {
+        return self::getConfig('ROLE_PERMISSIONS', self::defaultRolePermissions());
+    }
+
     // ── Write ─────────────────────────────────────────────────────────────────
 
     public static function setConfig(string $key, array $value): void
