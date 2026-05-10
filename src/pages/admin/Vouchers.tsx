@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, Plus, Trash2, Tag, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import AdminLayout from "@/components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -97,99 +96,97 @@ export default function AdminVouchers() {
     };
 
     return (
-        <AdminLayout>
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-foreground">Vouchers</h1>
-                        <p className="text-sm text-muted-foreground mt-1">Generate and manage campaign voucher codes</p>
-                    </div>
-                    <Button onClick={() => setCreateOpen(true)}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Vouchers
-                    </Button>
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-foreground">Vouchers</h1>
+                    <p className="text-sm text-muted-foreground mt-1">Generate and manage campaign voucher codes</p>
                 </div>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Tag className="w-4 h-4" />
-                            All Vouchers
-                        </CardTitle>
-                        <CardDescription>
-                            {vouchers.filter(v => v.status === "ACTIVE").length} active ·{" "}
-                            {vouchers.filter(v => v.status === "USED").length} redeemed
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {loading ? (
-                            <div className="flex justify-center py-10">
-                                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : vouchers.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-10 text-sm">No vouchers yet.</p>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Code</TableHead>
-                                        <TableHead>Value</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Expires</TableHead>
-                                        <TableHead>Redeemed By</TableHead>
-                                        <TableHead>Created</TableHead>
-                                        <TableHead />
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {vouchers.map(v => (
-                                        <TableRow key={v.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-sm font-semibold text-foreground">{v.code}</span>
-                                                    <button
-                                                        onClick={() => copyCode(v.code)}
-                                                        className="text-muted-foreground hover:text-foreground transition-colors"
-                                                    >
-                                                        {copiedCode === v.code ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-                                                    </button>
-                                                </div>
-                                                {v.description && <p className="text-xs text-muted-foreground mt-0.5">{v.description}</p>}
-                                            </TableCell>
-                                            <TableCell className="font-semibold text-foreground">₹{Number(v.value).toLocaleString("en-IN")}</TableCell>
-                                            <TableCell>
-                                                <Badge className={statusColor[v.status] || ""}>{v.status}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {v.expires_at ? format(new Date(v.expires_at), "dd MMM yyyy") : "—"}
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {v.usedByName || v.usedByEmail || "—"}
-                                                {v.used_at && <span className="block text-muted-foreground/70">{format(new Date(v.used_at), "dd MMM yy")}</span>}
-                                            </TableCell>
-                                            <TableCell className="text-xs text-muted-foreground">
-                                                {v.createdAt ? format(new Date(v.createdAt), "dd MMM yyyy") : "—"}
-                                            </TableCell>
-                                            <TableCell>
-                                                {v.status === "ACTIVE" && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleDeactivate(v.id, v.code)}
-                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
+                <Button onClick={() => setCreateOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Vouchers
+                </Button>
             </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Tag className="w-4 h-4" />
+                        All Vouchers
+                    </CardTitle>
+                    <CardDescription>
+                        {vouchers.filter(v => v.status === "ACTIVE").length} active ·{" "}
+                        {vouchers.filter(v => v.status === "USED").length} redeemed
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="flex justify-center py-10">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : vouchers.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-10 text-sm">No vouchers yet.</p>
+                    ) : (
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Code</TableHead>
+                                    <TableHead>Value</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Expires</TableHead>
+                                    <TableHead>Redeemed By</TableHead>
+                                    <TableHead>Created</TableHead>
+                                    <TableHead />
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {vouchers.map(v => (
+                                    <TableRow key={v.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-sm font-semibold text-foreground">{v.code}</span>
+                                                <button
+                                                    onClick={() => copyCode(v.code)}
+                                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                                >
+                                                    {copiedCode === v.code ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+                                                </button>
+                                            </div>
+                                            {v.description && <p className="text-xs text-muted-foreground mt-0.5">{v.description}</p>}
+                                        </TableCell>
+                                        <TableCell className="font-semibold text-foreground">₹{Number(v.value).toLocaleString("en-IN")}</TableCell>
+                                        <TableCell>
+                                            <Badge className={statusColor[v.status] || ""}>{v.status}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {v.expires_at ? format(new Date(v.expires_at), "dd MMM yyyy") : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {v.usedByName || v.usedByEmail || "—"}
+                                            {v.used_at && <span className="block text-muted-foreground/70">{format(new Date(v.used_at), "dd MMM yy")}</span>}
+                                        </TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {v.createdAt ? format(new Date(v.createdAt), "dd MMM yyyy") : "—"}
+                                        </TableCell>
+                                        <TableCell>
+                                            {v.status === "ACTIVE" && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeactivate(v.id, v.code)}
+                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Create Dialog */}
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -247,6 +244,6 @@ export default function AdminVouchers() {
                     </div>
                 </DialogContent>
             </Dialog>
-        </AdminLayout>
+        </div>
     );
 }
