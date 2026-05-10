@@ -250,6 +250,10 @@ class AdminController
         if ($requestedRole === 'ADMIN' && $callerRole !== 'SUPERADMIN') {
             Response::error('Only SUPERADMIN can create support users', 403);
         }
+        // ADMIN portal accounts must use @webmydrive.com — they log in via username only
+        if ($requestedRole === 'ADMIN' && !str_ends_with($email, '@webmydrive.com')) {
+            Response::error('Support admin accounts must use a @webmydrive.com email', 400);
+        }
         // Never allow creating another SUPERADMIN via this endpoint
         $role = in_array($requestedRole, ['USER', 'ADMIN'], true) ? $requestedRole : 'USER';
 

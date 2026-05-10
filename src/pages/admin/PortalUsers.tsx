@@ -30,15 +30,17 @@ function AddAdminModal({ open, onClose, onCreated }: {
   onCreated: (user: PortalUser, password: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
 
+  const email = username.trim().toLowerCase() + "@webmydrive.com";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) { toast.error("Email is required"); return; }
+    if (!username.trim()) { toast.error("Username is required"); return; }
     setSaving(true);
     try {
       const res = await api.post("/admin/users", { name, email, password: password || undefined, role: "ADMIN" });
@@ -47,7 +49,7 @@ function AddAdminModal({ open, onClose, onCreated }: {
       };
       toast.success(`Support admin created — password: ${res.plainPassword ?? "(see below)"}`);
       onCreated(created, res.plainPassword ?? "");
-      setName(""); setEmail(""); setPassword("");
+      setName(""); setUsername(""); setPassword("");
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Failed to create admin");
@@ -77,8 +79,19 @@ function AddAdminModal({ open, onClose, onCreated }: {
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className="mt-1" />
           </div>
           <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</Label>
-            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@company.com" className="mt-1" required />
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Username</Label>
+            <div className="flex mt-1">
+              <Input
+                value={username}
+                onChange={e => setUsername(e.target.value.replace(/[@\s]/g, ""))}
+                placeholder="dhwani.panchal"
+                className="rounded-r-none flex-1"
+                required
+              />
+              <span className="flex items-center px-3 bg-muted border border-l-0 border-input rounded-r-md text-sm text-muted-foreground select-none">
+                @webmydrive.com
+              </span>
+            </div>
           </div>
           <div>
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Password (Optional)</Label>
