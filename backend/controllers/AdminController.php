@@ -327,6 +327,9 @@ class AdminController
         if ($user['role'] === 'SUPERADMIN')
             Response::error('Cannot delete a SUPERADMIN account', 403);
 
+        // Remove from Google Workspace first (non-fatal if not provisioned)
+        GoogleWorkspaceService::deleteUser($user['email']);
+
         Database::beginTransaction();
         try {
             Database::execute('DELETE FROM `UserSession` WHERE userId = :id', [':id' => $id]);

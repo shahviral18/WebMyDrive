@@ -448,4 +448,22 @@ class GoogleWorkspaceService
         Logger::info('[GWS] listAllDomainUsers: fetched ' . count($users) . ' users from webmydrive.com');
         return $users;
     }
+
+    /**
+     * Permanently delete a user from Google Workspace.
+     * Returns true on success, false if not provisioned or already gone.
+     */
+    public static function deleteUser(string $workspaceEmail): bool
+    {
+        if (!self::isProvisioned($workspaceEmail)) return false;
+        try {
+            $service = self::getService();
+            $service->users->delete($workspaceEmail);
+            Logger::info("[GWS] deleteUser OK → $workspaceEmail");
+            return true;
+        } catch (Throwable $e) {
+            Logger::error("[GWS] deleteUser FAILED → $workspaceEmail: " . $e->getMessage());
+            return false;
+        }
+    }
 }
