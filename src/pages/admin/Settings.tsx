@@ -12,6 +12,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Separator } from "@/components/ui/separator";
 import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { useTheme } from "@/contexts/ThemeContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { Navigate } from "react-router-dom";
 
 
 const DEFAULT_FEATURES: Record<string, { enabled: boolean; description: string }> = {
@@ -23,7 +25,9 @@ const DEFAULT_FEATURES: Record<string, { enabled: boolean; description: string }
 };
 
 export default function Settings() {
+    const { can } = usePermissions();
     const { isDark, toggleTheme } = useTheme();
+    if (!can("settings", "view")) return <Navigate to="/admin/dashboard" replace />;
     const handleThemeChange = (next: boolean) => {
         if (next !== isDark) toggleTheme();
     };

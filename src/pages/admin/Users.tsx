@@ -21,6 +21,8 @@ import {
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { useUser } from "@/contexts/UserContext";
 
 interface User {
   id: number;
@@ -88,15 +90,17 @@ function PasswordRevealDialog({ info, onClose }: {
 }
 
 // -- Add User Modal --
-function AddUserModal({ open, onClose, onCreated }: {
+function AddUserModal({ open, onClose, onCreated, isSuperAdmin = false }: {
   open: boolean;
   onClose: () => void;
   onCreated: (user: User, password: string) => void;
+  isSuperAdmin?: boolean;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [platformRole, setPlatformRole] = useState<PlatformUserRole>("customer");
+  const [adminRole, setAdminRole] = useState<"USER" | "ADMIN">("USER");
   const [saving, setSaving] = useState(false);
 
   if (!open) return null;
@@ -107,9 +111,10 @@ function AddUserModal({ open, onClose, onCreated }: {
     setSaving(true);
     try {
       const endpoint = platformRole === "distributor" ? "/admin/distributors" : "/admin/users";
+      const resolvedRole = platformRole === "distributor" ? undefined : (isSuperAdmin ? adminRole : "USER");
       const res = await api.post(endpoint, {
         name, email, password: password || undefined,
-        role: platformRole === "distributor" ? undefined : "USER"
+        role: resolvedRole,
       });
       const created: User = res.user || {
         id: res.distributor?.id ?? Date.now(), name: name || email, email,
@@ -153,6 +158,20 @@ function AddUserModal({ open, onClose, onCreated }: {
             </button>
           ))}
         </div>
+
+        {isSuperAdmin && platformRole === "customer" && (
+          <div className="flex gap-2 mb-4 p-1 bg-surface-3 rounded-lg">
+            {(["USER", "ADMIN"] as const).map(r => (
+              <button key={r} onClick={() => setAdminRole(r)}
+                className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${adminRole === r
+                  ? "bg-card text-primary shadow-sm border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}>
+                {r === "USER" ? "Regular User" : "Support Admin"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -203,6 +222,9 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const { user: adminUser } = useUser();
+  const isSuperAdmin = (adminUser?.role ?? "").toUpperCase() === "SUPERADMIN";
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -323,9 +345,11 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-foreground">Accounts</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{users.length} total accounts</p>
         </div>
-        <Button onClick={() => setShowAddUser(true)} className="bg-primary hover:bg-primary/90 text-white gap-2 self-start">
-          <UserPlus className="w-4 h-4" /> Add User
-        </Button>
+        {can("users", "create") && (
+          <Button onClick={() => setShowAddUser(true)} className="bg-primary hover:bg-primary/90 text-white gap-2 self-start">
+            <UserPlus className="w-4 h-4" /> Add User
+          </Button>
+        )}
       </div>
 
       {/* Status chips */}
@@ -439,11 +463,15 @@ export default function UsersPage() {
                             <DropdownMenuItem className="gap-2 text-xs" onClick={() => handleAction(user, "force-logout")}>
                               <LogOut className="w-3 h-3" /> Force Logout
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-danger focus:text-red-500 focus:bg-red-50 gap-2 text-xs"
-                              onClick={() => handleAction(user, "delete")}>
-                              <Trash2 className="w-3 h-3" /> Delete User
-                            </DropdownMenuItem>
+                            {can("users", "delete") && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-danger focus:text-red-500 focus:bg-red-50 gap-2 text-xs"
+                                  onClick={() => handleAction(user, "delete")}>
+                                  <Trash2 className="w-3 h-3" /> Delete User
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -476,7 +504,7 @@ export default function UsersPage() {
 
       <AnimatePresence>
         {showAddUser && (
-          <AddUserModal open={showAddUser} onClose={() => setShowAddUser(false)} onCreated={handleCreated} />
+          <AddUserModal open={showAddUser} onClose={() => setShowAddUser(false)} onCreated={handleCreated} isSuperAdmin={isSuperAdmin} />
         )}
       </AnimatePresence>
 

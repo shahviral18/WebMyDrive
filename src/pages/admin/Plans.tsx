@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GlobalFeature {
@@ -165,11 +166,12 @@ function GlobalFeaturesCard({
 
 // ─── Inline Plan Card ──────────────────────────────────────────────────────────
 function InlinePlanCard({
-    plan, onSaved, onDelete,
+    plan, onSaved, onDelete, canDelete = true,
 }: {
     plan: Plan;
     onSaved: (updated: Plan) => void;
     onDelete: (p: Plan) => void;
+    canDelete?: boolean;
 }) {
     const [name, setName] = useState(plan.name);
     const [yearlyPrice, setYearlyPrice] = useState(plan.priceINR ?? plan.price ?? 0);
@@ -293,14 +295,16 @@ function InlinePlanCard({
                     placeholder="Plan name"
                     className="flex-1 bg-surface-2 border-border/60 text-sm font-semibold h-9"
                 />
-                <Button
-                    size="sm" variant="ghost"
-                    className="h-8 w-8 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-500 shrink-0"
-                    onClick={() => onDelete(plan)}
-                    title="Delete plan"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </Button>
+                {canDelete && (
+                  <Button
+                      size="sm" variant="ghost"
+                      className="h-8 w-8 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-500 shrink-0"
+                      onClick={() => onDelete(plan)}
+                      title="Delete plan"
+                  >
+                      <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
             </div>
 
             {/* Prices + Storage */}
@@ -990,6 +994,7 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function Plans() {
+    const { can } = usePermissions();
     const [activeTab, setActiveTab] = useState<"plans" | "promo">("plans");
     const [plans, setPlans] = useState<Plan[]>([]);
     const [globalFeatures, setGlobalFeatures] = useState<GlobalFeature[]>(DEFAULT_GLOBAL_FEATURES);
@@ -1147,9 +1152,11 @@ export default function Plans() {
                                 <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">Click <strong>+ New Plan</strong> or load from the website.</p>
                             </div>
                             <div className="flex gap-2">
-                                <Button onClick={() => setCreating(true)} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
+                                {can("plans", "create") && (
+                                  <Button onClick={() => setCreating(true)} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
                                     <Plus className="w-3.5 h-3.5" /> New Plan
-                                </Button>
+                                  </Button>
+                                )}
                             </div>
                         </div>
                     ) : (
@@ -1161,6 +1168,7 @@ export default function Plans() {
                                         plan={plan}
                                         onSaved={handleSaved}
                                         onDelete={setDeleteTarget}
+                                        canDelete={can("plans", "delete")}
                                     />
                                 ))}
                             </AnimatePresence>

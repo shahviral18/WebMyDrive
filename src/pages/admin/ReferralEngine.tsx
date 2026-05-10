@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // ─── Defaults (exact match to design doc 2026-02-20 & ConfigService.ts) ─────
 const DEFAULT_USER_CONFIG = {
@@ -91,6 +92,7 @@ function NumberField({ value, onChange, suffix = "", min = 0, step = 1, width = 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReferralEnginePage() {
+    const { can } = usePermissions();
     const [userConfig, setUserConfig] = useState<typeof DEFAULT_USER_CONFIG>(DEFAULT_USER_CONFIG);
     const [distConfig, setDistConfig] = useState<typeof DEFAULT_DIST_CONFIG>(DEFAULT_DIST_CONFIG);
     const [walletConfig, setWalletConfig] = useState<typeof DEFAULT_WALLET_CONFIG>(DEFAULT_WALLET_CONFIG);
@@ -176,14 +178,16 @@ export default function ReferralEnginePage() {
                     <h1 className="text-2xl font-bold text-foreground">Commission &amp; Referral System</h1>
                     <p className="text-muted-foreground text-sm mt-0.5">Manage user referrals and the distributor partner program</p>
                 </div>
-                <Button
-                    onClick={saveConfigs}
-                    disabled={!dirty || saving}
-                    className={cn("gap-2 min-w-[130px]", dirty ? "bg-primary hover:bg-primary/90" : "bg-muted text-muted-foreground")}
-                >
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    {saving ? "Saving…" : "Save Changes"}
-                </Button>
+                {can("referralEngine", "edit") && (
+                  <Button
+                      onClick={saveConfigs}
+                      disabled={!dirty || saving}
+                      className={cn("gap-2 min-w-[130px]", dirty ? "bg-primary hover:bg-primary/90" : "bg-muted text-muted-foreground")}
+                  >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      {saving ? "Saving…" : "Save Changes"}
+                  </Button>
+                )}
             </div>
 
             {/* ── User Referral Program ───────────────────────────────────── */}

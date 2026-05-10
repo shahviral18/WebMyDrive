@@ -26,6 +26,8 @@ import DistributorPayoutsAdmin from "./pages/admin/DistributorPayoutsAdmin";
 import ChangePlan from "./pages/admin/ChangePlan";
 import AssignDistributor from "./pages/admin/AssignDistributor";
 import ImportUsers from "./pages/admin/ImportUsers";
+import RolePermissions from "./pages/admin/RolePermissions";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import UserLogin from "./pages/user/UserLogin";
 import UserDashboard from "./pages/user/UserDashboard";
 import UserFiles from "./pages/user/UserFiles";
@@ -191,7 +193,7 @@ const App = () => (
 
                 {/* ── ADMIN Console — JWT-guarded via ProtectedLayout ───────────── */}
                 <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin" element={<ProtectedLayout />}>
+                <Route path="/admin" element={<PermissionsProvider><ProtectedLayout /></PermissionsProvider>}>
                   <Route index element={<Navigate to="/admin/dashboard" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="users" element={<Users />} />
@@ -208,6 +210,7 @@ const App = () => (
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="alerts" element={<Alerts />} />
                   <Route path="settings" element={<Settings />} />
+                  <Route path="permissions" element={<RolePermissions />} />
                   {/* Legacy redirects */}
                   <Route path="promo" element={<Navigate to="/admin/referral-engine" replace />} />
                   <Route path="referrals-engine" element={<Navigate to="/admin/referral-engine" replace />} />

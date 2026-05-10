@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
   LogOut, Menu, X, Shield, CreditCard, Gift, Tag,
-  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight,
+  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight, ShieldCheck,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -18,6 +18,7 @@ import { ThemeSwitch } from "@/components/ui/theme-switch";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useUser } from "@/contexts/UserContext";
+import { usePermissions, ModuleKey } from "@/contexts/PermissionsContext";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Navigation structure
@@ -26,35 +27,36 @@ const navGroups = [
   {
     label: "CORE",
     items: [
-      { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-      { label: "Accounts", href: "/admin/users", icon: Users },
-      { label: "Change Plan", href: "/admin/change-plan", icon: ArrowLeftRight, superAdminOnly: true },
+      { label: "Dashboard",   href: "/admin/dashboard",   icon: LayoutDashboard, module: "dashboard"   as ModuleKey },
+      { label: "Accounts",    href: "/admin/users",        icon: Users,           module: "users"       as ModuleKey },
+      { label: "Change Plan", href: "/admin/change-plan",  icon: ArrowLeftRight,  module: "changePlan"  as ModuleKey },
     ],
   },
   {
     label: "COMMERCIAL",
     items: [
-      { label: "Plans", href: "/admin/plans", icon: CreditCard },
-      { label: "Orders", href: "/admin/orders", icon: FileText },
-      { label: "Referral Engine", href: "/admin/referral-engine", icon: Gift },
-      { label: "Vouchers", href: "/admin/vouchers", icon: Tag },
+      { label: "Plans",           href: "/admin/plans",           icon: CreditCard, module: "plans"         as ModuleKey },
+      { label: "Orders",          href: "/admin/orders",          icon: FileText,   module: "orders"        as ModuleKey },
+      { label: "Referral Engine", href: "/admin/referral-engine", icon: Gift,       module: "referralEngine" as ModuleKey },
+      { label: "Vouchers",        href: "/admin/vouchers",        icon: Tag,        module: "vouchers"      as ModuleKey },
     ],
   },
   {
     label: "OPERATIONS",
     items: [
-      { label: "Import Users", href: "/admin/import-users", icon: Users },
-      { label: "Distributors", href: "/admin/distributors", icon: Handshake },
-      { label: "Assign Distributor", href: "/admin/assign-distributor", icon: Users },
-      { label: "Distributor Applications", href: "/admin/distributor-applications", icon: Briefcase },
-      { label: "Distributor Payouts", href: "/admin/distributor-payouts", icon: Briefcase },
-      { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
+      { label: "Import Users",              href: "/admin/import-users",              icon: Users,     module: "importUsers"             as ModuleKey },
+      { label: "Distributors",              href: "/admin/distributors",              icon: Handshake, module: "distributors"            as ModuleKey },
+      { label: "Assign Distributor",        href: "/admin/assign-distributor",        icon: Users,     module: "assignDistributor"       as ModuleKey },
+      { label: "Distributor Applications",  href: "/admin/distributor-applications",  icon: Briefcase, module: "distributorApplications" as ModuleKey },
+      { label: "Distributor Payouts",       href: "/admin/distributor-payouts",       icon: Briefcase, module: "distributorPayouts"      as ModuleKey },
+      { label: "Audit Logs",                href: "/admin/audit-logs",                icon: ScrollText, module: "auditLogs"             as ModuleKey },
     ],
   },
   {
     label: "SETTINGS",
     items: [
-      { label: "Settings", href: "/admin/settings", icon: Settings },
+      { label: "Settings",         href: "/admin/settings",     icon: Settings,     module: "settings" as ModuleKey },
+      { label: "Role Permissions", href: "/admin/permissions",  icon: ShieldCheck,  superAdminOnly: true },
     ],
   },
 ];
@@ -138,14 +140,17 @@ function SidebarNav({
   onClick?: () => void;
 }) {
   const { user } = useUser();
+  const { can } = usePermissions();
   const isSuperAdmin = (user.role ?? "").toUpperCase() === "SUPERADMIN";
 
   return (
     <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
       {navGroups.map((group, gi) => {
-        const visibleItems = group.items.filter(
-          (item: any) => !item.superAdminOnly || isSuperAdmin
-        );
+        const visibleItems = group.items.filter((item: any) => {
+          if (item.superAdminOnly && !isSuperAdmin) return false;
+          if (item.module && !isSuperAdmin) return can(item.module, "view");
+          return true;
+        });
         if (visibleItems.length === 0) return null;
         return (
           <div key={group.label}>
