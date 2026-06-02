@@ -10,9 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
-import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -101,9 +98,8 @@ function PromoCodeDialog({ dist, open, onClose, onAssigned }: {
     onClose: () => void;
     onAssigned: (code: string) => void;
 }) {
-    const [availableCodes, setAvailableCodes] = useState<any[]>([]);
     const [history, setHistory] = useState<any[]>([]);
-    const [selectedId, setSelectedId] = useState<string>("");
+    const [customCode, setCustomCode] = useState<string>("");
     const [isFestive, setIsFestive] = useState(false);
     const [note, setNote] = useState("");
     const [assigning, setAssigning] = useState(false);
@@ -113,34 +109,27 @@ function PromoCodeDialog({ dist, open, onClose, onAssigned }: {
     useEffect(() => {
         if (!open) return;
         setLoadingData(true);
-        Promise.all([
-            api.get("/admin/promo-codes"),
-            api.get(`/admin/distributors/${dist.id}/promo-codes`),
-        ])
-            .then(([codes, hist]) => {
-                setAvailableCodes(Array.isArray(codes) ? codes : []);
-                setHistory(Array.isArray(hist) ? hist : []);
-            })
-            .catch(() => toast.error("Failed to load promo code data"))
+        api.get(`/admin/distributors/${dist.id}/promo-codes`)
+            .then((hist) => setHistory(Array.isArray(hist) ? hist : []))
+            .catch(() => toast.error("Failed to load promo code history"))
             .finally(() => setLoadingData(false));
     }, [open, dist.id]);
 
     const handleAssign = async () => {
-        if (!selectedId) { toast.error("Select a promo code first"); return; }
+        const code = customCode.trim().toUpperCase();
+        if (!code) { toast.error("Enter a promo code"); return; }
         setAssigning(true);
         try {
             await api.post(`/admin/distributors/${dist.id}/promo-code`, {
-                promoCodeId: parseInt(selectedId),
+                code,
                 isFestive,
                 note,
             });
-            const code = availableCodes.find(c => String(c.id) === selectedId)?.code ?? "";
             toast.success(`Promo code ${code} assigned to ${dist.name}`);
             onAssigned(code);
-            // Refresh history
             const hist = await api.get(`/admin/distributors/${dist.id}/promo-codes`);
             setHistory(Array.isArray(hist) ? hist : []);
-            setSelectedId(""); setNote(""); setIsFestive(false);
+            setCustomCode(""); setNote(""); setIsFestive(false);
         } catch {
             toast.error("Failed to assign promo code");
         } finally {
@@ -180,19 +169,17 @@ function PromoCodeDialog({ dist, open, onClose, onAssigned }: {
                     <div className="space-y-5">
                         {/* Assign form */}
                         <div className="space-y-3 p-4 rounded-lg bg-muted/40 border border-border">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assign New Code</p>
-                            <Select value={selectedId} onValueChange={setSelectedId}>
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select promo code…" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableCodes.map((c: any) => (
-                                        <SelectItem key={c.id} value={String(c.id)}>
-                                            {c.code}{c.name ? ` — ${c.name}` : ""}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assign Promo Code</p>
+                            <input
+                                className="w-full font-mono uppercase text-sm rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring tracking-widest"
+                                placeholder="Type code e.g. VIRAL50"
+                                value={customCode}
+                                onChange={e => setCustomCode(e.target.value.toUpperCase())}
+                                onKeyDown={e => e.key === "Enter" && handleAssign()}
+                            />
+                            <p className="text-[11px] text-muted-foreground -mt-1">
+                                Type any code — it will be created automatically if it doesn't exist yet.
+                            </p>
                             <input
                                 className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                                 placeholder="Note (optional)"
@@ -204,7 +191,7 @@ function PromoCodeDialog({ dist, open, onClose, onAssigned }: {
                                     className="rounded border-border" />
                                 Mark as festive / temporary assignment
                             </label>
-                            <Button className="w-full" onClick={handleAssign} disabled={assigning || !selectedId}>
+                            <Button className="w-full" onClick={handleAssign} disabled={assigning || !customCode.trim()}>
                                 {assigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                                 Assign Code
                             </Button>

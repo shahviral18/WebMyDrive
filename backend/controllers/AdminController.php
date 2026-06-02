@@ -1046,20 +1046,35 @@ class AdminController
     {
         $distributorId = (int)($req->params['id'] ?? 0);
         $promoCodeId = (int)($req->body['promoCodeId'] ?? 0);
+        $codeStr = strtoupper(trim((string)($req->body['code'] ?? '')));
         $isFestive = !empty($req->body['isFestive']) ? 1 : 0;
         $note = trim((string)($req->body['note'] ?? ''));
         $adminId = $req->user['userId'] ?? null;
 
         if (!$distributorId) Response::error('Distributor ID required', 400);
-        if (!$promoCodeId) Response::error('promoCodeId required', 400);
+        if (!$promoCodeId && !$codeStr) Response::error('promoCodeId or code required', 400);
 
         $dist = Database::queryOne('SELECT id FROM "Distributor" WHERE id = :id', [':id' => $distributorId]);
         if (!$dist) Response::error('Distributor not found', 404);
 
-        $promo = Database::queryOne('SELECT id FROM "PromoCode" WHERE id = :id', [':id' => $promoCodeId]);
-        if (!$promo) Response::error('Promo code not found', 404);
-
         $now = date('Y-m-d H:i:s');
+
+        if ($codeStr && !$promoCodeId) {
+            // Find or create PromoCode by code string
+            $existing = Database::queryOne('SELECT id FROM "PromoCode" WHERE code = :c', [':c' => $codeStr]);
+            if ($existing) {
+                $promoCodeId = (int) $existing['id'];
+            } else {
+                $promoCodeId = (int) Database::insert(
+                    'INSERT INTO "PromoCode" (code, name, discountPercent, applicablePlans, status, usesLimit, usesCount, expiresAt, createdAt, updatedAt)
+                     VALUES (:c, :n, 0, NULL, \'active\', NULL, 0, NULL, :now1, :now2)',
+                    [':c' => $codeStr, ':n' => $codeStr, ':now1' => $now, ':now2' => $now]
+                );
+            }
+        } else {
+            $promo = Database::queryOne('SELECT id FROM "PromoCode" WHERE id = :id', [':id' => $promoCodeId]);
+            if (!$promo) Response::error('Promo code not found', 404);
+        }
 
         Database::execute(
             'UPDATE "DistributorPromoCode" SET isActive = 0, revokedAt = :now
