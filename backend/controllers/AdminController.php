@@ -657,6 +657,8 @@ class AdminController
             ]
         );
 
+        $this->autoAssignPromoCode((int)$id, $name ?: $email, $referralCode);
+
         $dist = Database::queryOne('SELECT * FROM "Distributor" WHERE id = :id', [':id' => $id]);
         Response::json([
             'distributor' => $dist,
@@ -1609,7 +1611,7 @@ class AdminController
         $now = date('Y-m-d H:i:s');
         $userId = Database::insert(
             'INSERT INTO `User` (name, email, recoveryEmail, recoveryPhone, passwordHash, role, referralCode, walletBalance, passwordResetRequired, first_login, createdAt, updatedAt)
-             VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :actDate, :actDate)',
+             VALUES (:name, :email, :recEmail, :recPhone, :hash, \'USER\', :code, 0, 1, 1, :actDate1, :actDate2)',
             [
                 ':name'     => $fullName,
                 ':email'    => $email,
@@ -1617,7 +1619,8 @@ class AdminController
                 ':recPhone' => $eu['recoveryPhone'] ?? null,
                 ':hash'     => $passwordHash,
                 ':code'     => $referralCode,
-                ':actDate'  => $activationDate . ' 00:00:00',
+                ':actDate1' => $activationDate . ' 00:00:00',
+                ':actDate2' => $activationDate . ' 00:00:00',
             ]
         );
 
@@ -1856,6 +1859,8 @@ class AdminController
 
         AuditService::log('PROMOTE_TO_DISTRIBUTOR', null, null, ['detail' => "Promoted user #{$userId} ({$user['email']}) to distributor #{$distId}"]);
 
+        $this->autoAssignPromoCode((int)$distId, $user['name'] ?? $user['email'], $referralCode);
+
         $dist = Database::queryOne('SELECT * FROM "Distributor" WHERE id = :id', [':id' => $distId]);
         Response::json([
             'success' => true,
@@ -1863,6 +1868,33 @@ class AdminController
             'plainPassword' => $plainPassword,
             'message' => 'Distributor account created. Share the password — it will not be shown again.',
         ]);
+    }
+
+    private function autoAssignPromoCode(int $distributorId, string $name, string $referralCode): void
+    {
+        $now = date('Y-m-d H:i:s');
+
+        $existing = Database::queryOne('SELECT id FROM "PromoCode" WHERE code = :c', [':c' => $referralCode]);
+        if ($existing) {
+            $promoCodeId = (int) $existing['id'];
+        } else {
+            $promoCodeId = (int) Database::insert(
+                'INSERT INTO "PromoCode" (code, name, discountPercent, applicablePlans, status, usesLimit, usesCount, expiresAt, createdAt, updatedAt)
+                 VALUES (:c, :n, 0, NULL, \'active\', NULL, 0, NULL, :now1, :now2)',
+                [':c' => $referralCode, ':n' => $name . "'s Promo Code", ':now1' => $now, ':now2' => $now]
+            );
+        }
+
+        Database::execute(
+            'UPDATE "DistributorPromoCode" SET isActive = 0, revokedAt = :now WHERE distributorId = :did AND isActive = 1',
+            [':now' => $now, ':did' => $distributorId]
+        );
+
+        Database::insert(
+            'INSERT INTO "DistributorPromoCode" (distributorId, promoCodeId, isFestive, isActive, assignedAt, assignedBy, note)
+             VALUES (:did, :pcid, 0, 1, :now, NULL, \'Auto-assigned on account creation\')',
+            [':did' => $distributorId, ':pcid' => $promoCodeId, ':now' => $now]
+        );
     }
 
     // ── Vouchers ──────────────────────────────────────────────────────────────

@@ -367,15 +367,23 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                             <Tag className="w-3 h-3" /> Manage
                         </button>
                     </div>
-                    <div className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20">
-                        <span className="font-mono text-primary font-bold flex-1 text-lg tracking-widest">
-                            {currentPromoCode ?? dist.referralCode}
-                        </span>
-                        <button
-                            onClick={() => copyToClipboard(currentPromoCode ?? dist.referralCode).then(() => toast.success("Code copied!"))}
-                            className="text-primary hover:text-primary/80 transition-colors" title="Copy code">
-                            <Copy className="w-4 h-4" />
-                        </button>
+                    <div className={`flex items-center gap-2 rounded-lg px-3 py-2 border ${currentPromoCode ? "bg-primary/5 border-primary/20" : "bg-muted/40 border-border"}`}>
+                        {currentPromoCode ? (
+                            <span className="font-mono text-primary font-bold flex-1 text-lg tracking-widest">
+                                {currentPromoCode}
+                            </span>
+                        ) : (
+                            <span className="text-muted-foreground text-sm italic flex-1">
+                                Not assigned
+                            </span>
+                        )}
+                        {currentPromoCode && (
+                            <button
+                                onClick={() => copyToClipboard(currentPromoCode).then(() => toast.success("Promo code copied!"))}
+                                className="text-primary hover:text-primary/80 transition-colors" title="Copy promo code">
+                                <Copy className="w-4 h-4" />
+                            </button>
+                        )}
                         <button
                             onClick={() => copyToClipboard(`https://webmydrive.com/?ref=${dist.referralCode}`).then(() => toast.success("Referral link copied!"))}
                             className="text-primary hover:text-primary/80 transition-colors" title="Copy referral link">
@@ -383,11 +391,10 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                         </button>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1.5">
-                        Customers type this at checkout for a discount · distributor earns commission
+                        {currentPromoCode
+                            ? "Customers type this at checkout for a discount · distributor earns commission"
+                            : "No promo code assigned — click Manage to assign one"}
                     </p>
-                    {currentPromoCode && (
-                        <p className="text-[10px] text-amber-500 mt-1 font-medium uppercase tracking-wide">Custom override active</p>
-                    )}
                     {showPromoDialog && (
                         <PromoCodeDialog
                             dist={dist}
