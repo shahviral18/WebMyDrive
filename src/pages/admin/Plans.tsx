@@ -675,8 +675,14 @@ function PromoCodeModal({
     const [code, setCode] = useState(promo?.code ?? "");
     const [name, setName] = useState(promo?.name ?? "");
     const [discountPercent, setDiscountPercent] = useState(promo?.discountPercent ?? 10);
-    const [allPlans, setAllPlans] = useState(promo?.applicablePlans === null || promo?.applicablePlans === undefined);
-    const [selectedPlans, setSelectedPlans] = useState<number[]>(promo?.applicablePlans ?? []);
+    const parsedApplicablePlans: number[] | null = (() => {
+        const ap = promo?.applicablePlans;
+        if (ap === null || ap === undefined) return null;
+        if (typeof ap === 'string') { try { return JSON.parse(ap); } catch { return null; } }
+        return ap as number[];
+    })();
+    const [allPlans, setAllPlans] = useState(parsedApplicablePlans === null);
+    const [selectedPlans, setSelectedPlans] = useState<number[]>(parsedApplicablePlans ?? []);
     const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">(promo?.status ?? "ACTIVE");
     const [expiresAt, setExpiresAt] = useState(promo?.expiresAt ? promo.expiresAt.slice(0, 10) : "");
     const [usesLimit, setUsesLimit] = useState<string>(promo?.usesLimit != null ? String(promo.usesLimit) : "");
@@ -921,14 +927,18 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
                                     <td className="px-4 py-3 text-xs text-muted-foreground">{promo.name ?? "—"}</td>
                                     <td className="px-4 py-3 text-xs font-semibold text-foreground">{promo.discountPercent}%</td>
                                     <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px]">
-                                        {promo.applicablePlans === null
-                                            ? <span className="text-emerald-500 font-medium">All Plans</span>
-                                            : promo.applicablePlans.map(id => planName(id)).join(", ") || "—"
-                                        }
+                                        {(() => {
+                                            const ap = typeof promo.applicablePlans === 'string'
+                                                ? (() => { try { return JSON.parse(promo.applicablePlans as any); } catch { return null; } })()
+                                                : promo.applicablePlans;
+                                            return ap === null || ap === undefined
+                                                ? <span className="text-emerald-500 font-medium">All Plans</span>
+                                                : (Array.isArray(ap) ? ap.map((id: number) => planName(id)).join(", ") : "—") || "—";
+                                        })()}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${promo.status === "ACTIVE" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
-                                            {promo.status}
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${promo.status?.toUpperCase() === "ACTIVE" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
+                                            {promo.status?.toUpperCase()}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-xs text-muted-foreground">{promo.expiresAt ? promo.expiresAt.slice(0, 10) : "—"}</td>
