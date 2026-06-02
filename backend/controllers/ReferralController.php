@@ -21,6 +21,12 @@ declare(strict_types=1);
 
 class ReferralController
 {
+    /** Extract short plan name for promoDiscounts lookup: "Cloud Storage - Premium" → "Premium" */
+    private static function shortPlanName(string $planName): string
+    {
+        return trim((string) preg_replace('/^Cloud Storage\s*[-–]\s*/i', '', $planName));
+    }
+
     public function getDashboard(Request $req): void
     {
         $userId = $req->user['userId'] ?? null;
@@ -93,14 +99,14 @@ class ReferralController
         $promoRow = Database::queryOne(
             'SELECT pc.*, dpc.distributorId FROM `PromoCode` pc
              JOIN `DistributorPromoCode` dpc ON dpc.promoCodeId = pc.id
-             WHERE pc.code = :code AND pc.status = \'ACTIVE\' AND dpc.isActive = 1
+             WHERE pc.code = :code AND LOWER(pc.status) = \'active\' AND dpc.isActive = 1
                AND (pc.expiresAt IS NULL OR pc.expiresAt > NOW())
              LIMIT 1',
             [':code' => strtoupper($promoCode)]
         );
         if ($promoRow) {
             $config = ConfigService::getDistributorConfig();
-            $discountPct = (float)($config['promoDiscounts'][$planName] ?? 0);
+            $discountPct = (float)($config['promoDiscounts'][self::shortPlanName($planName)] ?? 0);
             Response::json([
                 'success' => true,
                 'discountPct' => $discountPct,
@@ -112,7 +118,7 @@ class ReferralController
         // Check standalone promo code (not linked to a distributor)
         $standalonePromo = Database::queryOne(
             'SELECT * FROM `PromoCode`
-             WHERE code = :code AND status = \'ACTIVE\'
+             WHERE code = :code AND LOWER(status) = \'active\'
                AND (expiresAt IS NULL OR expiresAt > NOW())
                AND (usesLimit IS NULL OR usesCount < usesLimit)
              LIMIT 1',
@@ -139,7 +145,7 @@ class ReferralController
 
         if ($validLink['role'] === 'DISTRIBUTOR') {
             $distCfg = ConfigService::getDistributorConfig();
-            $discountPct = (float)($distCfg['promoDiscounts'][$planName] ?? 0);
+            $discountPct = (float)($distCfg['promoDiscounts'][self::shortPlanName($planName)] ?? 0);
             Response::json(['success' => true, 'discountPct' => $discountPct, 'type' => 'DISTRIBUTOR_REF']);
         }
 
@@ -216,7 +222,7 @@ class ReferralController
                 $distPromoRow = Database::queryOne(
                     'SELECT pc.*, dpc.distributorId FROM "PromoCode" pc
                      JOIN "DistributorPromoCode" dpc ON dpc.promoCodeId = pc.id
-                     WHERE pc.code = :code AND pc.status = \'ACTIVE\' AND dpc.isActive = 1
+                     WHERE pc.code = :code AND LOWER(pc.status) = \'active\' AND dpc.isActive = 1
                        AND (pc.expiresAt IS NULL OR pc.expiresAt > NOW())
                      LIMIT 1',
                     [':code' => $cleanCode]
@@ -224,7 +230,7 @@ class ReferralController
 
                 if ($distPromoRow) {
                     $distConfig = ConfigService::getDistributorConfig();
-                    $discountPct = (float)($distConfig['promoDiscounts'][$plan['name']] ?? 0);
+                    $discountPct = (float)($distConfig['promoDiscounts'][self::shortPlanName($plan['name'])] ?? 0);
                     if ($discountPct > 0) {
                         $discountedAmount = round($amountINR * (1 - $discountPct / 100), 2);
                     }
@@ -250,7 +256,7 @@ class ReferralController
 
                     if ($validLink['role'] === 'DISTRIBUTOR') {
                         $distConfig = ConfigService::getDistributorConfig();
-                        $discountPct = (float)($distConfig['promoDiscounts'][$plan['name']] ?? 0);
+                        $discountPct = (float)($distConfig['promoDiscounts'][self::shortPlanName($plan['name'])] ?? 0);
                         if ($discountPct > 0) {
                             $discountedAmount = round($amountINR * (1 - $discountPct / 100), 2);
                         }

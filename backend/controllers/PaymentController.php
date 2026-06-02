@@ -81,7 +81,8 @@ class PaymentController
                 if ($distPromoRow) {
                     $distConfig    = ConfigService::getDistributorConfig();
                     $planDiscounts = $distConfig['promoDiscounts'] ?? [];
-                    $discountPercent = (float)($planDiscounts[$plan['name'] ?? ''] ?? 0) / 100;
+                    $shortName = trim((string) preg_replace('/^Cloud Storage\s*[-–]\s*/i', '', $plan['name'] ?? ''));
+                    $discountPercent = (float)($planDiscounts[$shortName] ?? 0) / 100;
                     // Rewrite to DIST_ format so the webhook handler can attribute commission
                     $promoCode = 'DIST_' . $distPromoRow['distributorId'] . ':' . strtoupper(trim((string)($b['promoCode'] ?? '')));
                 }

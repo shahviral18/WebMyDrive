@@ -25,6 +25,20 @@ const DEFAULT_DIST_CONFIG = {
         { name: "Gold",     newOrdersThreshold: 100000,  renewalThreshold: 75000,  rate: 0.15 },
         { name: "Platinum", newOrdersThreshold: 200000,  renewalThreshold: 150000, rate: 0.20 },
     ],
+    promoDiscounts: {
+        "Basic": 10,
+        "Professional": 20,
+        "Premium": 40,
+        "Enterprise": 40,
+        "Enterprise Plus": 10,
+    } as Record<string, number>,
+    referrerCredits: {
+        "Basic": 5,
+        "Professional": 5,
+        "Premium": 7.5,
+        "Enterprise": 7.5,
+        "Enterprise Plus": 10,
+    } as Record<string, number>,
     disableProgramFromDate: null as string | null,
     existingOnDisable: "CONTINUE" as "CONTINUE" | "FREEZE" | "TERMINATE",
 };
@@ -109,6 +123,8 @@ export default function ReferralEnginePage() {
                         ...DEFAULT_DIST_CONFIG,
                         ...d,
                         tiers: Array.isArray(d.tiers) ? d.tiers : DEFAULT_DIST_CONFIG.tiers,
+                        promoDiscounts: d.promoDiscounts ?? DEFAULT_DIST_CONFIG.promoDiscounts,
+                        referrerCredits: d.referrerCredits ?? DEFAULT_DIST_CONFIG.referrerCredits,
                         disableProgramFromDate: d.disableProgramFromDate ?? null,
                         existingOnDisable: d.existingOnDisable ?? "CONTINUE",
                     });
@@ -124,8 +140,22 @@ export default function ReferralEnginePage() {
     const saveConfigs = async () => {
         setSaving(true);
         try {
+            // Sync promoDiscounts → planDiscountSlabs so user referral codes use the same buyer discounts
+            const promoDisc = distConfig.promoDiscounts ?? DEFAULT_DIST_CONFIG.promoDiscounts;
+            const refCredits = distConfig.referrerCredits ?? DEFAULT_DIST_CONFIG.referrerCredits;
+            const syncedSlabs = Object.fromEntries(
+                Object.entries(promoDisc).map(([plan, pct]) => [
+                    plan,
+                    {
+                        referredDiscount: (pct as number) / 100,
+                        referrerCredit: (refCredits[plan] ?? 5) / 100,
+                    },
+                ])
+            );
+            const userConfigToSave = { ...userConfig, planDiscountSlabs: syncedSlabs };
+
             await Promise.all([
-                api.post("/admin/config", { type: "USER_REFERRAL_SETTINGS", data: userConfig }),
+                api.post("/admin/config", { type: "USER_REFERRAL_SETTINGS", data: userConfigToSave }),
                 api.post("/admin/config", { type: "DISTRIBUTOR_SETTINGS", data: distConfig }),
                 api.post("/admin/config", { type: "WALLET_SETTINGS", data: walletConfig }),
             ]);
@@ -266,6 +296,55 @@ export default function ReferralEnginePage() {
                     ))}
                     <p className="text-[11px] text-muted-foreground/60 mt-1">
                         Starter tier always earns 0% commission. A distributor upgrades when BOTH new-orders AND renewal thresholds are met mid-year. At year-end, tier resets to the highest qualifying tier based on annual revenue.
+                    </p>
+                </div>
+
+                {/* Promo Discount Table */}
+                <div className="py-4">
+                    <p className="text-sm font-semibold mb-1 text-foreground">Promo Code Discounts &amp; Referrer Earnings</p>
+                    <p className="text-xs text-muted-foreground mb-3">Buyer discount applied at checkout, and the commission earned by the referrer/distributor (% of what buyer paid for the plan, ex-GST).</p>
+                    <div className="grid grid-cols-3 gap-2 mb-2 text-xs text-muted-foreground font-medium px-1">
+                        <span>Plan</span>
+                        <span>Buyer Discount</span>
+                        <span>Referrer Earns</span>
+                    </div>
+                    {Object.entries(distConfig.promoDiscounts ?? DEFAULT_DIST_CONFIG.promoDiscounts).map(([plan, pct]) => (
+                        <div key={plan} className="grid grid-cols-3 gap-2 mb-2 items-center">
+                            <span className="text-sm text-foreground px-1">{plan}</span>
+                            <div className="relative w-28">
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    value={pct as number}
+                                    onChange={e => {
+                                        const updated = { ...(distConfig.promoDiscounts ?? DEFAULT_DIST_CONFIG.promoDiscounts), [plan]: parseFloat(e.target.value) || 0 };
+                                        setD("promoDiscounts", updated);
+                                    }}
+                                    className="h-9 text-sm pr-7 text-right font-semibold"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
+                            </div>
+                            <div className="relative w-28">
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={0.5}
+                                    value={(distConfig.referrerCredits ?? DEFAULT_DIST_CONFIG.referrerCredits)[plan] ?? 0}
+                                    onChange={e => {
+                                        const updated = { ...(distConfig.referrerCredits ?? DEFAULT_DIST_CONFIG.referrerCredits), [plan]: parseFloat(e.target.value) || 0 };
+                                        setD("referrerCredits", updated);
+                                    }}
+                                    className="h-9 text-sm pr-7 text-right font-semibold"
+                                />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
+                            </div>
+                        </div>
+                    ))}
+                    <p className="text-[11px] text-muted-foreground/60 mt-1">
+                        Applies to both distributor promo codes and user referral codes. Referrer earnings = % of buyer's paid amount (after discount, ex-GST).
                     </p>
                 </div>
 

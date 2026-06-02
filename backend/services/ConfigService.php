@@ -61,7 +61,7 @@ class ConfigService
                 'Professional'    => 20,
                 'Premium'         => 40,
                 'Enterprise'      => 40,
-                'Enterprise Plus' => 0,
+                'Enterprise Plus' => 10,
             ],
             'payoutConfig' => [
                 'tdsEnabled'      => false,
