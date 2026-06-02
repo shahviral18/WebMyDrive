@@ -29,11 +29,11 @@ class ConfigService
     {
         return [
             'planDiscountSlabs' => [
-                'Basic'           => ['referredDiscount' => 0.10, 'referrerCredit' => 0.05],
-                'Professional'    => ['referredDiscount' => 0.20, 'referrerCredit' => 0.05],
-                'Premium'         => ['referredDiscount' => 0.40, 'referrerCredit' => 0.075],
-                'Enterprise'      => ['referredDiscount' => 0.40, 'referrerCredit' => 0.075],
-                'Enterprise Plus' => ['referredDiscount' => 0.10, 'referrerCredit' => 0.05],
+                'Basic'           => ['referredDiscount' => 0.10,  'referrerCredit' => 0.05],
+                'Professional'    => ['referredDiscount' => 0.20,  'referrerCredit' => 0.05],
+                'Premium'         => ['referredDiscount' => 0.40,  'referrerCredit' => 0.075],
+                'Enterprise'      => ['referredDiscount' => 0.40,  'referrerCredit' => 0.075],
+                'Enterprise Plus' => ['referredDiscount' => 0.10,  'referrerCredit' => 0.10],
             ],
             'paidAdsDiscountRate' => 0.20,
             'creditExpiryMonths' => 24,
@@ -63,6 +63,13 @@ class ConfigService
                 'Enterprise'      => 40,
                 'Enterprise Plus' => 10,
             ],
+            'referrerCredits' => [
+                'Basic'           => 5,
+                'Professional'    => 5,
+                'Premium'         => 7.5,
+                'Enterprise'      => 7.5,
+                'Enterprise Plus' => 10,
+            ],
             'payoutConfig' => [
                 'tdsEnabled'      => false,
                 'tdsRate'         => 10,
@@ -88,10 +95,13 @@ class ConfigService
     {
         $config = self::getUserReferralConfig();
         $slabs  = $config['planDiscountSlabs'] ?? [];
-        if (isset($slabs[$planName])) {
+        // Normalise full plan name to short key: "Cloud Storage - Premium" → "Premium"
+        $shortName = trim((string) preg_replace('/^Cloud Storage\s*[-–]\s*/i', '', $planName));
+        $key = isset($slabs[$planName]) ? $planName : (isset($slabs[$shortName]) ? $shortName : null);
+        if ($key !== null) {
             return [
-                'referredDiscount' => (float) $slabs[$planName]['referredDiscount'],
-                'referrerCredit'   => (float) $slabs[$planName]['referrerCredit'],
+                'referredDiscount' => (float) $slabs[$key]['referredDiscount'],
+                'referrerCredit'   => (float) $slabs[$key]['referrerCredit'],
             ];
         }
         return [
@@ -108,8 +118,11 @@ class ConfigService
             'SELECT value FROM "AdminConfig" WHERE `key` = :key',
             [':key' => $key]
         );
-        if (!$row)
+        if (!$row) {
+            // Persist default immediately so DB is always the source of truth
+            self::setConfig($key, $default);
             return $default;
+        }
         $parsed = json_decode($row['value'], true);
         return is_array($parsed) ? $parsed : $default;
     }
@@ -167,7 +180,7 @@ class ConfigService
 
     public static function setConfig(string $key, array $value): void
     {
-        $json = json_encode($value);
+        $json = json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
         $now = date('Y-m-d H:i:s');
 
         // MySQL UPSERT

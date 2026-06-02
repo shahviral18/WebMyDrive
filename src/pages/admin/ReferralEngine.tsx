@@ -147,8 +147,8 @@ export default function ReferralEnginePage() {
                 Object.entries(promoDisc).map(([plan, pct]) => [
                     plan,
                     {
-                        referredDiscount: (pct as number) / 100,
-                        referrerCredit: (refCredits[plan] ?? 5) / 100,
+                        referredDiscount: Math.round((pct as number)) / 100,
+                        referrerCredit: Math.round((refCredits[plan] ?? 5) * 10) / 1000,
                     },
                 ])
             );
