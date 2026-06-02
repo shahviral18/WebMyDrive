@@ -56,7 +56,7 @@ class PaymentController
             $globalCfg = ConfigService::getUserReferralConfig();
             $discountPercent = (float) ($globalCfg['paidAdsDiscountRate'] ?? 0.20);
         } elseif ($promoCode) {
-            // Validate code — must be a USER referral link
+            // First: check USER referral link or user's personal referral code
             $validLink = ReferralLinkService::validateCode($promoCode);
             $referrer  = null;
             if ($validLink && $validLink['role'] === 'USER') {
@@ -65,11 +65,28 @@ class PaymentController
                 $referrer = Database::queryOne('SELECT id FROM `User` WHERE referralCode = :c', [':c' => $promoCode]);
             }
             if ($referrer) {
-                $slab            = ConfigService::getPlanReferralSlab($plan['name'] ?? '');
-                $discountPercent = $slab['referredDiscount'];
+                $slab               = ConfigService::getPlanReferralSlab($plan['name'] ?? '');
+                $discountPercent    = $slab['referredDiscount'];
                 $resolvedReferrerId = (int) $referrer['id'];
+            } else {
+                // Then: check distributor promo code
+                $distPromoRow = Database::queryOne(
+                    'SELECT pc.id, dpc.distributorId FROM `PromoCode` pc
+                     JOIN `DistributorPromoCode` dpc ON dpc.promoCodeId = pc.id
+                     WHERE pc.code = :code AND dpc.isActive = 1
+                       AND (pc.expiresAt IS NULL OR pc.expiresAt > NOW())
+                     LIMIT 1',
+                    [':code' => strtoupper($promoCode)]
+                );
+                if ($distPromoRow) {
+                    $distConfig    = ConfigService::getDistributorConfig();
+                    $planDiscounts = $distConfig['promoDiscounts'] ?? [];
+                    $discountPercent = (float)($planDiscounts[$plan['name'] ?? ''] ?? 0) / 100;
+                    // Rewrite to DIST_ format so the webhook handler can attribute commission
+                    $promoCode = 'DIST_' . $distPromoRow['distributorId'] . ':' . strtoupper(trim((string)($b['promoCode'] ?? '')));
+                }
             }
-            // Invalid code: silently ignore discount (don't block purchase)
+            // Unknown code: silently ignore discount (don't block purchase)
         }
 
         // Apply discount to base amount (ex-GST)
@@ -479,13 +496,23 @@ class PaymentController
                 }
             }
 
-            // 7. Process referral commission (non-fatal, after commit)
+            // 7. Process referral/distributor commission (non-fatal, after commit)
             $promoCode = $checkout['promoCode'] ?? ($meta['promoCode'] ?? null);
             if ($promoCode) {
                 try {
-                    ReferralService::processNewOrder($orderId, $userId, $promoCode);
+                    if (str_starts_with((string)$promoCode, 'DIST_')) {
+                        // Distributor promo code — attribute commission to the distributor
+                        $parts = explode(':', (string)$promoCode, 2);
+                        $distributorId = (int) str_replace('DIST_', '', $parts[0]);
+                        if ($distributorId > 0) {
+                            $orderForDist = Database::queryOne('SELECT amount FROM `Order` WHERE id = :id', [':id' => $orderId]);
+                            DistributorService::processSale($distributorId, $userId, $orderId, (float)($orderForDist['amount'] ?? 0));
+                        }
+                    } else {
+                        ReferralService::processNewOrder($orderId, $userId, $promoCode);
+                    }
                 } catch (Throwable $re) {
-                    Logger::error('[ZohoWebhook] ReferralService::processNewOrder failed (non-fatal): ' . $re->getMessage());
+                    Logger::error('[ZohoWebhook] Commission processing failed (non-fatal): ' . $re->getMessage());
                 }
             }
 
