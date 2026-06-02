@@ -157,6 +157,8 @@ $router->post('/api/admin/distributors/:id/promo-code', [AdminController::class,
 $router->delete('/api/admin/distributors/:id/promo-code/:dpcId', [AdminController::class, 'revokeDistributorPromoCode'], $adminOnly);
 $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOuPath'], $adminOnly);
 $router->post('/api/admin/users/:id/assign-distributor', [AdminController::class, 'assignUserToDistributor'], $adminOnly);
+$router->post('/api/admin/users/:id/assign-referrer', [AdminController::class, 'assignReferrer'], $adminOnly);
+$router->get('/api/admin/referral-assignments', [AdminController::class, 'getReferralAssignments'], $adminOnly);
 $router->post('/api/admin/users/:id/promote-distributor', [AdminController::class, 'promoteUserToDistributor'], $adminOnly);
 $router->post('/api/admin/existing-users/sync-google', [AdminController::class, 'syncFromGoogle'], $adminOnly);
 $router->get('/api/admin/existing-users', [AdminController::class, 'getExistingUsers'], $adminOnly);

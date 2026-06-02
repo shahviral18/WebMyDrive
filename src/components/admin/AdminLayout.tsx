@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users,
   ScrollText, Settings, ChevronLeft, ChevronRight,
   LogOut, Menu, X, Shield, CreditCard, Gift, Tag,
-  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight, ShieldCheck, Receipt,
+  FileText, ChevronDown, Handshake, Briefcase, ArrowLeftRight, ShieldCheck, Receipt, GitBranch,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -47,7 +47,8 @@ const navGroups = [
     items: [
       { label: "Import Users",              href: "/admin/import-users",              icon: Users,     module: "importUsers"             as ModuleKey },
       { label: "Distributors",              href: "/admin/distributors",              icon: Handshake, module: "distributors"            as ModuleKey },
-      { label: "Assign Distributor",        href: "/admin/assign-distributor",        icon: Users,     module: "assignDistributor"       as ModuleKey },
+      { label: "Assign Distributor",        href: "/admin/assign-distributor",        icon: Users,        module: "assignDistributor"       as ModuleKey },
+      { label: "Assign Referral",           href: "/admin/assign-referral",           icon: GitBranch,    module: "assignDistributor"       as ModuleKey },
       { label: "Distributor Applications",  href: "/admin/distributor-applications",  icon: Briefcase, module: "distributorApplications" as ModuleKey },
       { label: "Distributor Payouts",       href: "/admin/distributor-payouts",       icon: Briefcase, module: "distributorPayouts"      as ModuleKey },
       { label: "Audit Logs",                href: "/admin/audit-logs",                icon: ScrollText, module: "auditLogs"             as ModuleKey },

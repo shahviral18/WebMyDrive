@@ -1870,6 +1870,108 @@ class AdminController
         Response::json(['success' => true, 'message' => "User assigned to distributor {$dist['name']}."]);
     }
 
+    // ── Assign referrer to a user (manual retroactive link) ───────────────────
+
+    public function assignReferrer(Request $req): void
+    {
+        $refereeId  = (int) ($req->params['id'] ?? 0);
+        $referrerId = isset($req->body['referrerId']) && $req->body['referrerId'] !== null && $req->body['referrerId'] !== ''
+            ? (int) $req->body['referrerId'] : null;
+        $applyCredit = (bool) ($req->body['applyCredit'] ?? false);
+
+        $referee = Database::queryOne(
+            'SELECT id, name, email FROM "User" WHERE id = :id',
+            [':id' => $refereeId]
+        );
+        if (!$referee) Response::error('User not found', 404);
+
+        if ($referrerId === null) {
+            // Remove link: delete manual ReferralLog entries for this referee
+            Database::execute(
+                'DELETE FROM "ReferralLog" WHERE refereeId = :rid AND type = \'MANUAL_ASSIGN\'',
+                [':rid' => $refereeId]
+            );
+            AuditService::log('UNASSIGN_REFERRER', null, null, ['detail' => "Removed referrer link from user #{$refereeId}"]);
+            Response::json(['success' => true]);
+        }
+
+        if ($referrerId === $refereeId) Response::error('A user cannot refer themselves', 422);
+
+        $referrer = Database::queryOne(
+            'SELECT id, name, email, walletBalance FROM "User" WHERE id = :id',
+            [':id' => $referrerId]
+        );
+        if (!$referrer) Response::error('Referrer not found', 404);
+
+        // Check for existing link
+        $exists = Database::queryOne(
+            'SELECT id FROM "ReferralLog" WHERE refereeId = :rid',
+            [':rid' => $refereeId]
+        );
+        if ($exists) Response::error('This user is already linked to a referrer', 409);
+
+        // Compute credit if requested
+        $creditApplied = 0.0;
+        if ($applyCredit) {
+            // Find referee's most recent paid order to determine plan
+            $order = Database::queryOne(
+                'SELECT o.amount, p.name AS planName FROM `Order` o
+                 JOIN `Plan` p ON p.id = o.planId
+                 WHERE o.userId = :uid AND o.status = \'PAID\'
+                 ORDER BY o.createdAt DESC LIMIT 1',
+                [':uid' => $refereeId]
+            );
+            if ($order) {
+                $slab = ConfigService::getPlanReferralSlab($order['planName']);
+                $creditApplied = round((float)$order['amount'] * (float)$slab['referrerCredit'], 2);
+            }
+        }
+
+        $now = date('Y-m-d H:i:s');
+
+        // Insert ReferralLog with MANUAL_ASSIGN type
+        Database::execute(
+            'INSERT INTO "ReferralLog"
+             (referrerId, refereeId, orderId, amount, commissionEarned, status, type, referralYear, referrer_credited, createdAt, updatedAt)
+             VALUES (:rid, :eid, NULL, :amt, :comm, \'PAID\', \'MANUAL_ASSIGN\', 1, 1, :now, :now)',
+            [
+                ':rid'  => $referrerId,
+                ':eid'  => $refereeId,
+                ':amt'  => 0,
+                ':comm' => $creditApplied,
+                ':now'  => $now,
+            ]
+        );
+
+        if ($creditApplied > 0) {
+            Database::execute(
+                'UPDATE "User" SET walletBalance = walletBalance + :amt, updatedAt = :now WHERE id = :id',
+                [':amt' => $creditApplied, ':now' => $now, ':id' => $referrerId]
+            );
+        }
+
+        AuditService::log('ASSIGN_REFERRER', null, null, [
+            'detail' => "Manually linked referee #{$refereeId} ({$referee['email']}) → referrer #{$referrerId} ({$referrer['email']}); credit=₹{$creditApplied}",
+        ]);
+
+        Response::json(['success' => true, 'creditApplied' => $creditApplied]);
+    }
+
+    public function getReferralAssignments(Request $req): void
+    {
+        $rows = Database::query(
+            'SELECT rl.refereeId, rl.referrerId, rl.commissionEarned AS creditApplied, rl.createdAt AS assignedAt,
+                    referee.name AS refereeName, referee.email AS refereeEmail,
+                    referrer.name AS referrerName, referrer.email AS referrerEmail
+             FROM "ReferralLog" rl
+             JOIN "User" referee  ON referee.id  = rl.refereeId
+             JOIN "User" referrer ON referrer.id = rl.referrerId
+             WHERE rl.type = \'MANUAL_ASSIGN\'
+             ORDER BY rl.createdAt DESC'
+        );
+        Response::json($rows ?? []);
+    }
+
     // ── Promote user to distributor ────────────────────────────────────────────
 
     public function promoteUserToDistributor(Request $req): void
