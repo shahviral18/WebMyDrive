@@ -1928,18 +1928,27 @@ class AdminController
 
         $now = date('Y-m-d H:i:s');
 
-        Database::execute(
-            'INSERT INTO `ReferralLog`
-             (referrerId, refereeId, orderId, amount, commissionEarned, status, type, referralYear, referrer_credited, createdAt, updatedAt)
-             VALUES (:rid, :eid, NULL, :amt, :comm, \'PAID\', \'MANUAL_ASSIGN\', 1, 1, :now, :now)',
-            [
-                ':rid'  => $referrerId,
-                ':eid'  => $refereeId,
-                ':amt'  => 0,
-                ':comm' => $creditApplied,
-                ':now'  => $now,
-            ]
-        );
+        // Ensure type column exists (may be missing on older DB schemas)
+        try {
+            Database::execute("ALTER TABLE `ReferralLog` ADD COLUMN `type` VARCHAR(50) NULL");
+        } catch (\Throwable $_) {}
+
+        try {
+            Database::execute(
+                'INSERT INTO `ReferralLog`
+                 (referrerId, refereeId, orderId, amount, commissionEarned, status, type, referralYear, referrer_credited, createdAt, updatedAt)
+                 VALUES (:rid, :eid, NULL, :amt, :comm, \'PAID\', \'MANUAL_ASSIGN\', 1, 1, :now, :now)',
+                [
+                    ':rid'  => $referrerId,
+                    ':eid'  => $refereeId,
+                    ':amt'  => 0,
+                    ':comm' => $creditApplied,
+                    ':now'  => $now,
+                ]
+            );
+        } catch (\Throwable $e) {
+            Response::error('Failed to save referral link: ' . $e->getMessage(), 500);
+        }
 
         if ($creditApplied > 0) {
             Database::execute(
@@ -1957,17 +1966,22 @@ class AdminController
 
     public function getReferralAssignments(Request $req): void
     {
-        $rows = Database::query(
-            'SELECT rl.refereeId, rl.referrerId, rl.commissionEarned AS creditApplied, rl.createdAt AS assignedAt,
-                    referee.name AS refereeName, referee.email AS refereeEmail,
-                    referrer.name AS referrerName, referrer.email AS referrerEmail
-             FROM `ReferralLog` rl
-             JOIN `User` referee  ON referee.id  = rl.refereeId
-             JOIN `User` referrer ON referrer.id = rl.referrerId
-             WHERE rl.type = \'MANUAL_ASSIGN\'
-             ORDER BY rl.createdAt DESC'
-        );
-        Response::json($rows ?? []);
+        // Ensure the type column exists before querying it
+        try {
+            $rows = Database::query(
+                'SELECT rl.refereeId, rl.referrerId, rl.commissionEarned AS creditApplied, rl.createdAt AS assignedAt,
+                        referee.name AS refereeName, referee.email AS refereeEmail,
+                        referrer.name AS referrerName, referrer.email AS referrerEmail
+                 FROM `ReferralLog` rl
+                 JOIN `User` referee  ON referee.id  = rl.refereeId
+                 JOIN `User` referrer ON referrer.id = rl.referrerId
+                 WHERE rl.type = \'MANUAL_ASSIGN\'
+                 ORDER BY rl.createdAt DESC'
+            );
+            Response::json($rows ?? []);
+        } catch (\Throwable $e) {
+            Response::json([]);
+        }
     }
 
     // ── Promote user to distributor ────────────────────────────────────────────
