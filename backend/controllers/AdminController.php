@@ -1880,7 +1880,7 @@ class AdminController
         $applyCredit = (bool) ($req->body['applyCredit'] ?? false);
 
         $referee = Database::queryOne(
-            'SELECT id, name, email FROM "User" WHERE id = :id',
+            'SELECT id, name, email FROM `User` WHERE id = :id',
             [':id' => $refereeId]
         );
         if (!$referee) Response::error('User not found', 404);
@@ -1888,7 +1888,7 @@ class AdminController
         if ($referrerId === null) {
             // Remove link: delete manual ReferralLog entries for this referee
             Database::execute(
-                'DELETE FROM "ReferralLog" WHERE refereeId = :rid AND type = \'MANUAL_ASSIGN\'',
+                'DELETE FROM `ReferralLog` WHERE refereeId = :rid AND type = \'MANUAL_ASSIGN\'',
                 [':rid' => $refereeId]
             );
             AuditService::log('UNASSIGN_REFERRER', null, null, ['detail' => "Removed referrer link from user #{$refereeId}"]);
@@ -1898,14 +1898,14 @@ class AdminController
         if ($referrerId === $refereeId) Response::error('A user cannot refer themselves', 422);
 
         $referrer = Database::queryOne(
-            'SELECT id, name, email, walletBalance FROM "User" WHERE id = :id',
+            'SELECT id, name, email, walletBalance FROM `User` WHERE id = :id',
             [':id' => $referrerId]
         );
         if (!$referrer) Response::error('Referrer not found', 404);
 
         // Check for existing link
         $exists = Database::queryOne(
-            'SELECT id FROM "ReferralLog" WHERE refereeId = :rid',
+            'SELECT id FROM `ReferralLog` WHERE refereeId = :rid',
             [':rid' => $refereeId]
         );
         if ($exists) Response::error('This user is already linked to a referrer', 409);
@@ -1913,7 +1913,6 @@ class AdminController
         // Compute credit if requested
         $creditApplied = 0.0;
         if ($applyCredit) {
-            // Find referee's most recent paid order to determine plan
             $order = Database::queryOne(
                 'SELECT o.amount, p.name AS planName FROM `Order` o
                  JOIN `Plan` p ON p.id = o.planId
@@ -1929,9 +1928,8 @@ class AdminController
 
         $now = date('Y-m-d H:i:s');
 
-        // Insert ReferralLog with MANUAL_ASSIGN type
         Database::execute(
-            'INSERT INTO "ReferralLog"
+            'INSERT INTO `ReferralLog`
              (referrerId, refereeId, orderId, amount, commissionEarned, status, type, referralYear, referrer_credited, createdAt, updatedAt)
              VALUES (:rid, :eid, NULL, :amt, :comm, \'PAID\', \'MANUAL_ASSIGN\', 1, 1, :now, :now)',
             [
@@ -1945,7 +1943,7 @@ class AdminController
 
         if ($creditApplied > 0) {
             Database::execute(
-                'UPDATE "User" SET walletBalance = walletBalance + :amt, updatedAt = :now WHERE id = :id',
+                'UPDATE `User` SET walletBalance = walletBalance + :amt, updatedAt = :now WHERE id = :id',
                 [':amt' => $creditApplied, ':now' => $now, ':id' => $referrerId]
             );
         }
@@ -1963,9 +1961,9 @@ class AdminController
             'SELECT rl.refereeId, rl.referrerId, rl.commissionEarned AS creditApplied, rl.createdAt AS assignedAt,
                     referee.name AS refereeName, referee.email AS refereeEmail,
                     referrer.name AS referrerName, referrer.email AS referrerEmail
-             FROM "ReferralLog" rl
-             JOIN "User" referee  ON referee.id  = rl.refereeId
-             JOIN "User" referrer ON referrer.id = rl.referrerId
+             FROM `ReferralLog` rl
+             JOIN `User` referee  ON referee.id  = rl.refereeId
+             JOIN `User` referrer ON referrer.id = rl.referrerId
              WHERE rl.type = \'MANUAL_ASSIGN\'
              ORDER BY rl.createdAt DESC'
         );

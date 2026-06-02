@@ -121,7 +121,9 @@ export default function AssignReferralPage() {
       api.get("/admin/users?limit=1000&skip=0"),
       api.get("/admin/referral-assignments"),
     ]).then(([uRes, aRes]) => {
-      setUsers(uRes.users ?? []);
+      // Exclude distributors — they are injected into the users list with id+1000000 offset
+      // and don't exist in the User table. Only real users can be referees/referrers.
+      setUsers((uRes.users ?? []).filter((u: User) => u.role !== "DISTRIBUTOR"));
       setAssignments(Array.isArray(aRes) ? aRes : []);
     }).catch(() => toast.error("Failed to load data"))
       .finally(() => setLoading(false));
