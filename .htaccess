@@ -7,6 +7,10 @@
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteRule ^ - [L]
 
+  # Route /api/* requests to backend/public/index.php
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteRule ^api/(.*)$ backend/public/index.php [QSA,L]
+
   # Don't rewrite backend API requests
   RewriteCond %{REQUEST_URI} !^/backend/
 
@@ -15,3 +19,7 @@
 </IfModule>
 
 Options -Indexes
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# This domain inherits the "PHP" package.
+# php -- END cPanel-generated handler, do not edit

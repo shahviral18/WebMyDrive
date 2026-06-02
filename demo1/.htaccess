@@ -1,0 +1,26 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /demo1/
+
+  # If the requested file or directory exists, serve it directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Don't rewrite backend API requests
+  RewriteCond %{REQUEST_URI} !^/demo1/backend/
+
+  # Fallback rule for React Router to index.html
+  RewriteRule ^ index.html [QSA,L]
+</IfModule>
+
+Options -Indexes
+
+# Prevent index.html from being cached — ensures deploys take effect immediately
+<Files "index.html">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-store, no-cache, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </IfModule>
+</Files>

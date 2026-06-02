@@ -1,0 +1,13 @@
+# Allow PHP execution in this directory (override parent deny)
+<FilesMatch "\.php$">
+    Require all granted
+</FilesMatch>
+
+RewriteEngine On
+
+# If request is for an existing file or directory, serve it directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Route all other requests to index.php
+RewriteRule ^(.*)$ index.php [QSA,L]

@@ -1,0 +1,7 @@
+Content-type: text/plain;charset=UTF-8
+
+Bootstrap OK
+ERROR: AdminController::upsertPlan(): Argument #1 ($req) must be of type Request, stdClass given, called in /home1/wmdadmin/public_html/demo1/diag_plansave.php on line 50
+File: /home1/wmdadmin/public_html/demo1/backend/controllers/AdminController.php:883
+#0 /home1/wmdadmin/public_html/demo1/diag_plansave.php(50): AdminController->upsertPlan(Object(stdClass))
+#1 {main}

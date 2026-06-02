@@ -1,0 +1,11 @@
+Loaded: /home1/wmdadmin/secure_config/db_config.php
+db_host = localhost
+db_name = wmdadmin_webmydrive
+db_user = wmdadmin_wmd
+db_pass = tHNOUPKVQgah5oTWcwwjb2LX
+DB_HOST = NOT SET
+DB_NAME = NOT SET
+DB_USER = NOT SET
+DB_PASS = NOT SET
+Connecting to: host=localhost dbname=wmdadmin_webmydrive
+Error: SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '\`Plan\` WHERE id=5' at line 1

@@ -1,0 +1,79 @@
+<?php
+declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+header('Content-Type: application/json; charset=utf-8');
+
+if (!hash_equals('CMQ0LSJR84JZIH9PARSR5X9XYU2TPREV', $_GET['token'] ?? '')) {
+    http_response_code(403); echo json_encode(['error' => 'Forbidden']); exit;
+}
+
+define('BASE_PATH', dirname(__DIR__));
+require BASE_PATH . '/config/env.php';
+
+$pdo = new PDO(
+    sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_NAME),
+    DB_USER, DB_PASS,
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+);
+$pdo->exec("SET sql_mode='ANSI_QUOTES'");
+
+$email = 'testviralshah@webmydrive.com';
+$name  = 'Test Viralshah';
+$now   = date('Y-m-d H:i:s');
+
+// ── 1. Find 5TB plan ──────────────────────────────────────────────────────────
+$plan = $pdo->query(
+    'SELECT id, name, storageGB FROM "Plan"
+     WHERE storageGB = 5000 OR name LIKE \'%5TB%\' OR name LIKE \'%5 TB%\' OR name LIKE \'%Professional%\'
+     ORDER BY id ASC LIMIT 1'
+)->fetch();
+
+$allPlans = $pdo->query('SELECT id, name, storageGB FROM "Plan" ORDER BY id ASC')->fetchAll();
+
+// ── 2. Check existing ─────────────────────────────────────────────────────────
+$chk = $pdo->prepare('SELECT id FROM "User" WHERE email = :e');
+$chk->execute([':e' => $email]);
+if ($chk->fetch()) {
+    echo json_encode(['error' => "User $email already exists.", 'plans' => $allPlans], JSON_PRETTY_PRINT);
+    exit;
+}
+
+// ── 3. Referral code ──────────────────────────────────────────────────────────
+$code = 'TESTVIRALSHAH' . date('Y');
+for ($i = 1; $i <= 10; $i++) {
+    $c = $pdo->prepare('SELECT id FROM "User" WHERE referralCode = :c');
+    $c->execute([':c' => $code]);
+    if (!$c->fetch()) break;
+    $code = 'TESTVIRALSHAH' . date('Y') . $i;
+}
+
+// ── 4. Create User ────────────────────────────────────────────────────────────
+$hash = password_hash('Test@1123', PASSWORD_BCRYPT, ['cost' => 10]);
+$ins  = $pdo->prepare(
+    'INSERT INTO "User" (name, email, displayEmail, passwordHash, role, referralCode,
+      walletBalance, isDisabled, passwordResetRequired, first_login, createdAt, updatedAt)
+     VALUES (:name, :email, :email, :hash, \'USER\', :code, 0, 0, 0, 0, :now, :now)'
+);
+$ins->execute([':name' => $name, ':email' => $email, ':hash' => $hash, ':code' => $code, ':now' => $now]);
+$userId = (int) $pdo->lastInsertId();
+
+// ── 5. Create Workspace ───────────────────────────────────────────────────────
+$planId   = $plan ? (int) $plan['id'] : null;
+$metadata = json_encode(['email' => $email, 'passwordSet' => true, 'source' => 'manual_test']);
+$wIns = $pdo->prepare(
+    'INSERT INTO "Workspace" (userId, googleCustomerId, status, planId, metadata, createdAt, updatedAt)
+     VALUES (:uid, :gcid, \'ACTIVE\', :pid, :meta, :now, :now)'
+);
+$wIns->execute([':uid' => $userId, ':gcid' => $email, ':pid' => $planId, ':meta' => $metadata, ':now' => $now]);
+
+@rename(__FILE__, str_replace('.php', '.done', __FILE__));
+
+echo json_encode([
+    'success'     => true,
+    'userId'      => $userId,
+    'email'       => $email,
+    'planId'      => $planId,
+    'planName'    => $plan['name'] ?? '(no 5TB plan found)',
+    'allPlans'    => $allPlans,
+], JSON_PRETTY_PRINT);

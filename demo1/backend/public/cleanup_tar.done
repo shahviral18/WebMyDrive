@@ -1,0 +1,19 @@
+<?php
+declare(strict_types=1);
+header('Content-Type: application/json');
+if (!hash_equals('CMQ0LSJR84JZIH9PARSR5X9XYU2TPREV', $_GET['token'] ?? '')) { http_response_code(403); echo json_encode(['error'=>'Forbidden']); exit; }
+
+$targets = [
+    '/home1/wmdadmin/public_html/google-api.tar',
+    '/home1/wmdadmin/public_html/db_test.php',
+];
+$log = [];
+foreach ($targets as $f) {
+    if (file_exists($f)) {
+        unlink($f) ? $log[] = "Deleted: $f" : $log[] = "FAILED to delete: $f";
+    } else {
+        $log[] = "Not found (already gone): $f";
+    }
+}
+@rename(__FILE__, str_replace('.php', '.done', __FILE__));
+echo json_encode(['log' => $log], JSON_PRETTY_PRINT);

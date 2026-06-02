@@ -1,0 +1,37 @@
+<?php
+declare(strict_types=1);
+header('Content-Type: application/json; charset=utf-8');
+if (!hash_equals('CMQ0LSJR84JZIH9PARSR5X9XYU2TPREV', $_GET['token'] ?? '')) {
+    http_response_code(403); echo json_encode(['error' => 'Forbidden']); exit;
+}
+
+define('BASE_PATH', dirname(__DIR__));
+require BASE_PATH . '/config/env.php';
+
+$pdo = new PDO(
+    sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_NAME),
+    DB_USER, DB_PASS,
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+);
+
+$results = [];
+
+$sql = "CREATE TABLE IF NOT EXISTS `UserSession` (
+    `id`        INT AUTO_INCREMENT PRIMARY KEY,
+    `userId`    INT NOT NULL,
+    `ipAddress` VARCHAR(100),
+    `userAgent` VARCHAR(500),
+    `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `revokedAt` DATETIME NULL,
+    INDEX `idx_usersession_user` (`userId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+try {
+    $pdo->exec($sql);
+    $results['create_user_session'] = 'ok';
+} catch (PDOException $e) {
+    $results['create_user_session'] = $e->getMessage();
+}
+
+@rename(__FILE__, str_replace('.php', '.done', __FILE__));
+echo json_encode(['results' => $results], JSON_PRETTY_PRINT);

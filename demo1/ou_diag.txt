@@ -1,0 +1,160 @@
+Testing OU path: webmydrive.com/A - Basic - 500GB
+SUCCESS: {"name":"A - Basic - 500GB","path":"\/webmydrive.com\/A - Basic - 500GB"}
+
+Listing all OUs:
+  /zEmails/Artoprint
+  /zEmails/Kaleidoscope
+  /zEmails/Skyrotek
+  /zEmails/TodaysTraders
+  /webmydrive.com
+  /zEmails/KarmaDevelopers
+  /zEmails/Palsa
+  /zEmails/FutureAutomationIndia
+  /zEmails/Eduease
+  /zEmails/Mideahub/mideahub.co
+  /zEmails/Wealthpoint
+  /zEmails/ApproachMediaClients
+  /zEmails/monicacot
+  /zEmails/JayminCA/Glccsr
+  /zEmails/Uviworld
+  /zEmails/Drilasayurveda
+  /zEmails/traj
+  /zEmails/Kumash-Techicom/dandkconsultant
+  /zEmails/Centricwealth/Rogue360
+  /zEmails/adink.in
+  /zEmails/KotakLoggisticss/kotakglobalprojject
+  /zEmails/EagleTechnofab
+  /zEmails/Kumash-Techicom/Techicom
+  /zEmails/linkgenicdigitaltech
+  /zEmails/lilacevent
+  /zEmails/SarthakSatvik
+  /zEmails/GraphiteDust
+  /zEmails/DhavalVadgama/Yokibiofuels
+  /zEmails/Shivaadvisors
+  /webmydrive.com/C - Premium
+  /zEmails/S&P/sharmaandpagaria
+  /Suspended
+  /zEmails/Inoxbeemahoday
+  /zEmails/TechnoDoc
+  /zEmails/TheAuxicon
+  /zEmails/Patidartravels
+  /zEmails/decenthospitality
+  /zEmails/ShreenathMetal
+  /zEmails/S&P/tiare
+  /zEmails/smsales.in
+  /zEmails/Zroopdrive
+  /zEmails/JayminCA
+  /zEmails/DhavalVadgama/mefcomcap
+  /zEmails/DhavalVadgama/Yokifin
+  /zEmails/GRTSales
+  /TestOU
+  /zEmails/Nextview
+  /zEmails/Back2basics
+  /zEmails/SejalPrintPack
+  /zEmails/Sunijpharma
+  /zEmails/Honeytechsol/safalsoftcom
+  /zEmails/abrandsense
+  /zEmails/Onyxgroup
+  /zEmails/GSDP
+  /webmydrive.com/A - Basic - 500GB
+  /zEmails/Weassure
+  /zEmails/Urbanaac
+  /zEmails/Inoxbeemahoday/Inoxbee
+  /zEmails
+  /zEmails/Monil/RCSPH
+  /zEmails/Agriworldexpo
+  /zEmails/Verddaan
+  /zEmails/ontosdesign
+  /zEmails/Pistondessport
+  /zEmails/Navajivan
+  /zEmails/Greenbulbdesigns
+  /Test
+  /zEmails/Kaivalyaguru
+  /zEmails/FutureSolutions
+  /zEmails/NeevFluidex
+  /zEmails/Darshinal/protectric
+  /zEmails/Onyxgroup/healthpriority
+  /zEmails/askcaabhay
+  /zEmails/Mideahub/mideahub.us
+  /zEmails/Rollce
+  /zEmails/7StudioProjects
+  /zEmails/DhavalVadgama
+  /zEmails/Eulogiainn
+  /zEmails/ChemTraders
+  /zEmails/anvica
+  /zEmails/UjjvalFadia
+  /zEmails/Mideahub/mideahub.io
+  /zEmails/mescosurgical
+  /zEmails/Monil/Finsync
+  /zEmails/Dealer-uixstudios
+  /webmydrive.com/C - Premium - 50TB
+  /zEmails/Awoke
+  /zEmails/Glowel
+  /zEmails/ASAGST
+  /zEmails/Krishnagifts
+  /zEmails/Vinayak CA
+  /zEmails/IPFI
+  /zEmails/Kumash-Techicom/falsanindia
+  /zEmails/UjjvalFadia/upscaleliving
+  /zEmails/Kumash-Techicom
+  /zEmails/ApproachMediaClients/CrownGear
+  /zEmails/JayminCA/Surpriseplanning
+  /zEmails/rogue360
+  /zEmails/Kumash-Techicom/ourgujarati
+  /zEmails/Mideahub
+  /zEmails/ashomb
+  /zEmails/JayminCA/Glcglobe
+  /Suspended/TestCreateOU
+  /zEmails/Acewealth
+  /zEmails/Darshinal/darshinal
+  /webmydrive.com/E - EnterprisePlus - 500 TB
+  /zEmails/Robust
+  /zEmails/hmrawal.com
+  /zEmails/2plus2
+  /zEmails/Navajivan/nationalphotofest
+  /zEmails/Bluewaves
+  /zEmails/Darshinal
+  /webmydrive.com/D - Enterprise - 100TB
+  /webmydrive.com/A - Essential
+  /zEmails/Shreedharlabels/shreedharlables - non bcc
+  /zEmails/Shreedharlabels
+  /zEmails/Eecmai
+  /zEmails/KotakLoggisticss
+  /zEmails/PSDAdvisory
+  /zEmails/Yashs
+  /zEmails/EagleTechnofab/Eaglescales
+  /zEmails/Shreedharlabels/shreedharlabels - bcc
+  /zEmails/Samvedana
+  /zEmails/tusharshah.photography
+  /zEmails/Deepkala
+  /zEmails/Edugo
+  /zEmails/Darshinal/switchcon
+  /zEmails/Inoxbeemahoday/Mahodayelectric
+  /zEmails/AlertTechnologies
+  /zEmails/nichesolutions
+  /zEmails/Monil
+  /zEmails/Khamakhaya
+  /zEmails/Parikh Assurance
+  /zEmails/S&P
+  /webmydrive.com/B - Professional
+  /zEmails/Chandantea
+  /zEmails/Aoem
+  /zEmails/Sukan Foods
+  /webmydrive.com/Photos
+  /zEmails/AmbicaPapertech
+  /zEmails/shaileshmachines-Approach
+  /zEmails/Harryinternational
+  /webmydrive.com/B - Professional - 5TB
+  /zEmails/seasontextiles.co
+  /zEmails/PVDRS
+  /zEmails/AVS Projects
+  /zEmails/DhavalVadgama/Frozenfire
+  /zEmails/krishnacreations
+  /zEmails/Welar
+  /zEmails/Honeytechsol
+  /zEmails/CSJaymeen
+  /zEmails/Centricwealth
+  /zEmails/Businesstaxperts
+  /zEmails/Poddartyre
+  /zEmails/Designnav
+  /zEmails/nichesolutions/Uviworld

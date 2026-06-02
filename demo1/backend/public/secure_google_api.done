@@ -1,0 +1,92 @@
+<?php
+/**
+ * One-shot: move google-api out of public_html → /home1/wmdadmin/google_api/
+ * Self-destructs after run.
+ */
+declare(strict_types=1);
+header('Content-Type: application/json; charset=utf-8');
+
+$token = $_GET['token'] ?? '';
+if (!hash_equals('CMQ0LSJR84JZIH9PARSR5X9XYU2TPREV', $token)) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Forbidden']);
+    exit;
+}
+
+$log     = [];
+$errors  = [];
+
+// ── Paths ─────────────────────────────────────────────────────────────────────
+$publicHtml = '/home1/wmdadmin/public_html';
+$srcDir     = $publicHtml . '/google-api';
+$destDir    = '/home1/wmdadmin/google_api';   // outside public_html
+
+// ── 1. Create destination ─────────────────────────────────────────────────────
+if (!is_dir($destDir)) {
+    if (mkdir($destDir, 0750, true)) {
+        $log[] = "Created $destDir";
+    } else {
+        $errors[] = "Failed to create $destDir";
+    }
+}
+
+// ── 2. Move entire google-api folder ─────────────────────────────────────────
+if (is_dir($srcDir) && !is_dir($destDir . '/vendor')) {
+    if (rename($srcDir, $destDir)) {
+        $log[] = "Moved $srcDir → $destDir";
+    } else {
+        // rename() may fail across mount points — fallback: copy then remove
+        $errors[] = "rename() failed for $srcDir, trying recursive copy...";
+        function rcopy(string $src, string $dst): bool {
+            if (!is_dir($dst)) mkdir($dst, 0750, true);
+            foreach (scandir($src) as $item) {
+                if ($item === '.' || $item === '..') continue;
+                $s = "$src/$item"; $d = "$dst/$item";
+                if (is_dir($s)) { if (!rcopy($s, $d)) return false; }
+                else             { if (!copy($s, $d)) return false; }
+            }
+            return true;
+        }
+        function rrmdir(string $dir): void {
+            foreach (scandir($dir) as $item) {
+                if ($item === '.' || $item === '..') continue;
+                $p = "$dir/$item";
+                is_dir($p) ? rrmdir($p) : unlink($p);
+            }
+            rmdir($dir);
+        }
+        if (rcopy($srcDir, $destDir)) {
+            rrmdir($srcDir);
+            $log[] = "Copied $srcDir → $destDir, then removed source";
+        } else {
+            $errors[] = "Copy also failed. Manual move required.";
+        }
+    }
+} elseif (is_dir($destDir . '/vendor')) {
+    $log[] = "google-api already at $destDir — skipping move";
+} else {
+    $errors[] = "Source $srcDir not found";
+}
+
+// ── 3. Remove test/debug files from public_html ───────────────────────────────
+$filesToRemove = [
+    $publicHtml . '/test_google_connection.php',
+    $publicHtml . '/find_google_api.php',
+];
+foreach ($filesToRemove as $f) {
+    if (file_exists($f)) {
+        unlink($f) ? $log[] = "Deleted $f" : $errors[] = "Could not delete $f";
+    } else {
+        $log[] = "Already gone: $f";
+    }
+}
+
+// ── 4. Self-destruct ──────────────────────────────────────────────────────────
+@rename(__FILE__, str_replace('.php', '.done', __FILE__));
+
+echo json_encode([
+    'success' => empty($errors),
+    'log'     => $log,
+    'errors'  => $errors,
+    'result'  => "google_api now at: $destDir",
+], JSON_PRETTY_PRINT);

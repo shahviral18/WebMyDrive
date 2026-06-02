@@ -1,0 +1,5 @@
+# Block direct access to sensitive files
+<FilesMatch "^\.env|^\.env\.|secure_config|\.log$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

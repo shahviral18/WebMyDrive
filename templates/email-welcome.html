@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #1bb2e2 0%, #0891b8 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to WebMyDrive!</h1>
+    </div>
+    
+    <div style="background: #f9f9f9; padding: 30px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #1bb2e2; margin-top: 0;">Hi {{first_name}}! 🎉</h2>
+        
+        <p>Your Google Workspace account has been successfully created and is ready to use!</p>
+        
+        <div style="background: white; padding: 20px; border-left: 4px solid #1bb2e2; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Your Account Details:</strong></p>
+            <p style="margin: 5px 0;"><strong>Email:</strong> {{email}}</p>
+            <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #f0f0f0; padding: 5px 10px; border-radius: 3px; font-size: 16px;">{{password}}</code></p>
+            <p style="margin: 5px 0;"><strong>Plan:</strong> {{plan}}</p>
+        </div>
+        
+        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;"><strong>⚠️ Important:</strong> You will be required to change this password on your first login.</p>
+        </div>
+        
+        <h3 style="color: #1bb2e2; margin-top: 30px;">Next Steps:</h3>
+        <ol style="line-height: 2;">
+            <li>Visit <a href="https://accounts.google.com" style="color: #1bb2e2;">accounts.google.com</a></li>
+            <li>Sign in with your email: <strong>{{email}}</strong></li>
+            <li>Use the temporary password provided above</li>
+            <li>Create a new, secure password when prompted</li>
+            <li>Access your files at <a href="https://drive.google.com" style="color: #1bb2e2;">drive.google.com</a></li>
+        </ol>
+        
+        <div style="background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Need Help?</strong></p>
+            <p style="margin: 5px 0;">Contact us at <a href="mailto:support@webmydrive.com" style="color: #1bb2e2;">support@webmydrive.com</a></p>
+        </div>
+    </div>
+    
+    <div style="text-align: center; padding: 20px; color: #666; font-size: 12px;">
+        <p>© 2025 WebMyDrive. All rights reserved.</p>
+        <p>This is an automated email. Please do not reply to this message.</p>
+    </div>
+</body>
+</html>

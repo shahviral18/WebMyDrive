@@ -467,6 +467,8 @@ class AuthController
                     'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
                     [':h' => $newHash, ':now' => $now, ':id' => $link['userId']]
                 );
+                $u = Database::queryOne('SELECT email FROM "User" WHERE id = :id', [':id' => $link['userId']]);
+                if ($u) self::syncDistributorPassword($u['email'], $newHash, $now);
             } else {
                 Database::execute(
                     'UPDATE "Distributor" SET passwordHash = :h, passwordResetRequired = 0, updatedAt = :now WHERE id = :id',
@@ -491,6 +493,7 @@ class AuthController
                 'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
                 [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
             );
+            self::syncDistributorPassword($email, $newHash, $now);
             AuditService::log('FORGOT_PASSWORD_RESET', (int) $user['id'], $req->ip, ['email' => $email]);
             Response::json(['success' => true, 'message' => 'Password updated successfully']);
         }
@@ -519,6 +522,26 @@ class AuthController
         if (!in_array($target, ['portal', 'google', 'both'], true)) $target = 'portal';
         if (strlen($newPassword) < 8) Response::error('Password must be at least 8 characters', 400);
 
+        // Distributor JWT uses negative userId
+        $isDistributor = $reqUser['role'] === 'DISTRIBUTOR' || $reqUser['userId'] < 0;
+        if ($isDistributor) {
+            $distId = abs((int) $reqUser['userId']);
+            $dist = Database::queryOne('SELECT * FROM "Distributor" WHERE id = :id', [':id' => $distId]);
+            if (!$dist || !$dist['passwordHash']) Response::error('Account not found', 404);
+            if (!password_verify($currentPassword, $dist['passwordHash'])) {
+                Response::error('Current password is incorrect', 400);
+            }
+            $now = date('Y-m-d H:i:s');
+            $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
+            Database::execute(
+                'UPDATE "Distributor" SET passwordHash = :h, passwordResetRequired = 0, updatedAt = :now WHERE id = :id',
+                [':h' => $newHash, ':now' => $now, ':id' => $dist['id']]
+            );
+            // Sync to the linked User row if same email exists
+            self::syncDistributorPassword($dist['email'], $newHash, $now);
+            Response::json(['success' => true, 'portalUpdated' => true, 'googleUpdated' => false]);
+        }
+
         $user = Database::queryOne('SELECT * FROM "User" WHERE id = :id', [':id' => $reqUser['userId']]);
         if (!$user || !$user['passwordHash']) Response::error('User not found', 404);
 
@@ -531,10 +554,12 @@ class AuthController
 
         if ($target === 'portal' || $target === 'both') {
             $now = date('Y-m-d H:i:s');
+            $newHash = password_hash($newPassword, PASSWORD_BCRYPT);
             Database::execute(
                 'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
-                [':h' => password_hash($newPassword, PASSWORD_BCRYPT), ':now' => $now, ':id' => $user['id']]
+                [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
             );
+            self::syncDistributorPassword($user['email'], $newHash, $now);
             $portalUpdated = true;
         }
 
@@ -602,6 +627,7 @@ class AuthController
             'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
             [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
         );
+        self::syncDistributorPassword($user['email'], $newHash, $now);
 
         // Clear temp password from metadata
         $updatedMeta = json_encode(array_merge($wsMeta, ['tempPassword' => null, 'passwordSet' => true]));
@@ -855,6 +881,7 @@ class AuthController
             'UPDATE "User" SET passwordHash = :h, passwordResetRequired = 0, first_login = 0, updatedAt = :now WHERE id = :id',
             [':h' => $newHash, ':now' => $now, ':id' => $user['id']]
         );
+        self::syncDistributorPassword($user['email'], $newHash, $now);
 
         Database::execute(
             "UPDATE \"SecurityLink\" SET status = 'USED', usedAt = :now WHERE id = :id",
@@ -866,6 +893,22 @@ class AuthController
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Sync a password hash to both User and Distributor rows that share the same email,
+     * so all login paths stay in sync after any password change.
+     */
+    private static function syncDistributorPassword(string $email, string $newHash, string $now): void
+    {
+        Database::execute(
+            'UPDATE "Distributor" SET passwordHash = :h, updatedAt = :now WHERE email = :e',
+            [':h' => $newHash, ':now' => $now, ':e' => $email]
+        );
+        Database::execute(
+            'UPDATE "User" SET passwordHash = :h, updatedAt = :now WHERE email = :e',
+            [':h' => $newHash, ':now' => $now, ':e' => $email]
+        );
+    }
 
     private static function maskEmail(string $email): string
     {
