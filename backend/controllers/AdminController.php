@@ -1125,8 +1125,56 @@ class AdminController
 
     public function getPromoCodes(Request $req): void
     {
-        $codes = Database::query('SELECT * FROM "PromoCode" ORDER BY createdAt DESC');
+        // Independent codes: PromoCode NOT linked to any distributor, with redemption count
+        $codes = Database::query(
+            'SELECT pc.*,
+                (SELECT COUNT(*) FROM `Order` o WHERE o.promoCode = pc.code AND o.status = \'PAID\') AS redemptions
+             FROM `PromoCode` pc
+             WHERE pc.id NOT IN (SELECT promoCodeId FROM `DistributorPromoCode`)
+             ORDER BY pc.createdAt DESC'
+        );
         Response::json($codes);
+    }
+
+    public function getDistributorCodesAll(Request $req): void
+    {
+        $codes = Database::query(
+            'SELECT pc.code, pc.discountPercent, pc.status, pc.expiresAt, pc.usesCount, pc.usesLimit,
+                    dpc.isActive, dpc.assignedAt, dpc.isFestive,
+                    d.id AS distributorId, d.name AS distributorName, d.email AS distributorEmail,
+                    d.tier AS distributorTier,
+                    (SELECT COUNT(*) FROM `DistributorSale` ds WHERE ds.distributorId = d.id AND ds.orderId IN
+                        (SELECT o.id FROM `Order` o WHERE o.promoCode = pc.code AND o.status = \'PAID\')
+                    ) AS redemptions
+             FROM `DistributorPromoCode` dpc
+             JOIN `PromoCode` pc ON pc.id = dpc.promoCodeId
+             JOIN `Distributor` d ON d.id = dpc.distributorId
+             ORDER BY dpc.assignedAt DESC'
+        );
+        Response::json($codes);
+    }
+
+    public function getUserCodesAll(Request $req): void
+    {
+        // Personal referral codes (User.referralCode) + custom ReferralLinks (role=USER)
+        $personal = Database::query(
+            'SELECT u.referralCode AS code, u.name AS userName, u.email AS userEmail,
+                    \'PERSONAL\' AS type, \'ACTIVE\' AS status, u.createdAt,
+                    (SELECT COUNT(*) FROM `ReferralLog` rl WHERE rl.referrerId = u.id) AS redemptions
+             FROM `User` u
+             WHERE u.referralCode IS NOT NULL AND u.role NOT IN (\'ADMIN\', \'SUPERADMIN\')
+             ORDER BY u.createdAt DESC'
+        );
+        $custom = Database::query(
+            'SELECT rl.code, u.name AS userName, u.email AS userEmail,
+                    \'CUSTOM_LINK\' AS type, rl.status, rl.createdAt,
+                    (SELECT COUNT(*) FROM `ReferralLog` rlog WHERE rlog.referrerId = rl.referrerId) AS redemptions
+             FROM `ReferralLink` rl
+             JOIN `User` u ON u.id = rl.referrerId
+             WHERE rl.role = \'USER\'
+             ORDER BY rl.createdAt DESC'
+        );
+        Response::json(['personal' => $personal, 'custom' => $custom]);
     }
 
     public function upsertPromoCode(Request $req): void

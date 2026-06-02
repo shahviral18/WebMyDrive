@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
     Plus, Trash2, Package, X, Save,
     Globe, IndianRupee, Loader2, Download, CheckSquare, Square,
-    Tag, Pencil, CheckCircle2, XCircle
+    Tag, Pencil, CheckCircle2, XCircle, Search, Building2, Users, ShoppingBag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -837,12 +837,46 @@ function PromoCodeModal({
     );
 }
 
-// ─── Promo Codes Tab ───────────────────────────────────────────────────────────
-function PromoCodesTab({ plans }: { plans: Plan[] }) {
+// ─── Shared helpers ────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+    const active = status?.toUpperCase() === "ACTIVE";
+    return (
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${active ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
+            {active ? "Active" : "Inactive"}
+        </span>
+    );
+}
+
+function RedemptionBadge({ count }: { count: number }) {
+    return (
+        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium ${count > 0 ? "bg-primary/10 text-primary" : "bg-surface-2 text-muted-foreground"}`}>
+            <ShoppingBag className="w-3 h-3" />{count}
+        </span>
+    );
+}
+
+function SearchFilter({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+    return (
+        <div className="relative w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-border bg-surface-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+        </div>
+    );
+}
+
+// ─── Tab 1: Company Codes ──────────────────────────────────────────────────────
+function CompanyCodesTab({ plans }: { plans: Plan[] }) {
     const [promos, setPromos] = useState<PromoCode[]>([]);
     const [loading, setLoading] = useState(true);
     const [editTarget, setEditTarget] = useState<Partial<PromoCode> | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
 
     useEffect(() => {
         api.get("/admin/promo-codes")
@@ -876,34 +910,38 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
         }
     };
 
-    const planName = (id: number) => plans.find(p => Number(p.id) === id)?.name ?? `Plan #${id}`;
+    const planName = (id: number) => plans.find(p => Number(p.id) === id)?.name?.replace("Cloud Storage - ", "") ?? `Plan #${id}`;
 
-    if (loading) {
-        return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
-    }
+    const filtered = promos.filter(p => {
+        const matchSearch = !search || p.code.toLowerCase().includes(search.toLowerCase()) || (p.name ?? "").toLowerCase().includes(search.toLowerCase());
+        const matchStatus = statusFilter === "ALL" || p.status?.toUpperCase() === statusFilter;
+        return matchSearch && matchStatus;
+    });
+
+    if (loading) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{promos.length} promo code{promos.length !== 1 ? "s" : ""}</p>
-                <Button
-                    size="sm"
-                    onClick={() => setEditTarget({})}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-8 text-xs"
-                >
-                    <Plus className="w-3.5 h-3.5" /> Add Promo Code
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                    <SearchFilter value={search} onChange={setSearch} placeholder="Search code or name…" />
+                    <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                        className="h-8 px-2 text-xs rounded-md border border-border bg-surface-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="ALL">All Status</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                    </select>
+                    <span className="text-xs text-muted-foreground">{filtered.length} code{filtered.length !== 1 ? "s" : ""}</span>
+                </div>
+                <Button size="sm" onClick={() => setEditTarget({})} className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-8 text-xs">
+                    <Plus className="w-3.5 h-3.5" /> Add Code
                 </Button>
             </div>
 
-            {promos.length === 0 ? (
-                <div className="flex flex-col items-center gap-4 py-24 text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                        <Tag className="w-8 h-8 text-muted-foreground/30" />
-                    </div>
-                    <p className="text-sm font-medium text-muted-foreground">No promo codes yet</p>
-                    <Button onClick={() => setEditTarget({})} variant="outline" size="sm" className="border-primary/30 text-primary gap-2">
-                        <Plus className="w-3.5 h-3.5" /> Add Promo Code
-                    </Button>
+            {filtered.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-20 text-center">
+                    <Tag className="w-10 h-10 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">{promos.length === 0 ? "No company codes yet" : "No codes match your filter"}</p>
                 </div>
             ) : (
                 <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
@@ -917,54 +955,38 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
                                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
                                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Expiry</th>
                                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Uses</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Purchases</th>
                                 <th className="px-4 py-2.5" />
                             </tr>
                         </thead>
                         <tbody>
-                            {promos.map((promo, i) => (
-                                <tr key={promo.id} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${i === promos.length - 1 ? "border-b-0" : ""}`}>
-                                    <td className="px-4 py-3 font-mono font-semibold text-primary text-xs">{promo.code}</td>
-                                    <td className="px-4 py-3 text-xs text-muted-foreground">{promo.name ?? "—"}</td>
-                                    <td className="px-4 py-3 text-xs font-semibold text-foreground">{promo.discountPercent}%</td>
-                                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px]">
-                                        {(() => {
-                                            const ap = typeof promo.applicablePlans === 'string'
-                                                ? (() => { try { return JSON.parse(promo.applicablePlans as any); } catch { return null; } })()
-                                                : promo.applicablePlans;
-                                            return ap === null || ap === undefined
+                            {filtered.map((promo, i) => {
+                                const ap = typeof promo.applicablePlans === 'string'
+                                    ? (() => { try { return JSON.parse(promo.applicablePlans as any); } catch { return null; } })()
+                                    : promo.applicablePlans;
+                                return (
+                                    <tr key={promo.id} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
+                                        <td className="px-4 py-3 font-mono font-semibold text-primary text-xs">{promo.code}</td>
+                                        <td className="px-4 py-3 text-xs text-muted-foreground">{promo.name ?? "—"}</td>
+                                        <td className="px-4 py-3 text-xs font-semibold text-foreground">{promo.discountPercent}%</td>
+                                        <td className="px-4 py-3 text-xs text-muted-foreground max-w-[160px] truncate">
+                                            {ap === null || ap === undefined
                                                 ? <span className="text-emerald-500 font-medium">All Plans</span>
-                                                : (Array.isArray(ap) ? ap.map((id: number) => planName(id)).join(", ") : "—") || "—";
-                                        })()}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${promo.status?.toUpperCase() === "ACTIVE" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
-                                            {promo.status?.toUpperCase()}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-xs text-muted-foreground">{promo.expiresAt ? promo.expiresAt.slice(0, 10) : "—"}</td>
-                                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                                        {promo.usesCount}{promo.usesLimit != null ? ` / ${promo.usesLimit}` : ""}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={() => setEditTarget(promo)}
-                                                className="p-1.5 text-muted-foreground hover:text-primary rounded hover:bg-primary/10 transition-colors"
-                                                title="Edit"
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => setDeleteTarget(promo)}
-                                                className="p-1.5 text-muted-foreground hover:text-red-500 rounded hover:bg-red-500/10 transition-colors"
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                                : Array.isArray(ap) ? ap.map((id: number) => planName(id)).join(", ") || "—" : "—"}
+                                        </td>
+                                        <td className="px-4 py-3"><StatusBadge status={promo.status ?? ""} /></td>
+                                        <td className="px-4 py-3 text-xs text-muted-foreground">{promo.expiresAt ? promo.expiresAt.slice(0, 10) : "—"}</td>
+                                        <td className="px-4 py-3 text-xs text-muted-foreground">{promo.usesCount ?? 0}{promo.usesLimit != null ? ` / ${promo.usesLimit}` : ""}</td>
+                                        <td className="px-4 py-3"><RedemptionBadge count={Number((promo as any).redemptions ?? 0)} /></td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => setEditTarget(promo)} className="p-1.5 text-muted-foreground hover:text-primary rounded hover:bg-primary/10 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => setDeleteTarget(promo)} className="p-1.5 text-muted-foreground hover:text-red-500 rounded hover:bg-red-500/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -972,13 +994,7 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
 
             <AnimatePresence>
                 {editTarget !== null && (
-                    <PromoCodeModal
-                        key="promo-modal"
-                        promo={editTarget}
-                        plans={plans}
-                        onSave={handleSave}
-                        onClose={() => setEditTarget(null)}
-                    />
+                    <PromoCodeModal key="promo-modal" promo={editTarget} plans={plans} onSave={handleSave} onClose={() => setEditTarget(null)} />
                 )}
             </AnimatePresence>
 
@@ -986,18 +1002,227 @@ function PromoCodesTab({ plans }: { plans: Plan[] }) {
                 <AlertDialogContent className="bg-surface-1 border-border">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Promo Code</AlertDialogTitle>
-                        <AlertDialogDescription className="text-muted-foreground">
-                            Delete "{deleteTarget?.code}"? This cannot be undone.
-                        </AlertDialogDescription>
+                        <AlertDialogDescription className="text-muted-foreground">Delete "{deleteTarget?.code}"? This cannot be undone.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="bg-surface-2 border-border">Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90">
-                            Yes, Delete
-                        </AlertDialogAction>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-white hover:bg-destructive/90">Yes, Delete</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+        </div>
+    );
+}
+
+// ─── Tab 2: Distributor Codes ─────────────────────────────────────────────────
+function DistributorCodesTab() {
+    const [codes, setCodes] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
+
+    useEffect(() => {
+        api.get("/admin/distributor-codes")
+            .then(data => setCodes(Array.isArray(data) ? data : []))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
+
+    const filtered = codes.filter(c => {
+        const matchSearch = !search ||
+            c.code?.toLowerCase().includes(search.toLowerCase()) ||
+            c.distributorName?.toLowerCase().includes(search.toLowerCase()) ||
+            c.distributorEmail?.toLowerCase().includes(search.toLowerCase());
+        const matchStatus = statusFilter === "ALL" ||
+            (statusFilter === "ACTIVE" && c.isActive == 1) ||
+            (statusFilter === "INACTIVE" && c.isActive != 1);
+        return matchSearch && matchStatus;
+    });
+
+    if (loading) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+                <SearchFilter value={search} onChange={setSearch} placeholder="Search code, name or email…" />
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                    className="h-8 px-2 text-xs rounded-md border border-border bg-surface-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                    <option value="ALL">All Status</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                </select>
+                <span className="text-xs text-muted-foreground">{filtered.length} code{filtered.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {filtered.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-20 text-center">
+                    <Building2 className="w-10 h-10 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">{codes.length === 0 ? "No distributor codes assigned yet" : "No codes match your filter"}</p>
+                </div>
+            ) : (
+                <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-border bg-surface-2/50">
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Code</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Distributor</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Tier</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Discount</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Assigned</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Purchases</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map((c, i) => (
+                                <tr key={`${c.distributorId}-${c.code}`} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
+                                    <td className="px-4 py-3 font-mono font-semibold text-primary text-xs">{c.code}</td>
+                                    <td className="px-4 py-3 text-xs font-medium text-foreground">{c.distributorName ?? "—"}</td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{c.distributorEmail ?? "—"}</td>
+                                    <td className="px-4 py-3">
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary">{c.distributorTier ?? "Starter"}</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-xs font-semibold text-foreground">{Number(c.discountPercent ?? 0).toFixed(2)}%</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${c.isActive == 1 ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
+                                            {c.isActive == 1 ? "Active" : "Inactive"}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{c.assignedAt ? c.assignedAt.slice(0, 10) : "—"}</td>
+                                    <td className="px-4 py-3"><RedemptionBadge count={Number(c.redemptions ?? 0)} /></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Tab 3: User Codes ─────────────────────────────────────────────────────────
+function UserCodesTab() {
+    const [personal, setPersonal] = useState<any[]>([]);
+    const [custom, setCustom] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
+    const [typeFilter, setTypeFilter] = useState("ALL");
+
+    useEffect(() => {
+        api.get("/admin/user-codes")
+            .then(data => {
+                setPersonal(Array.isArray(data.personal) ? data.personal : []);
+                setCustom(Array.isArray(data.custom) ? data.custom : []);
+            })
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
+
+    const all = [...personal, ...custom];
+    const filtered = all.filter(c => {
+        const matchSearch = !search ||
+            c.code?.toLowerCase().includes(search.toLowerCase()) ||
+            c.userName?.toLowerCase().includes(search.toLowerCase()) ||
+            c.userEmail?.toLowerCase().includes(search.toLowerCase());
+        const matchStatus = statusFilter === "ALL" || c.status?.toUpperCase() === statusFilter;
+        const matchType = typeFilter === "ALL" || c.type === typeFilter;
+        return matchSearch && matchStatus && matchType;
+    });
+
+    if (loading) return <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+                <SearchFilter value={search} onChange={setSearch} placeholder="Search code, name or email…" />
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                    className="h-8 px-2 text-xs rounded-md border border-border bg-surface-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                    <option value="ALL">All Status</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                </select>
+                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+                    className="h-8 px-2 text-xs rounded-md border border-border bg-surface-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                    <option value="ALL">All Types</option>
+                    <option value="PERSONAL">Personal Code</option>
+                    <option value="CUSTOM_LINK">Custom Link</option>
+                </select>
+                <span className="text-xs text-muted-foreground">{filtered.length} of {all.length} codes</span>
+            </div>
+
+            {filtered.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-20 text-center">
+                    <Users className="w-10 h-10 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">{all.length === 0 ? "No user codes found" : "No codes match your filter"}</p>
+                </div>
+            ) : (
+                <div className="bg-surface-1 border border-border rounded-xl overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-border bg-surface-2/50">
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Code</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">User</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Since</th>
+                                <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Referrals</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map((c, i) => (
+                                <tr key={`${c.type}-${c.code}`} className={`border-b border-border/40 hover:bg-surface-2/30 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
+                                    <td className="px-4 py-3 font-mono font-semibold text-primary text-xs">{c.code}</td>
+                                    <td className="px-4 py-3 text-xs font-medium text-foreground">{c.userName ?? "—"}</td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{c.userEmail ?? "—"}</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${c.type === "PERSONAL" ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"}`}>
+                                            {c.type === "PERSONAL" ? "Personal" : "Custom Link"}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3"><StatusBadge status={c.status ?? "ACTIVE"} /></td>
+                                    <td className="px-4 py-3 text-xs text-muted-foreground">{c.createdAt ? c.createdAt.slice(0, 10) : "—"}</td>
+                                    <td className="px-4 py-3"><RedemptionBadge count={Number(c.redemptions ?? 0)} /></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Promo Codes Tab (wrapper with 3 sub-tabs) ────────────────────────────────
+function PromoCodesTab({ plans }: { plans: Plan[] }) {
+    const [subTab, setSubTab] = useState<"company" | "distributor" | "user">("company");
+
+    const tabs = [
+        { key: "company",     label: "Company Codes",     icon: <Tag className="w-3.5 h-3.5" /> },
+        { key: "distributor", label: "Distributor Codes",  icon: <Building2 className="w-3.5 h-3.5" /> },
+        { key: "user",        label: "User Codes",         icon: <Users className="w-3.5 h-3.5" /> },
+    ] as const;
+
+    return (
+        <div className="space-y-5">
+            {/* Sub-tab bar */}
+            <div className="flex gap-1 bg-surface-2/50 border border-border/40 rounded-lg p-1 w-fit">
+                {tabs.map(t => (
+                    <button
+                        key={t.key}
+                        onClick={() => setSubTab(t.key)}
+                        className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all ${subTab === t.key ? "bg-surface-1 text-foreground shadow-sm border border-border/60" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                        {t.icon}{t.label}
+                    </button>
+                ))}
+            </div>
+
+            {subTab === "company"     && <CompanyCodesTab plans={plans} />}
+            {subTab === "distributor" && <DistributorCodesTab />}
+            {subTab === "user"        && <UserCodesTab />}
         </div>
     );
 }

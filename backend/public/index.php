@@ -150,6 +150,8 @@ $router->patch('/api/admin/plans/:id/toggle', [AdminController::class, 'togglePl
 $router->get('/api/admin/promo-codes', [AdminController::class, 'getPromoCodes'], $adminOnly);
 $router->post('/api/admin/promo-codes', [AdminController::class, 'upsertPromoCode'], $adminOnly);
 $router->delete('/api/admin/promo-codes/:id', [AdminController::class, 'deletePromoCode'], $adminOnly);
+$router->get('/api/admin/distributor-codes', [AdminController::class, 'getDistributorCodesAll'], $adminOnly);
+$router->get('/api/admin/user-codes', [AdminController::class, 'getUserCodesAll'], $adminOnly);
 $router->get('/api/admin/distributors/:id/promo-codes', [AdminController::class, 'getDistributorPromoCodes'], $adminOnly);
 $router->post('/api/admin/distributors/:id/promo-code', [AdminController::class, 'assignDistributorPromoCode'], $adminOnly);
 $router->delete('/api/admin/distributors/:id/promo-code/:dpcId', [AdminController::class, 'revokeDistributorPromoCode'], $adminOnly);
