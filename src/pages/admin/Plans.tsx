@@ -1017,13 +1017,21 @@ function CompanyCodesTab({ plans }: { plans: Plan[] }) {
 // ─── Tab 2: Distributor Codes ─────────────────────────────────────────────────
 function DistributorCodesTab() {
     const [codes, setCodes] = useState<any[]>([]);
+    const [discountRange, setDiscountRange] = useState<{min: number; max: number} | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
 
     useEffect(() => {
         api.get("/admin/distributor-codes")
-            .then(data => setCodes(Array.isArray(data) ? data : []))
+            .then(data => {
+                if (data && Array.isArray(data.codes)) {
+                    setCodes(data.codes);
+                    setDiscountRange(data.discountRange ?? null);
+                } else {
+                    setCodes(Array.isArray(data) ? data : []);
+                }
+            })
             .catch(console.error)
             .finally(() => setLoading(false));
     }, []);
@@ -1083,7 +1091,9 @@ function DistributorCodesTab() {
                                     <td className="px-4 py-3">
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-primary/10 text-primary">{c.distributorTier ?? "Starter"}</span>
                                     </td>
-                                    <td className="px-4 py-3 text-xs font-semibold text-foreground">{Number(c.discountPercent ?? 0).toFixed(2)}%</td>
+                                    <td className="px-4 py-3 text-xs font-semibold text-foreground">
+                                        {discountRange ? `${discountRange.min}–${discountRange.max}%` : "—"}
+                                    </td>
                                     <td className="px-4 py-3">
                                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium ${c.isActive == 1 ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"}`}>
                                             {c.isActive == 1 ? "Active" : "Inactive"}

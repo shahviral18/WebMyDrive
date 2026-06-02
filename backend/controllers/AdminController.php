@@ -1151,7 +1151,15 @@ class AdminController
              JOIN `Distributor` d ON d.id = dpc.distributorId
              ORDER BY dpc.assignedAt DESC'
         );
-        Response::json($codes);
+        $distConfig   = ConfigService::getDistributorConfig();
+        $promoDiscounts = $distConfig['promoDiscounts'] ?? [];
+        $discountValues = array_values(array_filter(array_map('floatval', $promoDiscounts)));
+        $minDiscount  = $discountValues ? (int) min($discountValues) : 0;
+        $maxDiscount  = $discountValues ? (int) max($discountValues) : 0;
+        Response::json([
+            'codes'       => $codes,
+            'discountRange' => ['min' => $minDiscount, 'max' => $maxDiscount],
+        ]);
     }
 
     public function getUserCodesAll(Request $req): void
