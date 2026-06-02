@@ -37,11 +37,7 @@ class ConfigService
             ],
             'paidAdsDiscountRate' => 0.20,
             'creditExpiryMonths' => 24,
-            'referrerCreditRate' => 0.05,
-            'referredDiscountRate' => 0.10,
-            'decaySchedule' => [0, 0, 0, 0, 0, 0],
             'nudgeThreshold' => 5,
-            'upgradeFeeDiscount' => 0,
             'allowNewReferrals' => true,
             'disableReferralsFromDate' => null,
             'existingReferralsOnDisable' => 'CONTINUE_DECAY',
@@ -52,14 +48,11 @@ class ConfigService
     {
         return [
             'tiers' => [
-                ['name' => 'Starter', 'threshold' => 0, 'rate' => 0.10],
-                ['name' => 'Silver', 'threshold' => 100000, 'rate' => 0.15],
-                ['name' => 'Gold', 'threshold' => 300000, 'rate' => 0.20],
+                ['name' => 'Starter',  'newOrdersThreshold' => 0,      'renewalThreshold' => 0,      'rate' => 0],
+                ['name' => 'Silver',   'newOrdersThreshold' => 50000,   'renewalThreshold' => 30000,  'rate' => 0.10],
+                ['name' => 'Gold',     'newOrdersThreshold' => 100000,  'renewalThreshold' => 75000,  'rate' => 0.15],
+                ['name' => 'Platinum', 'newOrdersThreshold' => 200000,  'renewalThreshold' => 150000, 'rate' => 0.20],
             ],
-            'annualFee' => 5000,
-            'feeRefundTier' => 'Silver',
-            'tiersDroppedPerYear' => 1,
-            'decayMultipliers' => [1.0, 0.8, 0.6, 0.4, 0.2, 0],
             'allowNewSignups' => true,
             'disableProgramFromDate' => null,
             'existingOnDisable' => 'CONTINUE',
@@ -83,7 +76,7 @@ class ConfigService
         return [
             'distributorMinBalance' => 2000,
             'payoutThreshold' => 5000,
-            'lapseWalletForfeit' => true,
+            'deactivationWalletForfeit' => true,
         ];
     }
 

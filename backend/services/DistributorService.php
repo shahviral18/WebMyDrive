@@ -1,13 +1,10 @@
 <?php
 /**
- * DistributorService — Mirrors src/services/DistributorService.ts
+ * DistributorService — Dual-threshold tier model, flat commission, no decay.
  *
- * Handles:
- *  - Distributor onboarding
- *  - Sale processing with commission + tier upgrades + fee refunds (atomic)
- *  - Payout requests with balance guards
- *  - Sales history
- *  - Annual soft reset (tier demotion)
+ * Tiers upgrade mid-year when BOTH newOrdersThreshold AND renewalThreshold are met.
+ * At year-end, tier resets to the highest tier where both thresholds were met.
+ * Starter tier always earns 0% commission.
  */
 
 declare(strict_types=1);
@@ -25,6 +22,24 @@ class DistributorService
             return $joinDate->modify('+1 month')->modify('first day of this month');
         }
         return $joinDate->modify('first day of next year');
+    }
+
+    /**
+     * Resolve the highest qualifying tier given current new-order and renewal revenue.
+     * A distributor qualifies for a tier only if BOTH thresholds are met.
+     * Falls back to the first tier (Starter) if none match.
+     */
+    private static function resolveQualifyingTier(array $tiers, float $newOrders, float $renewals): string
+    {
+        usort($tiers, fn($a, $b) => $b['newOrdersThreshold'] <=> $a['newOrdersThreshold']);
+        foreach ($tiers as $tier) {
+            $noThreshold = (float) ($tier['newOrdersThreshold'] ?? 0);
+            $rnThreshold = (float) ($tier['renewalThreshold'] ?? 0);
+            if ($newOrders >= $noThreshold && $renewals >= $rnThreshold) {
+                return $tier['name'];
+            }
+        }
+        return $tiers[count($tiers) - 1]['name'] ?? 'Starter';
     }
 
     /**
@@ -53,8 +68,10 @@ class DistributorService
 
         $id = Database::insert(
             'INSERT INTO "Distributor"
-             (userId, email, tier, joinDate, resetDate, status, walletBalance, revenueThisYear, createdAt, updatedAt)
-             VALUES (:uid, :email, :tier, :joined, :reset, \'ACTIVE\', 0, 0, :now1, :now2)',
+             (userId, email, tier, joinDate, resetDate, status, walletBalance,
+              revenueThisYear, newOrdersRevenueThisYear, renewalRevenueThisYear,
+              createdAt, updatedAt)
+             VALUES (:uid, :email, :tier, :joined, :reset, \'ACTIVE\', 0, 0, 0, 0, :now1, :now2)',
             [
                 ':uid' => $userId,
                 ':email' => $email,
@@ -71,13 +88,15 @@ class DistributorService
 
     /**
      * Process a commission sale when a distributor's customer places a PAID order.
-     * Fully atomic: sale record + wallet credit + tier upgrade + optional fee refund.
+     * Fully atomic: sale record + wallet credit + tier upgrade.
+     * Starter (rate = 0) earns nothing — sale is silently skipped.
      */
     public static function processSale(
         int $distributorId,
         int $purchasingUserId,
         int $orderId,
-        float $amount
+        float $amount,
+        bool $isRenewal = false
     ): void {
         $dist = Database::queryOne(
             'SELECT * FROM "Distributor" WHERE id = :id',
@@ -110,22 +129,7 @@ class DistributorService
             }
         }
 
-        // Determine sale year for decay multiplier
-        $priorSalesCount = Database::count(
-            '"DistributorSale"',
-            'purchasingUserId = :uid AND distributorId = :did',
-            [':uid' => $purchasingUserId, ':did' => $distributorId]
-        );
-        $currentYearOfSale = $priorSalesCount + 1;
-
-        $decayMultipliers = $config['decayMultipliers'] ?? [1.0, 0.8, 0.6, 0.4, 0.2, 0];
-        if ($currentYearOfSale > count($decayMultipliers))
-            return;
-
-        $multiplier = (float) ($decayMultipliers[$currentYearOfSale - 1] ?? 0);
-        if ($multiplier <= 0)
-            return;
-
+        // Resolve current tier rate
         $currentTierConfig = null;
         foreach ($config['tiers'] as $tier) {
             if ($tier['name'] === $dist['tier']) {
@@ -133,40 +137,25 @@ class DistributorService
                 break;
             }
         }
-        if (!$currentTierConfig)
+        if (!$currentTierConfig) {
+            Logger::warn("[DistributorService] Tier '{$dist['tier']}' not found in config for distributor $distributorId");
             return;
-
-        $globalConfig = ConfigService::getGlobalPlanConfig();
-
-        $order = Database::queryOne('SELECT * FROM "Order" WHERE id = :id', [':id' => $orderId]);
-        $plan = ($order && $order['planId'])
-            ? Database::queryOne('SELECT * FROM "Plan" WHERE id = :id', [':id' => $order['planId']])
-            : null;
-
-        $baseAmount = $amount;
-        if ($plan) {
-            $baseAmount = $plan['hasOverride'] ? (float) $plan['price'] : (float) $globalConfig['priceINR'];
         }
 
-        $baseRate = (float) $globalConfig['distributorCreditRate'];
-        $finalRate = round($baseRate * $multiplier, 6);
-        $commission = round($baseAmount * $finalRate, 2);
+        $rate = (float) ($currentTierConfig['rate'] ?? 0);
 
-        // Prospective tier upgrade based on new revenue
-        $newRevenue = (float) $dist['revenueThisYear'] + $amount;
-        $tiersDesc = $config['tiers'];
-        usort($tiersDesc, fn($a, $b) => $b['threshold'] <=> $a['threshold']);
-        $newTier = $dist['tier'];
-        foreach ($tiersDesc as $t) {
-            if ($newRevenue >= (float) $t['threshold']) {
-                $newTier = $t['name'];
-                break;
-            }
+        // Starter (rate = 0) earns nothing
+        if ($rate <= 0) {
+            Logger::info("[DistributorService] Skipping sale — distributor $distributorId is on Starter (0% commission)");
+            return;
         }
 
-        $tierUpgraded = $newTier !== $dist['tier'];
-        $feeRefundNeeded = $tierUpgraded && $newTier === ($config['feeRefundTier'] ?? 'Silver');
-        $walletIncrement = $feeRefundNeeded ? $commission + (float) ($config['annualFee'] ?? 0) : $commission;
+        $commission = round($amount * $rate, 2);
+
+        // Prospective revenue tracking and tier upgrade
+        $newOrdersRev = (float) $dist['newOrdersRevenueThisYear'] + ($isRenewal ? 0.0 : $amount);
+        $renewalRev   = (float) $dist['renewalRevenueThisYear']   + ($isRenewal ? $amount : 0.0);
+        $newTier = self::resolveQualifyingTier($config['tiers'], $newOrdersRev, $renewalRev);
 
         $now = date('Y-m-d H:i:s');
 
@@ -175,35 +164,46 @@ class DistributorService
         try {
             Database::insert(
                 'INSERT INTO "DistributorSale"
-                 (distributorId, purchasingUserId, orderId, amount, commissionRate, commissionEarned, saleYear, status, createdAt)
-                 VALUES (:did, :uid, :oid, :amt, :rate, :comm, :yr, \'COMPLETED\', :now)',
+                 (distributorId, purchasingUserId, orderId, amount, commissionRate,
+                  commissionEarned, isRenewal, status, createdAt)
+                 VALUES (:did, :uid, :oid, :amt, :rate, :comm, :renew, \'COMPLETED\', :now)',
                 [
-                    ':did' => $distributorId,
-                    ':uid' => $purchasingUserId,
-                    ':oid' => $orderId,
-                    ':amt' => $amount,
-                    ':rate' => $finalRate,
-                    ':comm' => $commission,
-                    ':yr' => $currentYearOfSale,
-                    ':now' => $now,
+                    ':did'   => $distributorId,
+                    ':uid'   => $purchasingUserId,
+                    ':oid'   => $orderId,
+                    ':amt'   => $amount,
+                    ':rate'  => $rate,
+                    ':comm'  => $commission,
+                    ':renew' => $isRenewal ? 1 : 0,
+                    ':now'   => $now,
                 ]
             );
 
-            // Optimistic concurrency guard: only proceed if revenueThisYear unchanged
+            // Optimistic concurrency guard
+            $prevNewOrders = round((float) $dist['newOrdersRevenueThisYear'], 2);
+            $prevRenewals  = round((float) $dist['renewalRevenueThisYear'], 2);
+
             $rows = Database::execute(
                 'UPDATE "Distributor"
-                 SET walletBalance = walletBalance + :wi,
-                     revenueThisYear = revenueThisYear + :amt,
-                     tier = :tier,
-                     updatedAt = :now
-                 WHERE id = :id AND ROUND(revenueThisYear, 2) = :prev_rev',
+                 SET walletBalance              = walletBalance + :wi,
+                     revenueThisYear            = revenueThisYear + :amt,
+                     newOrdersRevenueThisYear   = newOrdersRevenueThisYear + :no_inc,
+                     renewalRevenueThisYear     = renewalRevenueThisYear + :rn_inc,
+                     tier                       = :tier,
+                     updatedAt                  = :now
+                 WHERE id = :id
+                   AND ROUND(newOrdersRevenueThisYear, 2) = :prev_no
+                   AND ROUND(renewalRevenueThisYear, 2)   = :prev_rn',
                 [
-                    ':wi' => $walletIncrement,
-                    ':amt' => $amount,
-                    ':tier' => $newTier,
-                    ':now' => $now,
-                    ':id' => $distributorId,
-                    ':prev_rev' => round((float) $dist['revenueThisYear'], 2),
+                    ':wi'      => $commission,
+                    ':amt'     => $amount,
+                    ':no_inc'  => $isRenewal ? 0.0 : $amount,
+                    ':rn_inc'  => $isRenewal ? $amount : 0.0,
+                    ':tier'    => $newTier,
+                    ':now'     => $now,
+                    ':id'      => $distributorId,
+                    ':prev_no' => $prevNewOrders,
+                    ':prev_rn' => $prevRenewals,
                 ]
             );
 
@@ -216,27 +216,12 @@ class DistributorService
                  (distributorId, amount, type, status, description, createdAt)
                  VALUES (:did, :amt, \'COMMISSION\', \'COMPLETED\', :desc, :now)',
                 [
-                    ':did' => $distributorId,
-                    ':amt' => $commission,
-                    ':desc' => "Sale Year $currentYearOfSale for user #$purchasingUserId | Order #$orderId",
-                    ':now' => $now,
+                    ':did'  => $distributorId,
+                    ':amt'  => $commission,
+                    ':desc' => ($isRenewal ? "Renewal" : "New order") . " commission | Order #$orderId | User #$purchasingUserId",
+                    ':now'  => $now,
                 ]
             );
-
-            if ($feeRefundNeeded) {
-                $annualFee = (float) ($config['annualFee'] ?? 0);
-                Database::insert(
-                    'INSERT INTO "DistributorWalletTx"
-                     (distributorId, amount, type, status, description, createdAt)
-                     VALUES (:did, :amt, \'REFUND_FEE\', \'COMPLETED\', :desc, :now)',
-                    [
-                        ':did' => $distributorId,
-                        ':amt' => $annualFee,
-                        ':desc' => "Tier upgrade to $newTier — annual fee refund",
-                        ':now' => $now,
-                    ]
-                );
-            }
 
             Database::commit();
         } catch (Throwable $e) {
@@ -246,15 +231,113 @@ class DistributorService
         }
 
         AuditService::log('DISTRIBUTOR_COMMISSION_CREDITED', $distributorId, null, [
-            'orderId' => $orderId,
+            'orderId'          => $orderId,
             'purchasingUserId' => $purchasingUserId,
-            'commission' => $commission,
-            'finalRate' => $finalRate,
-            'saleYear' => $currentYearOfSale,
-            'tierUpgraded' => $tierUpgraded,
-            'newTier' => $newTier,
-            'feeRefundNeeded' => $feeRefundNeeded,
+            'commission'       => $commission,
+            'rate'             => $rate,
+            'isRenewal'        => $isRenewal,
+            'tierBefore'       => $dist['tier'],
+            'tierAfter'        => $newTier,
         ]);
+    }
+
+    /**
+     * Year-end reset: resolve new tier based on full-year revenue, zero counters.
+     */
+    public static function processAnnualReset(int $distributorId): array
+    {
+        $dist = Database::queryOne(
+            'SELECT * FROM "Distributor" WHERE id = :id',
+            [':id' => $distributorId]
+        );
+        if (!$dist) {
+            return ['success' => false, 'error' => 'Distributor not found'];
+        }
+
+        $config = ConfigService::getDistributorConfig();
+        $newTier = self::resolveQualifyingTier(
+            $config['tiers'],
+            (float) $dist['newOrdersRevenueThisYear'],
+            (float) $dist['renewalRevenueThisYear']
+        );
+
+        $nextReset = date('Y-01-01', strtotime('+1 year'));
+        $now = date('Y-m-d H:i:s');
+
+        Database::execute(
+            'UPDATE "Distributor"
+             SET tier                     = :tier,
+                 revenueThisYear          = 0,
+                 newOrdersRevenueThisYear = 0,
+                 renewalRevenueThisYear   = 0,
+                 resetDate                = :reset,
+                 updatedAt                = :now
+             WHERE id = :id',
+            [':tier' => $newTier, ':reset' => $nextReset, ':now' => $now, ':id' => $distributorId]
+        );
+
+        AuditService::log('DISTRIBUTOR_ANNUAL_RESET', $distributorId, null, [
+            'tierBefore' => $dist['tier'],
+            'tierAfter'  => $newTier,
+        ]);
+
+        return ['success' => true, 'newTier' => $newTier];
+    }
+
+    /**
+     * Deactivate a distributor. If deactivationWalletForfeit is enabled,
+     * forfeits the minimum balance (up to Rs 2,000) before setting INACTIVE.
+     */
+    public static function deactivate(int $distributorId, int $adminId): array
+    {
+        $dist = Database::queryOne(
+            'SELECT * FROM "Distributor" WHERE id = :id',
+            [':id' => $distributorId]
+        );
+        if (!$dist) {
+            return ['success' => false, 'error' => 'Distributor not found'];
+        }
+
+        $walletCfg = ConfigService::getWalletConfig();
+        $doForfeit = !empty($walletCfg['deactivationWalletForfeit']);
+        $forfeited = 0.0;
+        $now = date('Y-m-d H:i:s');
+
+        Database::beginTransaction();
+        try {
+            if ($doForfeit && (float) $dist['walletBalance'] > 0) {
+                $minBal = (float) ($walletCfg['distributorMinBalance'] ?? 2000);
+                $forfeited = min((float) $dist['walletBalance'], $minBal);
+                Database::execute(
+                    'UPDATE "Distributor" SET walletBalance = walletBalance - :f, updatedAt = :now WHERE id = :id',
+                    [':f' => $forfeited, ':now' => $now, ':id' => $distributorId]
+                );
+                Database::insert(
+                    'INSERT INTO "DistributorWalletTx"
+                     (distributorId, amount, type, status, description, createdAt)
+                     VALUES (:did, :amt, \'FORFEIT\', \'COMPLETED\', \'Forfeited on permanent deactivation\', :now)',
+                    [':did' => $distributorId, ':amt' => $forfeited, ':now' => $now]
+                );
+            }
+
+            Database::execute(
+                'UPDATE "Distributor" SET status = \'INACTIVE\', updatedAt = :now WHERE id = :id',
+                [':now' => $now, ':id' => $distributorId]
+            );
+
+            Database::commit();
+        } catch (Throwable $e) {
+            Database::rollback();
+            Logger::error("[DistributorService] deactivate failed: " . $e->getMessage());
+            throw $e;
+        }
+
+        AuditService::log('DISTRIBUTOR_DEACTIVATED', $adminId, null, [
+            'distributorId' => $distributorId,
+            'forfeited'     => $forfeited,
+        ]);
+
+        return ['success' => true, 'forfeited' => $forfeited];
     }
 
     /**
@@ -314,11 +397,11 @@ class DistributorService
                  (distributorId, amount, type, status, description, invoicePath, createdAt)
                  VALUES (:did, :amt, \'PAYOUT\', \'PENDING\', :desc, :inv, :now)',
                 [
-                    ':did' => $distributorId,
-                    ':amt' => -$reqAmount,
+                    ':did'  => $distributorId,
+                    ':amt'  => -$reqAmount,
                     ':desc' => "Payout request — Rs $reqAmount",
-                    ':inv' => $invoicePath,
-                    ':now' => $now,
+                    ':inv'  => $invoicePath,
+                    ':now'  => $now,
                 ]
             );
 
@@ -347,12 +430,13 @@ class DistributorService
         );
 
         return array_map(fn(array $s) => [
-            'id' => $s['id'],
-            'user' => $s['userName'] ?? $s['userEmail'] ?? 'Unknown',
-            'date' => date('d/m/Y', strtotime($s['createdAt'])),
-            'amount' => (float) $s['amount'],
+            'id'         => $s['id'],
+            'user'       => $s['userName'] ?? $s['userEmail'] ?? 'Unknown',
+            'date'       => date('d/m/Y', strtotime($s['createdAt'])),
+            'amount'     => (float) $s['amount'],
             'commission' => (float) $s['commissionEarned'],
-            'rate' => number_format((float) $s['commissionRate'] * 100, 1) . '%',
+            'rate'       => number_format((float) $s['commissionRate'] * 100, 1) . '%',
+            'isRenewal'  => !empty($s['isRenewal']),
         ], $sales);
     }
 }
