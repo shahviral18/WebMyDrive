@@ -50,7 +50,7 @@ class ZohoBooksService
         return self::$accessToken;
     }
 
-    // ── Internal cURL helper ──────────────────────────────────────────────────
+    // ── Internal cURL helper (JSON) ───────────────────────────────────────────
 
     private static function call(string $method, string $path, array $body = []): array
     {
@@ -75,6 +75,8 @@ class ZohoBooksService
         } elseif ($method === 'PUT') {
             $opts[CURLOPT_CUSTOMREQUEST] = 'PUT';
             $opts[CURLOPT_POSTFIELDS]    = json_encode($body);
+        } elseif ($method === 'DELETE') {
+            $opts[CURLOPT_CUSTOMREQUEST] = 'DELETE';
         }
 
         curl_setopt_array($ch, $opts);
@@ -93,6 +95,97 @@ class ZohoBooksService
         return $data;
     }
 
+    // ── Internal cURL helper (binary PDF) ────────────────────────────────────
+
+    private static function callPdf(string $invoiceId): string
+    {
+        $token = self::getAccessToken();
+        $orgId = ZOHO_BOOKS_ORG_ID;
+        $url   = self::API_BASE . "/invoices/{$invoiceId}?accept=pdf&organization_id={$orgId}";
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Zoho-oauthtoken ' . $token,
+                'Accept: application/pdf',
+            ],
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $pdf     = curl_exec($ch);
+        $code    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) throw new RuntimeException("Zoho Books PDF cURL error: $curlErr");
+        if ($code < 200 || $code >= 300) {
+            throw new RuntimeException("Zoho Books PDF fetch failed (HTTP $code)");
+        }
+        return (string) $pdf;
+    }
+
+    // ── Build line items + contact (shared) ──────────────────────────────────
+
+    private static function buildPayload(array $data): array
+    {
+        $activationDate    = date('Y-m-d', strtotime($data['activationDate']));
+        $activationDateFmt = date('d-M-Y', strtotime($data['activationDate']));
+        $renewalTs         = strtotime($data['renewalDate'] . ' -1 day');
+        $renewalDateFmt    = date('d-M-Y', $renewalTs);
+
+        $description = sprintf(
+            "Username: %s\nActivation Date: %s\nRenewal Type: %s\nNext Renewal Date: %s",
+            $data['username'],
+            $activationDateFmt,
+            ucfirst($data['billingPeriod'] ?? 'yearly'),
+            $renewalDateFmt
+        );
+
+        $planRate       = (float) ($data['planRate'] ?? 0);
+        $discountAmount = (float) ($data['discountAmount'] ?? 0);
+        if ($planRate <= 0) {
+            $planRate = round((float)$data['baseAmount'] / 1.18, 2);
+        }
+
+        $lineItems = [[
+            'name'        => $data['planName'],
+            'description' => $description,
+            'rate'        => $planRate,
+            'quantity'    => 1,
+        ]];
+
+        if ($discountAmount > 0) {
+            $lineItems[] = [
+                'name'        => 'Discount',
+                'description' => '',
+                'rate'        => -$discountAmount,
+                'quantity'    => 1,
+            ];
+        }
+
+        $contactId = self::findOrCreateContact(
+            $data['customerName'],
+            $data['customerEmail'],
+            $data['customerPhone'] ?? '',
+            $data['companyName']   ?? '',
+            $data['gstNumber']     ?? '',
+            $data['billingAddress']
+        );
+
+        $wmdRef = 'WMD-' . str_pad((string)(int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT);
+
+        return [
+            'customer_id'      => $contactId,
+            'invoice_date'     => $activationDate,
+            'due_date'         => date('Y-m-d', strtotime($activationDate . ' +7 days')),
+            'reference_number' => $wmdRef,
+            'purchaseorder_no' => $wmdRef,
+            'notes'            => "Thank you for subscribing to WebMyDrive.",
+            'line_items'       => $lineItems,
+        ];
+    }
+
     // ── Find or create a contact ──────────────────────────────────────────────
 
     private static function findOrCreateContact(
@@ -108,11 +201,9 @@ class ZohoBooksService
         foreach ($search['contacts'] ?? [] as $c) {
             if (strtolower($c['email']) === strtolower($email)) {
                 $contactId = (string) $c['contact_id'];
-                // Reactivate if inactive
                 if (($c['status'] ?? '') === 'inactive') {
                     self::call('POST', '/contacts/' . $contactId . '/active');
                 }
-                // Update name if it looks like a username (no space = not a real name)
                 $existingName = trim($c['contact_name'] ?? '');
                 $newName = trim($name ?: $email);
                 if ($newName && $existingName !== $newName) {
@@ -126,7 +217,7 @@ class ZohoBooksService
             }
         }
 
-        // Also search by name in case email doesn't match (e.g. workspace email vs personal)
+        // Also search by name
         if ($name) {
             $nameSearch = self::call('GET', '/contacts?contact_name=' . urlencode($name));
             foreach ($nameSearch['contacts'] ?? [] as $c) {
@@ -142,30 +233,29 @@ class ZohoBooksService
 
         // Create new contact
         $contact = [
-            'contact_name'  => $name ?: $email,
-            'company_name'  => $companyName ?: '',
-            'email'         => $email,
-            'phone'         => $phone,
-            'contact_type'  => 'customer',
+            'contact_name'    => $name ?: $email,
+            'company_name'    => $companyName ?: '',
+            'email'           => $email,
+            'phone'           => $phone,
+            'contact_type'    => 'customer',
             'billing_address' => [
-                'address'  => $billingAddress['address'] ?? '',
-                'city'     => $billingAddress['city']    ?? '',
-                'state'    => $billingAddress['state']   ?? '',
-                'zip'      => $billingAddress['zipCode'] ?? '',
-                'country'  => $billingAddress['country'] ?? 'India',
+                'address' => $billingAddress['address'] ?? '',
+                'city'    => $billingAddress['city']    ?? '',
+                'state'   => $billingAddress['state']   ?? '',
+                'zip'     => $billingAddress['zipCode'] ?? '',
+                'country' => $billingAddress['country'] ?? 'India',
             ],
         ];
 
         if ($gstNumber) {
-            $contact['gst_no']           = $gstNumber;
-            $contact['gst_treatment']    = 'business_gst';
+            $contact['gst_no']        = $gstNumber;
+            $contact['gst_treatment'] = 'business_gst';
         }
 
         try {
             $result = self::call('POST', '/contacts', $contact);
             return (string) ($result['contact']['contact_id'] ?? '');
         } catch (RuntimeException $e) {
-            // If duplicate name error, search again more broadly
             if (str_contains($e->getMessage(), 'already exists')) {
                 $fallback = self::call('GET', '/contacts?contact_name=' . urlencode($name ?: $email));
                 foreach ($fallback['contacts'] ?? [] as $c) {
@@ -176,85 +266,81 @@ class ZohoBooksService
         }
     }
 
-    // ── Public: create & send invoice ────────────────────────────────────────
+    // ── Public: create draft invoice + return PDF (base64) ───────────────────
 
-    /**
-     * @param array $data {
-     *   planName, username, customerName, customerEmail, customerPhone,
-     *   companyName, gstNumber, billingAddress (array),
-     *   billingPeriod (monthly|yearly), activationDate (Y-m-d H:i:s),
-     *   renewalDate (Y-m-d H:i:s), baseAmount (pre-tax), referenceNumber
-     * }
-     */
-    public static function createAndSendInvoice(array $data): array
+    public static function createDraftInvoice(array $data): array
     {
-        $billingState = strtolower(trim($data['billingAddress']['state'] ?? ''));
-        $isGujarat    = in_array($billingState, ['gujarat', 'gj'], true);
+        $payload = self::buildPayload($data);
 
-        $baseAmount = (float) $data['baseAmount'];
-        $activationDate = date('Y-m-d', strtotime($data['activationDate']));
+        Logger::info('[ZohoBooks] Creating draft invoice payload=' . json_encode($payload));
 
-        // Next renewal = renewal date minus 1 day
-        $renewalDate    = date('Y-m-d', strtotime($data['renewalDate'] . ' -1 day'));
-
-        $description = sprintf(
-            "Username: %s\nActivated: %s\nRenewal Type: %s\nNext Renewal: %s",
-            $data['username'],
-            $activationDate,
-            ucfirst($data['billingPeriod'] ?? 'yearly'),
-            $renewalDate
-        );
-
-        $lineItems = [[
-            'name'        => $data['planName'],
-            'description' => $description,
-            'rate'        => $baseAmount,
-            'quantity'    => 1,
-        ]];
-
-        $contactId = self::findOrCreateContact(
-            $data['customerName'],
-            $data['customerEmail'],
-            $data['customerPhone'] ?? '',
-            $data['companyName']   ?? '',
-            $data['gstNumber']     ?? '',
-            $data['billingAddress']
-        );
-
-        $wmdRef = 'WMD-' . str_pad((string)(int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT);
-        $invoicePayload = [
-            'customer_id'            => $contactId,
-            'invoice_date'           => $activationDate,
-            'due_date'               => date('Y-m-d', strtotime($activationDate . ' +7 days')),
-            'reference_number'       => $wmdRef,
-            'purchaseorder_no'       => $wmdRef,
-            'notes'                  => "Thank you for subscribing to WebMyDrive.",
-            'line_items'             => $lineItems,
-            'send_from_org_email_id' => true,
-        ];
-
-        Logger::info('[ZohoBooks] Creating invoice payload=' . json_encode($invoicePayload));
-
-        // Create invoice
-        $created = self::call('POST', '/invoices', $invoicePayload);
+        $created   = self::call('POST', '/invoices', $payload);
         $invoiceId = $created['invoice']['invoice_id'] ?? '';
 
         if (!$invoiceId) {
-            throw new RuntimeException('Zoho Books: invoice created but no invoice_id returned');
+            throw new RuntimeException('Zoho Books: draft invoice created but no invoice_id returned');
         }
 
-        // Send invoice via email
-        self::call('POST', "/invoices/{$invoiceId}/email", [
-            'send_from_org_email_id' => true,
-            'to_mail_ids'            => [$data['customerEmail']],
-            'subject'                => "Your WebMyDrive Invoice — {$data['planName']}",
-            'body'                   => "Dear {$data['customerName']},\n\nPlease find your invoice for {$data['planName']} attached.\n\nThank you for choosing WebMyDrive!\n\nTeam WebMyDrive",
-        ]);
+        $pdfBytes  = self::callPdf($invoiceId);
+        $pdfBase64 = base64_encode($pdfBytes);
 
-        Logger::info("[ZohoBooks] Invoice {$invoiceId} created and sent to {$data['customerEmail']}");
+        Logger::info("[ZohoBooks] Draft invoice {$invoiceId} created, PDF fetched");
+
         return [
             'invoice_id'     => $invoiceId,
             'invoice_number' => $created['invoice']['invoice_number'] ?? '',
+            'pdf_base64'     => $pdfBase64,
+        ];
+    }
+
+    // ── Public: send a draft invoice via email ────────────────────────────────
+
+    public static function sendDraftInvoice(string $invoiceId, string $customerEmail, string $customerName, string $planName): void
+    {
+        self::call('POST', "/invoices/{$invoiceId}/email", [
+            'send_from_org_email_id' => true,
+            'to_mail_ids'            => [$customerEmail],
+            'subject'                => "Your WebMyDrive Invoice — {$planName}",
+            'body'                   => "Dear {$customerName},\n\nPlease find your invoice for {$planName} attached.\n\nThank you for choosing WebMyDrive!\n\nTeam WebMyDrive",
+        ]);
+
+        Logger::info("[ZohoBooks] Invoice {$invoiceId} sent to {$customerEmail}");
+    }
+
+    // ── Public: void (cancel) a draft invoice ────────────────────────────────
+
+    public static function voidInvoice(string $invoiceId): void
+    {
+        try {
+            self::call('POST', "/invoices/{$invoiceId}/status/void");
+        } catch (Throwable $e) {
+            Logger::warn("[ZohoBooks] Could not void invoice {$invoiceId}: " . $e->getMessage());
+        }
+        try {
+            self::call('DELETE', "/invoices/{$invoiceId}");
+        } catch (Throwable $e) {
+            Logger::warn("[ZohoBooks] Could not delete invoice {$invoiceId}: " . $e->getMessage());
+        }
+    }
+
+    // ── Public: create draft + send in one step (payment webhook flow) ────────
+
+    public static function createAndSendInvoice(array $data): array
+    {
+        $draft = self::createDraftInvoice($data);
+
+        self::sendDraftInvoice(
+            $draft['invoice_id'],
+            $data['customerEmail'],
+            $data['customerName'],
+            $data['planName']
+        );
+
+        Logger::info("[ZohoBooks] Invoice {$draft['invoice_id']} created and sent to {$data['customerEmail']}");
+
+        return [
+            'invoice_id'     => $draft['invoice_id'],
+            'invoice_number' => $draft['invoice_number'],
         ];
     }
 }

@@ -569,9 +569,15 @@ class PaymentController
                 $billingAddr = $meta['billingAddress'] ?? [];
                 if (!is_array($billingAddr)) $billingAddr = [];
 
-                $invPlanName = $checkout['planId'] ? Database::queryOne('SELECT name FROM `Plan` WHERE id = :id', [':id' => $checkout['planId']])['name'] ?? '' : '';
+                $invPlan     = $checkout['planId'] ? Database::queryOne('SELECT name, priceINR, priceYearlyINR, priceMonthlyINR FROM `Plan` WHERE id = :id', [':id' => $checkout['planId']]) : [];
+                $invPlanName = $invPlan['name'] ?? '';
+                $billingPeriod = $checkout['billingPeriod'] ?? 'yearly';
+                $invPlanRate = (float) ($billingPeriod === 'monthly'
+                    ? ($invPlan['priceMonthlyINR'] ?? $invPlan['priceINR'] ?? 0)
+                    : ($invPlan['priceYearlyINR']  ?? $invPlan['priceINR'] ?? 0));
+                $invDiscountPct = (float) ($meta['discountPercent'] ?? 0);
+                $invDiscountAmt = $invPlanRate > 0 ? round($invPlanRate * $invDiscountPct, 2) : 0.0;
                 $invBase     = (float) $checkout['amount'];
-                $invGst      = round($invBase * 0.18 / 1.18, 2);
 
                 $invoiceResult = ZohoBooksService::createAndSendInvoice([
                     'planName'       => $invPlanName,
@@ -582,9 +588,11 @@ class PaymentController
                     'companyName'    => $meta['companyName']   ?? '',
                     'gstNumber'      => $meta['gstNumber']     ?? '',
                     'billingAddress' => $billingAddr,
-                    'billingPeriod'  => $checkout['billingPeriod'] ?? 'yearly',
+                    'billingPeriod'  => $billingPeriod,
                     'activationDate' => $now,
                     'renewalDate'    => $renewalDate,
+                    'planRate'       => $invPlanRate,
+                    'discountAmount' => $invDiscountAmt,
                     'baseAmount'     => $invBase,
                     'referenceNumber'=> $referenceNumber,
                     'orderId'        => $orderId,

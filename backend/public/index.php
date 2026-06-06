@@ -174,8 +174,11 @@ $router->post('/api/admin/vouchers',           [AdminController::class, 'createV
 $router->delete('/api/admin/vouchers/:id',     [AdminController::class, 'deactivateVoucher'], $adminOnly);
 $router->get('/api/admin/price-revision',      [AdminController::class, 'getPriceRevision'],  $adminOnly);
 $router->post('/api/admin/price-revision',     [AdminController::class, 'setPriceRevision'],  $adminOnly);
-$router->get('/api/admin/payment-audit',       [AdminController::class, 'getPaymentAudit'],   $adminOnly);
-$router->post('/api/admin/orders/:id/send-bill', [AdminController::class, 'resendInvoice'], $adminOnly);
+$router->get('/api/admin/payment-audit',              [AdminController::class, 'getPaymentAudit'],  $adminOnly);
+$router->post('/api/admin/orders/:id/send-bill',      [AdminController::class, 'resendInvoice'],   $adminOnly);
+$router->post('/api/admin/orders/:id/preview-bill',   [AdminController::class, 'previewInvoice'],  $adminOnly);
+$router->post('/api/admin/invoices/:id/send-draft',   [AdminController::class, 'sendInvoice'],     $adminOnly);
+$router->post('/api/admin/invoices/:id/void-draft',   [AdminController::class, 'voidInvoice'],     $adminOnly);
 
 // ── Super-admin only ──────────────────────────────────────────────────────────
 $superAdminOnly = [

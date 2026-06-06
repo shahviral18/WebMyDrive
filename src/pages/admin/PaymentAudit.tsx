@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, Clock, RefreshCw, Send, Loader2, FileText, Search } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, RefreshCw, Send, Loader2, FileText, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,18 +22,84 @@ interface AuditRow {
   googleStatus: "provisioned" | "pending" | "unknown";
 }
 
+interface InvoicePreview {
+  invoiceId: string;
+  invoiceNumber: string;
+  pdfBase64: string;
+  customerEmail: string;
+  customerName: string;
+  planName: string;
+  orderId: number;
+}
+
 const googleBadge = {
   provisioned: { label: "Provisioned", cls: "bg-success/10 text-success border-success/30", icon: CheckCircle2 },
   pending:     { label: "Pending",     cls: "bg-warning/10 text-warning border-warning/30", icon: Clock },
   unknown:     { label: "Not Provisioned", cls: "bg-danger/10 text-danger border-danger/30", icon: XCircle },
 };
 
+function InvoicePreviewModal({ preview, onSend, onCancel, sending }: {
+  preview: InvoicePreview;
+  onSend: () => void;
+  onCancel: () => void;
+  sending: boolean;
+}) {
+  const pdfUrl = `data:application/pdf;base64,${preview.pdfBase64}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Invoice Preview</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {preview.invoiceNumber} · {preview.customerName} · {preview.customerEmail}
+            </p>
+          </div>
+          <button onClick={onCancel} disabled={sending} className="p-1.5 rounded-lg hover:bg-surface-2 text-muted-foreground transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* PDF viewer */}
+        <div className="flex-1 overflow-hidden bg-surface-2 min-h-0">
+          <iframe
+            src={pdfUrl}
+            className="w-full h-full border-0"
+            style={{ minHeight: "500px" }}
+            title="Invoice Preview"
+          />
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-border shrink-0 bg-card">
+          <p className="text-xs text-muted-foreground">
+            This draft is saved in Zoho Books. Sending will email it to <span className="font-medium text-foreground">{preview.customerEmail}</span>.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onCancel} disabled={sending}>
+              Discard Draft
+            </Button>
+            <Button size="sm" onClick={onSend} disabled={sending} className="gap-1.5">
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send to Customer
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PaymentAuditPage() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [retrying, setRetrying] = useState<number | null>(null);
-  const [resending, setResending] = useState<number | null>(null);
+  const [previewing, setPreviewing] = useState<number | null>(null);
+  const [preview, setPreview] = useState<InvoicePreview | null>(null);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     api.get("/admin/payment-audit")
@@ -55,6 +121,11 @@ export default function PaymentAuditPage() {
   });
 
   const handleRetryGoogle = async (row: AuditRow) => {
+    const confirmed = window.confirm(
+      `This will create a Google Workspace account for ${row.userEmail}.\n\nA welcome email will be sent to the user.\n\nAre you sure?`
+    );
+    if (!confirmed) return;
+
     setRetrying(row.orderId);
     try {
       await api.post(`/admin/users/${row.userId}/provision-google-account`, {});
@@ -69,18 +140,51 @@ export default function PaymentAuditPage() {
     }
   };
 
-  const handleResendInvoice = async (row: AuditRow) => {
-    setResending(row.orderId);
+  const handlePreviewInvoice = async (row: AuditRow) => {
+    setPreviewing(row.orderId);
     try {
-      const res = await api.post(`/admin/orders/${row.orderId}/send-bill`, {});
-      toast.success(`Invoice ${res.invoiceNumber ?? ""} sent to ${row.userEmail}`);
-      setRows(prev => prev.map(r =>
-        r.orderId === row.orderId ? { ...r, invoiceNumber: res.invoiceNumber ?? r.invoiceNumber } : r
-      ));
+      const res = await api.post(`/admin/orders/${row.orderId}/preview-bill`, {});
+      setPreview({ ...res, orderId: row.orderId });
     } catch (e: any) {
-      toast.error(e?.message ?? "Invoice send failed");
+      toast.error(e?.message ?? "Failed to generate invoice preview");
     } finally {
-      setResending(null);
+      setPreviewing(null);
+    }
+  };
+
+  const handleSendInvoice = async () => {
+    if (!preview) return;
+    setSending(true);
+    try {
+      await api.post(`/admin/invoices/${preview.invoiceId}/send-draft`, {
+        customerEmail: preview.customerEmail,
+        customerName:  preview.customerName,
+        planName:      preview.planName,
+        orderId:       preview.orderId,
+        invoiceNumber: preview.invoiceNumber,
+      });
+      toast.success(`Invoice ${preview.invoiceNumber} sent to ${preview.customerEmail}`);
+      setRows(prev => prev.map(r =>
+        r.orderId === preview.orderId ? { ...r, invoiceNumber: preview.invoiceNumber } : r
+      ));
+      setPreview(null);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to send invoice");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!preview) return;
+    setSending(true);
+    try {
+      await api.post(`/admin/invoices/${preview.invoiceId}/void-draft`, {});
+    } catch {
+      // best-effort
+    } finally {
+      setSending(false);
+      setPreview(null);
     }
   };
 
@@ -93,141 +197,152 @@ export default function PaymentAuditPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-          <FileText className="w-5 h-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Payment Audit</h1>
-          <p className="text-sm text-muted-foreground">Last 100 paid orders — Google provisioning status + Zoho invoice</p>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          className="pl-9 h-9 text-sm"
-          placeholder="Search by user, plan, order ID, invoice…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+    <>
+      {preview && (
+        <InvoicePreviewModal
+          preview={preview}
+          onSend={handleSendInvoice}
+          onCancel={handleDiscardDraft}
+          sending={sending}
         />
-      </div>
+      )}
 
-      {/* Summary badges */}
-      <div className="flex gap-3 flex-wrap text-sm">
-        <span className="px-3 py-1 rounded-full bg-surface-2 border border-border text-muted-foreground">
-          {rows.length} orders
-        </span>
-        <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-success">
-          {rows.filter(r => r.googleStatus === "provisioned").length} Google ✓
-        </span>
-        <span className="px-3 py-1 rounded-full bg-danger/10 border border-danger/20 text-danger">
-          {rows.filter(r => r.googleStatus === "unknown").length} not provisioned
-        </span>
-        <span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary">
-          {rows.filter(r => r.invoiceNumber).length} invoices generated
-        </span>
-      </div>
+      <div className="p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <FileText className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Payment Audit</h1>
+            <p className="text-sm text-muted-foreground">Last 100 paid orders — Google provisioning status + Zoho invoice</p>
+          </div>
+        </div>
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface-2 border-b border-border text-left text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Order</th>
-                <th className="px-4 py-3 font-semibold">User</th>
-                <th className="px-4 py-3 font-semibold">Plan</th>
-                <th className="px-4 py-3 font-semibold text-right">Amount</th>
-                <th className="px-4 py-3 font-semibold">Paid At</th>
-                <th className="px-4 py-3 font-semibold">Google</th>
-                <th className="px-4 py-3 font-semibold">Invoice #</th>
-                <th className="px-4 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-12 text-muted-foreground">No matching orders</td>
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            className="pl-9 h-9 text-sm"
+            placeholder="Search by user, plan, order ID, invoice…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Summary badges */}
+        <div className="flex gap-3 flex-wrap text-sm">
+          <span className="px-3 py-1 rounded-full bg-surface-2 border border-border text-muted-foreground">
+            {rows.length} orders
+          </span>
+          <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-success">
+            {rows.filter(r => r.googleStatus === "provisioned").length} Google ✓
+          </span>
+          <span className="px-3 py-1 rounded-full bg-danger/10 border border-danger/20 text-danger">
+            {rows.filter(r => r.googleStatus === "unknown").length} not provisioned
+          </span>
+          <span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary">
+            {rows.filter(r => r.invoiceNumber).length} invoices generated
+          </span>
+        </div>
+
+        {/* Table */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-surface-2 border-b border-border text-left text-muted-foreground">
+                  <th className="px-4 py-3 font-semibold">Order</th>
+                  <th className="px-4 py-3 font-semibold">User</th>
+                  <th className="px-4 py-3 font-semibold">Plan</th>
+                  <th className="px-4 py-3 font-semibold text-right">Amount</th>
+                  <th className="px-4 py-3 font-semibold">Paid At</th>
+                  <th className="px-4 py-3 font-semibold">Google</th>
+                  <th className="px-4 py-3 font-semibold">Invoice #</th>
+                  <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
-              ) : filtered.map(row => {
-                const gCfg = googleBadge[row.googleStatus];
-                const GIcon = gCfg.icon;
-                const isRetrying = retrying === row.orderId;
-                const isResending = resending === row.orderId;
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-12 text-muted-foreground">No matching orders</td>
+                  </tr>
+                ) : filtered.map(row => {
+                  const gCfg = googleBadge[row.googleStatus];
+                  const GIcon = gCfg.icon;
+                  const isRetrying  = retrying  === row.orderId;
+                  const isPreviewing = previewing === row.orderId;
 
-                return (
-                  <tr key={row.orderId} className="hover:bg-surface-2/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-muted-foreground">WMD-{String(row.orderId).padStart(4, "0")}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground truncate max-w-[140px]">{row.userName ?? row.userEmail}</p>
-                      <p className="text-xs text-muted-foreground truncate max-w-[140px]">{row.userEmail}</p>
-                    </td>
-                    <td className="px-4 py-3 text-foreground">{row.planName}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-foreground">
-                      ₹{row.amount.toLocaleString("en-IN")}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                      {row.paidAt?.slice(0, 16).replace("T", " ")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline" className={cn("gap-1 text-xs", gCfg.cls)}>
-                        <GIcon className="w-3 h-3" />
-                        {gCfg.label}
-                      </Badge>
-                      {row.googleEmail && row.googleEmail !== "PENDING" && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[130px]">{row.googleEmail}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.invoiceNumber ? (
-                        <span className="font-mono text-xs text-foreground">{row.invoiceNumber}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {row.googleStatus !== "provisioned" && (
+                  return (
+                    <tr key={row.orderId} className="hover:bg-surface-2/50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-muted-foreground">WMD-{String(row.orderId).padStart(4, "0")}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground truncate max-w-[140px]">{row.userName ?? row.userEmail}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[140px]">{row.userEmail}</p>
+                      </td>
+                      <td className="px-4 py-3 text-foreground">{row.planName}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-foreground">
+                        ₹{row.amount.toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {row.paidAt?.slice(0, 16).replace("T", " ")}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className={cn("gap-1 text-xs", gCfg.cls)}>
+                          <GIcon className="w-3 h-3" />
+                          {gCfg.label}
+                        </Badge>
+                        {row.googleEmail && row.googleEmail !== "PENDING" && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[130px]">{row.googleEmail}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.invoiceNumber ? (
+                          <span className="font-mono text-xs text-foreground">{row.invoiceNumber}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {row.googleStatus !== "provisioned" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs gap-1"
+                              disabled={isRetrying}
+                              onClick={() => handleRetryGoogle(row)}
+                            >
+                              {isRetrying
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <RefreshCw className="w-3 h-3" />}
+                              Google
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
                             className="h-7 px-2 text-xs gap-1"
-                            disabled={isRetrying}
-                            onClick={() => handleRetryGoogle(row)}
+                            disabled={isPreviewing}
+                            onClick={() => handlePreviewInvoice(row)}
                           >
-                            {isRetrying
+                            {isPreviewing
                               ? <Loader2 className="w-3 h-3 animate-spin" />
-                              : <RefreshCw className="w-3 h-3" />}
-                            Google
+                              : <FileText className="w-3 h-3" />}
+                            Invoice
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs gap-1"
-                          disabled={isResending}
-                          onClick={() => handleResendInvoice(row)}
-                        >
-                          {isResending
-                            ? <Loader2 className="w-3 h-3 animate-spin" />
-                            : <Send className="w-3 h-3" />}
-                          Invoice
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

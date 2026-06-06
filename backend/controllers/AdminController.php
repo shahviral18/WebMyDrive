@@ -2702,17 +2702,28 @@ class AdminController
 
         if (!$order) Response::error('Order not found or not paid', 404);
 
-        // Re-fetch checkout meta if stored; fall back to order fields
+        // Re-fetch checkout meta + plan pricing
         $meta = [];
         try {
             $checkout = Database::queryOne(
-                'SELECT meta FROM `PendingCheckout` WHERE referenceNumber = :ref',
+                'SELECT checkoutMeta, promoCode FROM `PendingCheckout` WHERE referenceNumber = :ref',
                 [':ref' => $order['gatewayTxId'] ?? '']
             );
-            if ($checkout && $checkout['meta']) {
-                $meta = json_decode($checkout['meta'], true) ?? [];
+            if ($checkout && $checkout['checkoutMeta']) {
+                $meta = json_decode($checkout['checkoutMeta'], true) ?? [];
             }
         } catch (Throwable $e) { /* meta not critical */ }
+
+        $billingPeriod = $order['billingPeriod'] ?? $meta['billingPeriod'] ?? 'yearly';
+        $invPlan = Database::queryOne(
+            'SELECT priceINR, priceYearlyINR, priceMonthlyINR FROM `Plan` WHERE id = :id',
+            [':id' => $order['planId']]
+        ) ?? [];
+        $planRate = (float) ($billingPeriod === 'monthly'
+            ? ($invPlan['priceMonthlyINR'] ?? $invPlan['priceINR'] ?? 0)
+            : ($invPlan['priceYearlyINR']  ?? $invPlan['priceINR'] ?? 0));
+        $discountPct = (float) ($meta['discountPercent'] ?? 0);
+        $discountAmt = $planRate > 0 ? round($planRate * $discountPct, 2) : 0.0;
 
         $invoiceResult = ZohoBooksService::createAndSendInvoice([
             'planName'       => $order['planName'],
@@ -2723,9 +2734,11 @@ class AdminController
             'companyName'    => $meta['companyName']   ?? '',
             'gstNumber'      => $meta['gstNumber']     ?? '',
             'billingAddress' => $meta['billingAddress'] ?? [],
-            'billingPeriod'  => $order['billingPeriod'] ?? 'yearly',
+            'billingPeriod'  => $billingPeriod,
             'activationDate' => $order['createdAt'],
             'renewalDate'    => $order['renewalDate'] ?? date('Y-m-d', strtotime('+1 year')),
+            'planRate'       => $planRate,
+            'discountAmount' => $discountAmt,
             'baseAmount'     => (float) $order['amount'],
             'referenceNumber'=> 'WMD-' . str_pad((string)$orderId, 4, '0', STR_PAD_LEFT),
             'orderId'        => $orderId,
@@ -2773,5 +2786,144 @@ class AdminController
         }
 
         Response::json(['success' => true, 'invoiceNumber' => $invoiceNumber]);
+    }
+
+    // ── Preview invoice: create draft in Zoho + return PDF base64 ────────────
+
+    public function previewInvoice(Request $req): void
+    {
+        $orderId = (int)($req->params['id'] ?? 0);
+
+        $order = Database::queryOne(
+            'SELECT o.*, u.name AS userName, u.email AS userEmail,
+                    u.phone AS userPhone,
+                    p.name AS planName,
+                    w.renewalDate, w.billingPeriod
+             FROM `Order` o
+             JOIN `User` u ON u.id = o.userId
+             JOIN `Plan` p ON p.id = o.planId
+             LEFT JOIN `Workspace` w ON w.userId = o.userId
+             WHERE o.id = :id AND o.status = \'PAID\'',
+            [':id' => $orderId]
+        );
+
+        if (!$order) Response::error('Order not found or not paid', 404);
+
+        $meta = [];
+        try {
+            $checkout = Database::queryOne(
+                'SELECT checkoutMeta FROM `PendingCheckout` WHERE referenceNumber = :ref',
+                [':ref' => $order['gatewayTxId'] ?? '']
+            );
+            if ($checkout && $checkout['checkoutMeta']) {
+                $meta = json_decode($checkout['checkoutMeta'], true) ?? [];
+            }
+        } catch (Throwable $e) {}
+
+        $billingPeriod = $order['billingPeriod'] ?? $meta['billingPeriod'] ?? 'yearly';
+        $invPlan = Database::queryOne(
+            'SELECT priceINR, priceYearlyINR, priceMonthlyINR FROM `Plan` WHERE id = :id',
+            [':id' => $order['planId']]
+        ) ?? [];
+        $planRate = (float) ($billingPeriod === 'monthly'
+            ? ($invPlan['priceMonthlyINR'] ?? $invPlan['priceINR'] ?? 0)
+            : ($invPlan['priceYearlyINR']  ?? $invPlan['priceINR'] ?? 0));
+        $discountPct = (float) ($meta['discountPercent'] ?? 0);
+        $discountAmt = $planRate > 0 ? round($planRate * $discountPct, 2) : 0.0;
+
+        $draft = ZohoBooksService::createDraftInvoice([
+            'planName'       => $order['planName'],
+            'username'       => $meta['username'] ?? $order['userEmail'],
+            'customerName'   => $order['userName']  ?? '',
+            'customerEmail'  => $order['userEmail']  ?? '',
+            'customerPhone'  => $order['userPhone']  ?? '',
+            'companyName'    => $meta['companyName']   ?? '',
+            'gstNumber'      => $meta['gstNumber']     ?? '',
+            'billingAddress' => $meta['billingAddress'] ?? [],
+            'billingPeriod'  => $billingPeriod,
+            'activationDate' => $order['createdAt'],
+            'renewalDate'    => $order['renewalDate'] ?? date('Y-m-d', strtotime('+1 year')),
+            'planRate'       => $planRate,
+            'discountAmount' => $discountAmt,
+            'baseAmount'     => (float) $order['amount'],
+            'referenceNumber'=> 'WMD-' . str_pad((string)$orderId, 4, '0', STR_PAD_LEFT),
+            'orderId'        => $orderId,
+        ]);
+
+        Response::json([
+            'invoiceId'     => $draft['invoice_id'],
+            'invoiceNumber' => $draft['invoice_number'],
+            'pdfBase64'     => $draft['pdf_base64'],
+            'customerEmail' => $order['userEmail'],
+            'customerName'  => $order['userName'] ?? '',
+            'planName'      => $order['planName'],
+        ]);
+    }
+
+    // ── Send a draft invoice + store in DB ────────────────────────────────────
+
+    public function sendInvoice(Request $req): void
+    {
+        $invoiceId = $req->params['id'] ?? '';
+        $body      = $req->body();
+
+        $customerEmail = $body['customerEmail'] ?? '';
+        $customerName  = $body['customerName']  ?? '';
+        $planName      = $body['planName']       ?? '';
+        $orderId       = (int) ($body['orderId'] ?? 0);
+        $invoiceNumber = $body['invoiceNumber']  ?? '';
+
+        if (!$invoiceId || !$customerEmail) Response::error('Missing invoiceId or customerEmail', 400);
+
+        ZohoBooksService::sendDraftInvoice($invoiceId, $customerEmail, $customerName, $planName);
+
+        // Store/update invoice record
+        if ($orderId && $invoiceNumber) {
+            $order   = Database::queryOne('SELECT userId, amount, planId FROM `Order` WHERE id = :id', [':id' => $orderId]);
+            $existing = Database::queryOne('SELECT id FROM `invoices` WHERE orderId = :oid', [':oid' => $orderId]);
+            $now     = date('Y-m-d H:i:s');
+
+            if ($existing) {
+                Database::execute(
+                    'UPDATE `invoices` SET invoiceNumber = :num, updatedAt = :now WHERE orderId = :oid',
+                    [':num' => $invoiceNumber, ':now' => $now, ':oid' => $orderId]
+                );
+            } elseif ($order) {
+                $baseNet = round((float)$order['amount'] / 1.18, 2);
+                $gstAmt  = round((float)$order['amount'] - $baseNet, 2);
+                $plan    = Database::queryOne('SELECT name FROM `Plan` WHERE id = :id', [':id' => $order['planId']]);
+                Database::execute(
+                    'INSERT INTO `invoices`
+                     (userId, orderId, invoiceNumber, invoiceDate, planName, baseAmount, gstAmount, totalAmount, currency, status, source, createdAt, updatedAt)
+                     VALUES (:uid, :oid, :num, :idate, :plan, :base, :gst, :total, \'INR\', \'PAID\', \'MANUAL\', :creat, :upd)',
+                    [
+                        ':uid'   => (int)$order['userId'],
+                        ':oid'   => $orderId,
+                        ':num'   => $invoiceNumber,
+                        ':idate' => date('Y-m-d'),
+                        ':plan'  => $plan['name'] ?? '',
+                        ':base'  => $baseNet,
+                        ':gst'   => $gstAmt,
+                        ':total' => (float)$order['amount'],
+                        ':creat' => $now,
+                        ':upd'   => $now,
+                    ]
+                );
+            }
+        }
+
+        Response::json(['success' => true, 'invoiceNumber' => $invoiceNumber]);
+    }
+
+    // ── Void (discard) a draft invoice ────────────────────────────────────────
+
+    public function voidInvoice(Request $req): void
+    {
+        $invoiceId = $req->params['id'] ?? '';
+        if (!$invoiceId) Response::error('Missing invoiceId', 400);
+
+        ZohoBooksService::voidInvoice($invoiceId);
+
+        Response::json(['success' => true]);
     }
 }
