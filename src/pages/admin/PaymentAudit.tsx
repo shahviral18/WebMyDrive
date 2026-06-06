@@ -72,7 +72,7 @@ export default function PaymentAuditPage() {
   const handleResendInvoice = async (row: AuditRow) => {
     setResending(row.orderId);
     try {
-      const res = await api.post(`/admin/orders/${row.orderId}/resend-invoice`, {});
+      const res = await api.post(`/admin/orders/${row.orderId}/send-bill`, {});
       toast.success(`Invoice ${res.invoiceNumber ?? ""} sent to ${row.userEmail}`);
       setRows(prev => prev.map(r =>
         r.orderId === row.orderId ? { ...r, invoiceNumber: res.invoiceNumber ?? r.invoiceNumber } : r

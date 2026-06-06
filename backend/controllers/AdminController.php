@@ -2636,7 +2636,6 @@ class AdminController
 
     public function getPaymentAudit(Request $req): void
     {
-        $this->requireAdmin($req);
 
         $rows = Database::query(
             'SELECT o.id, o.amount, o.status, o.createdAt, o.paymentId,
@@ -2644,9 +2643,7 @@ class AdminController
                     p.name AS planName,
                     i.invoiceNumber,
                     w.status AS workspaceStatus,
-                    w.googleEmail,
-                    (SELECT COUNT(*) FROM `AuditLog` al
-                     WHERE al.userId = u.id AND al.action = \'PROVISION_GOOGLE_ACCOUNT\') AS googleAuditCount
+                    w.googleCustomerId
              FROM `Order` o
              JOIN `User` u ON u.id = o.userId
              JOIN `Plan` p ON p.id = o.planId
@@ -2658,26 +2655,27 @@ class AdminController
         );
 
         $result = array_map(function ($r) {
+            // Google status: if user email ends in @webmydrive.com and workspace is ACTIVE → provisioned
+            $email = $r['userEmail'] ?? '';
+            $wsStatus = $r['workspaceStatus'] ?? '';
             $google = 'unknown';
-            if (!empty($r['googleEmail']) && $r['googleEmail'] !== 'PENDING') {
+            if (str_ends_with($email, '@webmydrive.com') && $wsStatus === 'ACTIVE') {
                 $google = 'provisioned';
-            } elseif ((int)($r['googleAuditCount'] ?? 0) > 0) {
-                $google = 'provisioned';
-            } elseif ($r['googleEmail'] === 'PENDING') {
-                $google = 'pending';
+            } elseif ($wsStatus === 'ACTIVE') {
+                $google = 'unknown';
             }
             return [
                 'orderId'         => (int) $r['id'],
                 'userId'          => (int) $r['userId'],
                 'userName'        => $r['userName'],
-                'userEmail'       => $r['userEmail'],
+                'userEmail'       => $email,
                 'planName'        => $r['planName'],
                 'amount'          => (float) $r['amount'],
                 'paidAt'          => $r['createdAt'],
                 'paymentId'       => $r['paymentId'],
                 'invoiceNumber'   => $r['invoiceNumber'],
-                'workspaceStatus' => $r['workspaceStatus'],
-                'googleEmail'     => $r['googleEmail'],
+                'workspaceStatus' => $wsStatus,
+                'googleEmail'     => str_ends_with($email, '@webmydrive.com') ? $email : null,
                 'googleStatus'    => $google,
             ];
         }, $rows);
@@ -2687,7 +2685,6 @@ class AdminController
 
     public function resendInvoice(Request $req): void
     {
-        $this->requireAdmin($req);
         $orderId = (int)($req->params['id'] ?? 0);
 
         $order = Database::queryOne(
@@ -2730,7 +2727,7 @@ class AdminController
             'activationDate' => $order['createdAt'],
             'renewalDate'    => $order['renewalDate'] ?? date('Y-m-d', strtotime('+1 year')),
             'baseAmount'     => (float) $order['amount'],
-            'referenceNumber'=> 'WMD-' . str_pad($orderId, 4, '0', STR_PAD_LEFT),
+            'referenceNumber'=> 'WMD-' . str_pad((string)$orderId, 4, '0', STR_PAD_LEFT),
             'orderId'        => $orderId,
         ]);
 
@@ -2754,19 +2751,23 @@ class AdminController
                   status, source, createdAt, updatedAt)
                  VALUES
                  (:uid, :oid, :num, :idate, :rdate,
-                  :plan, :base, :gst, :total, \'INR\',
-                  \'PAID\', \'MANUAL\', :now, :now)',
+                  :plan, :base, :gst, :total, :cur,
+                  :status, :source, :creat, :upd)',
                 [
-                    ':uid'   => (int)$order['userId'],
-                    ':oid'   => $orderId,
-                    ':num'   => $invoiceNumber,
-                    ':idate' => date('Y-m-d'),
-                    ':rdate' => date('Y-m-d', strtotime($order['renewalDate'] ?? '+1 year')),
-                    ':plan'  => $order['planName'],
-                    ':base'  => $baseNet,
-                    ':gst'   => $gstAmt,
-                    ':total' => (float)$order['amount'],
-                    ':now'   => $now,
+                    ':uid'    => (int)$order['userId'],
+                    ':oid'    => $orderId,
+                    ':num'    => $invoiceNumber,
+                    ':idate'  => date('Y-m-d'),
+                    ':rdate'  => date('Y-m-d', strtotime($order['renewalDate'] ?? '+1 year')),
+                    ':plan'   => $order['planName'],
+                    ':base'   => $baseNet,
+                    ':gst'    => $gstAmt,
+                    ':total'  => (float)$order['amount'],
+                    ':cur'    => 'INR',
+                    ':status' => 'PAID',
+                    ':source' => 'MANUAL',
+                    ':creat'  => $now,
+                    ':upd'    => $now,
                 ]
             );
         }

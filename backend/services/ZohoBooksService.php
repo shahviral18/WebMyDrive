@@ -126,6 +126,20 @@ class ZohoBooksService
             }
         }
 
+        // Also search by name in case email doesn't match (e.g. workspace email vs personal)
+        if ($name) {
+            $nameSearch = self::call('GET', '/contacts?contact_name=' . urlencode($name));
+            foreach ($nameSearch['contacts'] ?? [] as $c) {
+                if (strtolower(trim($c['contact_name'] ?? '')) === strtolower(trim($name))) {
+                    $contactId = (string) $c['contact_id'];
+                    if (($c['status'] ?? '') === 'inactive') {
+                        self::call('POST', '/contacts/' . $contactId . '/active');
+                    }
+                    return $contactId;
+                }
+            }
+        }
+
         // Create new contact
         $contact = [
             'contact_name'  => $name ?: $email,
@@ -147,8 +161,19 @@ class ZohoBooksService
             $contact['gst_treatment']    = 'business_gst';
         }
 
-        $result = self::call('POST', '/contacts', $contact);
-        return (string) ($result['contact']['contact_id'] ?? '');
+        try {
+            $result = self::call('POST', '/contacts', $contact);
+            return (string) ($result['contact']['contact_id'] ?? '');
+        } catch (RuntimeException $e) {
+            // If duplicate name error, search again more broadly
+            if (str_contains($e->getMessage(), 'already exists')) {
+                $fallback = self::call('GET', '/contacts?contact_name=' . urlencode($name ?: $email));
+                foreach ($fallback['contacts'] ?? [] as $c) {
+                    return (string) $c['contact_id'];
+                }
+            }
+            throw $e;
+        }
     }
 
     // ── Public: create & send invoice ────────────────────────────────────────
@@ -196,7 +221,7 @@ class ZohoBooksService
             $data['billingAddress']
         );
 
-        $wmdRef = 'WMD-' . str_pad((int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT);
+        $wmdRef = 'WMD-' . str_pad((string)(int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT);
         $invoicePayload = [
             'customer_id'            => $contactId,
             'invoice_date'           => $activationDate,
