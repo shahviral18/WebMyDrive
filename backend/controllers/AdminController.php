@@ -2631,4 +2631,146 @@ class AdminController
             'revisionMessage' => $config['priceRevisionMessage'] ?? null,
         ]);
     }
+
+    // ── Payment Audit ─────────────────────────────────────────────────────────
+
+    public function getPaymentAudit(Request $req): void
+    {
+        $this->requireAdmin($req);
+
+        $rows = Database::query(
+            'SELECT o.id, o.amount, o.status, o.createdAt, o.paymentId,
+                    u.id AS userId, u.name AS userName, u.email AS userEmail,
+                    p.name AS planName,
+                    i.invoiceNumber,
+                    w.status AS workspaceStatus,
+                    w.googleEmail,
+                    (SELECT COUNT(*) FROM `AuditLog` al
+                     WHERE al.userId = u.id AND al.action = \'PROVISION_GOOGLE_ACCOUNT\') AS googleAuditCount
+             FROM `Order` o
+             JOIN `User` u ON u.id = o.userId
+             JOIN `Plan` p ON p.id = o.planId
+             LEFT JOIN `invoices` i ON i.orderId = o.id
+             LEFT JOIN `Workspace` w ON w.userId = o.userId
+             WHERE o.status = \'PAID\'
+             ORDER BY o.createdAt DESC
+             LIMIT 100'
+        );
+
+        $result = array_map(function ($r) {
+            $google = 'unknown';
+            if (!empty($r['googleEmail']) && $r['googleEmail'] !== 'PENDING') {
+                $google = 'provisioned';
+            } elseif ((int)($r['googleAuditCount'] ?? 0) > 0) {
+                $google = 'provisioned';
+            } elseif ($r['googleEmail'] === 'PENDING') {
+                $google = 'pending';
+            }
+            return [
+                'orderId'         => (int) $r['id'],
+                'userId'          => (int) $r['userId'],
+                'userName'        => $r['userName'],
+                'userEmail'       => $r['userEmail'],
+                'planName'        => $r['planName'],
+                'amount'          => (float) $r['amount'],
+                'paidAt'          => $r['createdAt'],
+                'paymentId'       => $r['paymentId'],
+                'invoiceNumber'   => $r['invoiceNumber'],
+                'workspaceStatus' => $r['workspaceStatus'],
+                'googleEmail'     => $r['googleEmail'],
+                'googleStatus'    => $google,
+            ];
+        }, $rows);
+
+        Response::json($result);
+    }
+
+    public function resendInvoice(Request $req): void
+    {
+        $this->requireAdmin($req);
+        $orderId = (int)($req->params['id'] ?? 0);
+
+        $order = Database::queryOne(
+            'SELECT o.*, u.name AS userName, u.email AS userEmail,
+                    u.phone AS userPhone,
+                    p.name AS planName,
+                    w.renewalDate, w.billingPeriod
+             FROM `Order` o
+             JOIN `User` u ON u.id = o.userId
+             JOIN `Plan` p ON p.id = o.planId
+             LEFT JOIN `Workspace` w ON w.userId = o.userId
+             WHERE o.id = :id AND o.status = \'PAID\'',
+            [':id' => $orderId]
+        );
+
+        if (!$order) Response::error('Order not found or not paid', 404);
+
+        // Re-fetch checkout meta if stored; fall back to order fields
+        $meta = [];
+        try {
+            $checkout = Database::queryOne(
+                'SELECT meta FROM `PendingCheckout` WHERE referenceNumber = :ref',
+                [':ref' => $order['gatewayTxId'] ?? '']
+            );
+            if ($checkout && $checkout['meta']) {
+                $meta = json_decode($checkout['meta'], true) ?? [];
+            }
+        } catch (Throwable $e) { /* meta not critical */ }
+
+        $invoiceResult = ZohoBooksService::createAndSendInvoice([
+            'planName'       => $order['planName'],
+            'username'       => $meta['username'] ?? $order['userEmail'],
+            'customerName'   => $order['userName']  ?? '',
+            'customerEmail'  => $order['userEmail']  ?? '',
+            'customerPhone'  => $order['userPhone']  ?? $meta['customerPhone'] ?? '',
+            'companyName'    => $meta['companyName']   ?? '',
+            'gstNumber'      => $meta['gstNumber']     ?? '',
+            'billingAddress' => $meta['billingAddress'] ?? [],
+            'billingPeriod'  => $order['billingPeriod'] ?? 'yearly',
+            'activationDate' => $order['createdAt'],
+            'renewalDate'    => $order['renewalDate'] ?? date('Y-m-d', strtotime('+1 year')),
+            'baseAmount'     => (float) $order['amount'],
+            'referenceNumber'=> 'WMD-' . str_pad($orderId, 4, '0', STR_PAD_LEFT),
+            'orderId'        => $orderId,
+        ]);
+
+        $invoiceNumber = $invoiceResult['invoice_number'] ?? '';
+
+        // Upsert invoice record
+        $existing = Database::queryOne('SELECT id FROM `invoices` WHERE orderId = :oid', [':oid' => $orderId]);
+        $now = date('Y-m-d H:i:s');
+        if ($existing) {
+            Database::execute(
+                'UPDATE `invoices` SET invoiceNumber = :num, updatedAt = :now WHERE orderId = :oid',
+                [':num' => $invoiceNumber, ':now' => $now, ':oid' => $orderId]
+            );
+        } else {
+            $baseNet = round((float)$order['amount'] / 1.18, 2);
+            $gstAmt  = round((float)$order['amount'] - $baseNet, 2);
+            Database::execute(
+                'INSERT INTO `invoices`
+                 (userId, orderId, invoiceNumber, invoiceDate, renewalDate,
+                  planName, baseAmount, gstAmount, totalAmount, currency,
+                  status, source, createdAt, updatedAt)
+                 VALUES
+                 (:uid, :oid, :num, :idate, :rdate,
+                  :plan, :base, :gst, :total, \'INR\',
+                  \'PAID\', \'MANUAL\', :now, :now)',
+                [
+                    ':uid'   => (int)$order['userId'],
+                    ':oid'   => $orderId,
+                    ':num'   => $invoiceNumber,
+                    ':idate' => date('Y-m-d'),
+                    ':rdate' => date('Y-m-d', strtotime($order['renewalDate'] ?? '+1 year')),
+                    ':plan'  => $order['planName'],
+                    ':base'  => $baseNet,
+                    ':gst'   => $gstAmt,
+                    ':total' => (float)$order['amount'],
+                    ':now'   => $now,
+                ]
+            );
+        }
+
+        Response::json(['success' => true, 'invoiceNumber' => $invoiceNumber]);
+    }
 }

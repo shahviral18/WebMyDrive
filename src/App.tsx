@@ -26,6 +26,7 @@ import DistributorPayoutsAdmin from "./pages/admin/DistributorPayoutsAdmin";
 import ChangePlan from "./pages/admin/ChangePlan";
 import AssignDistributor from "./pages/admin/AssignDistributor";
 import AssignReferral from "./pages/admin/AssignReferral";
+import PaymentAudit from "./pages/admin/PaymentAudit";
 import ImportUsers from "./pages/admin/ImportUsers";
 import RolePermissions from "./pages/admin/RolePermissions";
 import PortalUsers from "./pages/admin/PortalUsers";
@@ -212,6 +213,7 @@ const App = () => (
                   <Route path="change-plan" element={<ChangePlan />} />
                   <Route path="assign-distributor" element={<AssignDistributor />} />
                   <Route path="assign-referral" element={<AssignReferral />} />
+                  <Route path="payment-audit" element={<PaymentAudit />} />
                   <Route path="import-users" element={<ImportUsers />} />
                   <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="alerts" element={<Alerts />} />

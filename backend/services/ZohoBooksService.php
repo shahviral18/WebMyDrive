@@ -161,7 +161,7 @@ class ZohoBooksService
      *   renewalDate (Y-m-d H:i:s), baseAmount (pre-tax), referenceNumber
      * }
      */
-    public static function createAndSendInvoice(array $data): string
+    public static function createAndSendInvoice(array $data): array
     {
         $billingState = strtolower(trim($data['billingAddress']['state'] ?? ''));
         $isGujarat    = in_array($billingState, ['gujarat', 'gj'], true);
@@ -196,11 +196,13 @@ class ZohoBooksService
             $data['billingAddress']
         );
 
+        $wmdRef = 'WMD-' . str_pad((int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT);
         $invoicePayload = [
             'customer_id'            => $contactId,
             'invoice_date'           => $activationDate,
             'due_date'               => date('Y-m-d', strtotime($activationDate . ' +7 days')),
-            'reference_number'       => 'WMD-' . str_pad((int)($data['orderId'] ?? 0), 4, '0', STR_PAD_LEFT),
+            'reference_number'       => $wmdRef,
+            'purchaseorder_no'       => $wmdRef,
             'notes'                  => "Thank you for subscribing to WebMyDrive.",
             'line_items'             => $lineItems,
             'send_from_org_email_id' => true,
