@@ -601,6 +601,149 @@ class AdminController
         ]);
     }
 
+    public function getDistributorPortal(Request $req): void
+    {
+        $distId = (int) ($req->params['id'] ?? 0);
+        $page   = strtolower((string) ($req->query['page'] ?? 'dashboard'));
+
+        $dist = Database::queryOne('SELECT * FROM `Distributor` WHERE id = :id', [':id' => $distId]);
+        if (!$dist) Response::error('Distributor not found', 404);
+
+        switch ($page) {
+            case 'dashboard':
+                $custCount   = (int) (Database::scalar('SELECT COUNT(*) FROM `User` WHERE distributorId = :id', [':id' => $distId]) ?? 0);
+                $commission  = (float) (Database::scalar('SELECT COALESCE(SUM(commissionEarned),0) FROM `DistributorSale` WHERE distributorId = :id', [':id' => $distId]) ?? 0);
+                $config      = ConfigService::getDistributorConfig();
+                $promoRow    = Database::queryOne(
+                    'SELECT pc.code FROM `DistributorPromoCode` dpc
+                     JOIN `PromoCode` pc ON pc.id = dpc.promoCodeId
+                     WHERE dpc.distributorId = :id AND dpc.isActive = 1 LIMIT 1',
+                    [':id' => $distId]
+                );
+                $history = DistributorService::getSalesHistory($distId);
+                $pending = (float) (Database::scalar(
+                    'SELECT COALESCE(SUM(ABS(amount)),0) FROM `DistributorWalletTx` WHERE distributorId = :id AND type = \'PAYOUT\' AND status = \'PENDING\'',
+                    [':id' => $distId]
+                ) ?? 0);
+                Response::json([
+                    'distributor' => [
+                        'id'             => (int) $dist['id'],
+                        'name'           => $dist['name'],
+                        'email'          => $dist['displayEmail'] ?? $dist['email'],
+                        'tier'           => $dist['tier'] ?? null,
+                        'status'         => $dist['status'],
+                        'walletBalance'  => (float) $dist['walletBalance'],
+                        'revenueThisYear'=> (float) ($dist['revenueThisYear'] ?? 0),
+                        'totalCustomers' => $custCount,
+                        'totalCommission'=> $commission,
+                        'pendingPayout'  => $pending,
+                        'referralCode'   => $dist['referralCode'] ?? null,
+                        'commissionPct'  => (float) ($dist['commissionPct'] ?? 0),
+                        'bankAccountHolder' => $dist['bankAccountHolder'] ?? null,
+                        'bankName'          => $dist['bankName'] ?? null,
+                        'bankAccountNumber' => $dist['bankAccountNumber'] ?? null,
+                        'panNumber'         => $dist['panNumber'] ?? null,
+                        'gstin'             => $dist['gstin'] ?? null,
+                        'entityType'        => $dist['entityType'] ?? null,
+                    ],
+                    'promoCode'      => $promoRow['code'] ?? null,
+                    'promoDiscounts' => $config['promoDiscounts'] ?? [],
+                    'payoutConfig'   => $config['payoutConfig'] ?? ['tdsEnabled' => false, 'tdsRate' => 10, 'minPayoutAmount' => 5000],
+                    'history'        => $history,
+                ]);
+                break;
+
+            case 'customers':
+                $customers = Database::query(
+                    'SELECT u.id, u.name, u.email, u.createdAt,
+                            w.status AS wsStatus, p.name AS planName,
+                            (SELECT SUM(ds.commissionEarned) FROM `DistributorSale` ds WHERE ds.purchasingUserId = u.id AND ds.distributorId = :did) AS commission
+                     FROM `User` u
+                     LEFT JOIN `Workspace` w ON w.id = (SELECT id FROM `Workspace` WHERE userId = u.id ORDER BY createdAt DESC LIMIT 1)
+                     LEFT JOIN `Plan` p ON p.id = w.planId
+                     WHERE u.distributorId = :did
+                     ORDER BY u.createdAt DESC',
+                    [':did' => $distId]
+                );
+                Response::json(['customers' => $customers ?? []]);
+                break;
+
+            case 'earnings':
+                $totalCommission = (float) (Database::scalar(
+                    'SELECT COALESCE(SUM(commissionEarned),0) FROM `DistributorSale` WHERE distributorId = :id',
+                    [':id' => $distId]
+                ) ?? 0);
+                $pending = (float) (Database::scalar(
+                    'SELECT COALESCE(SUM(ABS(amount)),0) FROM `DistributorWalletTx` WHERE distributorId = :id AND type = \'PAYOUT\' AND status = \'PENDING\'',
+                    [':id' => $distId]
+                ) ?? 0);
+                $history = DistributorService::getSalesHistory($distId);
+                // Build monthly trend (last 6 months)
+                $monthly = Database::query(
+                    'SELECT DATE_FORMAT(createdAt, \'%b %Y\') AS month, SUM(commissionEarned) AS commission
+                     FROM `DistributorSale` WHERE distributorId = :id
+                     AND createdAt >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+                     GROUP BY DATE_FORMAT(createdAt, \'%Y-%m\')
+                     ORDER BY MIN(createdAt) ASC',
+                    [':id' => $distId]
+                );
+                $txs = Database::query(
+                    'SELECT id, amount, type, description, createdAt FROM `DistributorWalletTx`
+                     WHERE distributorId = :id ORDER BY createdAt DESC LIMIT 50',
+                    [':id' => $distId]
+                );
+                Response::json([
+                    'totalCommission' => $totalCommission,
+                    'pendingPayout'   => $pending,
+                    'tier'            => $dist['tier'] ?? 'Starter',
+                    'monthlyTrend'    => $monthly ?? [],
+                    'history'         => $history,
+                    'transactions'    => $txs ?? [],
+                ]);
+                break;
+
+            case 'wallet':
+                $txs = Database::query(
+                    'SELECT * FROM `DistributorWalletTx` WHERE distributorId = :id ORDER BY createdAt DESC LIMIT 100',
+                    [':id' => $distId]
+                );
+                Response::json([
+                    'walletBalance' => (float) $dist['walletBalance'],
+                    'bankName'      => $dist['bankName'] ?? null,
+                    'bankAccountNumber' => $dist['bankAccountNumber'] ?? null,
+                    'transactions'  => $txs ?? [],
+                ]);
+                break;
+
+            case 'payouts':
+                $payouts = Database::query(
+                    'SELECT id, distributorId, amount, type, status, description,
+                            invoicePath IS NOT NULL AS hasInvoice, utrNumber, adminNote, createdAt
+                     FROM `DistributorWalletTx`
+                     WHERE distributorId = :id AND type = \'PAYOUT\'
+                     ORDER BY createdAt DESC',
+                    [':id' => $distId]
+                );
+                $pending = (float) (Database::scalar(
+                    'SELECT COALESCE(SUM(ABS(amount)),0) FROM `DistributorWalletTx` WHERE distributorId = :id AND type = \'PAYOUT\' AND status = \'PENDING\'',
+                    [':id' => $distId]
+                ) ?? 0);
+                $config = ConfigService::getDistributorConfig();
+                Response::json([
+                    'walletBalance'   => (float) $dist['walletBalance'],
+                    'pendingPayout'   => $pending,
+                    'payouts'         => $payouts ?? [],
+                    'payoutConfig'    => $config['payoutConfig'] ?? ['tdsEnabled' => false, 'tdsRate' => 10, 'minPayoutAmount' => 5000],
+                    'bankName'        => $dist['bankName'] ?? null,
+                    'bankAccountNumber' => $dist['bankAccountNumber'] ?? null,
+                ]);
+                break;
+
+            default:
+                Response::error('Unknown page', 400);
+        }
+    }
+
     public function getDistributors(Request $req): void
     {
         $page = max(1, (int) ($req->query['page'] ?? 1));

@@ -137,6 +137,7 @@ $router->post('/api/public/reactivate/pay',  [PaymentController::class, 'createR
 $router->get('/api/admin/orders', [AdminController::class, 'getOrders'], $adminOnly);
 $router->get('/api/admin/distributors', [AdminController::class, 'getDistributors'], $adminOnly);
 $router->get('/api/admin/distributors/:id/detail', [AdminController::class, 'getDistributorDetail'], $adminOnly);
+$router->get('/api/admin/distributors/:id/portal', [AdminController::class, 'getDistributorPortal'], $adminOnly);
 $router->post('/api/admin/distributors', [AdminController::class, 'createDistributor'], $adminOnly);
 $router->post('/api/admin/distributors/:id/reset-password', [AdminController::class, 'resetDistributorPassword'], $adminOnly);
 $router->post('/api/admin/distributors/:id/adjust-wallet', [AdminController::class, 'adjustDistributorWallet'], $adminOnly);

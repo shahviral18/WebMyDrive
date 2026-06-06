@@ -4,7 +4,9 @@ import {
     Users, TrendingUp, Wallet, CheckCircle2, Clock, XCircle,
     MoreHorizontal, Copy, ExternalLink, UserPlus, Search,
     ChevronRight, BarChart3, ArrowUpRight, ChevronLeft, Loader2,
-    Tag, Plus, X, Link, Eye, Lock, Unlock, ShieldAlert
+    Tag, Plus, X, Link, Eye, Lock, Unlock, ShieldAlert,
+    DollarSign, Award, ChevronUp, ArrowDownLeft, CreditCard, Zap,
+    MessageSquare, Building, Download, LayoutDashboard
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,8 +20,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
-    ResponsiveContainer, CartesianGrid,
+    ResponsiveContainer, CartesianGrid, AreaChart, Area,
 } from "recharts";
+import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -293,41 +298,33 @@ function AddDistributorModal({ open, onClose, onAdd }: {
     );
 }
 
-// ── Distributor detail drawer ─────────────────────────────────────────────────
-// ── Distributor Portal Drawer (inline view-as-distributor panel) ─────────────
+// ── Distributor Portal Drawer (exact replica of distributor portal) ───────────
 
-interface PortalCustomer {
-    id: number; name: string | null; email: string; plan: string; status: string; joinedAt: string;
-}
-interface PortalWalletTx {
-    id: number; amount: number; type: string; description: string; createdAt: string;
-}
-interface PortalDetail {
-    customers: PortalCustomer[];
-    walletTxs: PortalWalletTx[];
-    promoCodes: { code: string; status: string; redemptions: number }[];
-}
+type PortalPage = "dashboard" | "customers" | "earnings" | "wallet" | "payouts";
 
 function DistributorPortalDrawer({ dist, onClose }: { dist: Distributor; onClose: () => void }) {
-    const [tab, setTab] = useState<"dashboard" | "customers" | "earnings" | "codes">("dashboard");
-    const [detail, setDetail] = useState<PortalDetail | null>(null);
+    const [page, setPage] = useState<PortalPage>("dashboard");
+    const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [editMode, setEditMode] = useState(false);
     const [showEditConfirm, setShowEditConfirm] = useState(false);
 
     useEffect(() => {
-        api.get(`/admin/distributors/${dist.id}/detail`)
-            .then(setDetail)
-            .catch(() => setDetail({ customers: [], walletTxs: [], promoCodes: [] }))
+        setLoading(true);
+        setData(null);
+        api.get(`/admin/distributors/${dist.id}/portal?page=${page}`)
+            .then(setData)
+            .catch(() => setData({}))
             .finally(() => setLoading(false));
-    }, [dist.id]);
+    }, [dist.id, page]);
 
-    const tabs = [
-        { key: "dashboard", label: "Dashboard" },
-        { key: "customers", label: "Customers" },
-        { key: "earnings",  label: "Earnings" },
-        { key: "codes",     label: "Promo Codes" },
-    ] as const;
+    const navItems: { key: PortalPage; label: string; icon: React.ReactNode }[] = [
+        { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
+        { key: "customers", label: "Customers",  icon: <Users className="w-4 h-4" /> },
+        { key: "earnings",  label: "Earnings",   icon: <TrendingUp className="w-4 h-4" /> },
+        { key: "wallet",    label: "Wallet",     icon: <Wallet className="w-4 h-4" /> },
+        { key: "payouts",   label: "Payouts",    icon: <CreditCard className="w-4 h-4" /> },
+    ];
 
     return (
         <div className="fixed inset-0 z-[60] flex justify-end">
@@ -335,32 +332,31 @@ function DistributorPortalDrawer({ dist, onClose }: { dist: Distributor; onClose
             <motion.aside
                 initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
                 transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-                className="relative w-full max-w-xl bg-surface-1 shadow-2xl border-l border-border flex flex-col overflow-hidden"
+                className="relative w-full max-w-4xl bg-surface-1 shadow-2xl border-l border-border flex flex-col overflow-hidden"
             >
                 {/* Header */}
-                <div className="p-5 border-b border-border flex items-center justify-between gap-3 flex-shrink-0">
+                <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-shrink-0 bg-gradient-to-r from-indigo-900/60 via-blue-900/40 to-transparent">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Eye className="w-5 h-5 text-primary" />
+                        <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+                            <Zap className="w-5 h-5 text-yellow-300" />
                         </div>
                         <div>
-                            <p className="text-sm font-bold text-foreground">{dist.name}</p>
-                            <p className="text-xs text-muted-foreground">{dist.email} · {dist.tier} · #{dist.id}</p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-foreground">{dist.name}</p>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-semibold uppercase tracking-wide">Viewing as Distributor</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{dist.email} · {dist.tier} · ID #{dist.id}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         {!editMode ? (
-                            <button
-                                onClick={() => setShowEditConfirm(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
-                            >
-                                <Lock className="w-3.5 h-3.5" /> Enable Editing
+                            <button onClick={() => setShowEditConfirm(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors">
+                                <Lock className="w-3.5 h-3.5" /> Read-only
                             </button>
                         ) : (
-                            <button
-                                onClick={() => setEditMode(false)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400/40 text-amber-500 hover:bg-amber-500/10 transition-colors"
-                            >
+                            <button onClick={() => setEditMode(false)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400/40 text-amber-500 hover:bg-amber-500/10 transition-colors">
                                 <Unlock className="w-3.5 h-3.5" /> Editing On
                             </button>
                         )}
@@ -379,8 +375,7 @@ function DistributorPortalDrawer({ dist, onClose }: { dist: Distributor; onClose
                                 <div>
                                     <p className="font-semibold text-foreground text-sm">Enable Editing?</p>
                                     <p className="text-xs text-muted-foreground mt-1">
-                                        Are you sure you want to edit <span className="font-medium text-foreground">{dist.name}</span> (ID: #{dist.id})?
-                                        Changes will affect their account immediately.
+                                        Changes to <span className="font-medium text-foreground">{dist.name}</span> will take effect immediately.
                                     </p>
                                 </div>
                             </div>
@@ -394,120 +389,616 @@ function DistributorPortalDrawer({ dist, onClose }: { dist: Distributor; onClose
                     </div>
                 )}
 
-                {/* Sub-tabs */}
-                <div className="flex border-b border-border flex-shrink-0 px-5 gap-1 pt-1">
-                    {tabs.map(t => (
-                        <button key={t.key} onClick={() => setTab(t.key)}
-                            className={cn("px-3 py-2 text-xs font-medium border-b-2 transition-colors",
-                                tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-                            )}>
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
+                {/* Body: left nav + content */}
+                <div className="flex flex-1 overflow-hidden">
+                    {/* Left mini-nav */}
+                    <nav className="w-36 flex-shrink-0 border-r border-border bg-surface-2/50 flex flex-col py-4 gap-1 px-2">
+                        {navItems.map(n => (
+                            <button key={n.key} onClick={() => setPage(n.key)}
+                                className={cn(
+                                    "flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors text-left",
+                                    page === n.key
+                                        ? "bg-primary/15 text-primary"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-surface-2"
+                                )}>
+                                {n.icon}
+                                {n.label}
+                            </button>
+                        ))}
+                    </nav>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : (
-                        <>
-                            {/* Dashboard Tab */}
-                            {tab === "dashboard" && (
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {[
-                                            { label: "Wallet Balance", value: `₹${dist.walletBalanceINR.toLocaleString("en-IN")}` },
-                                            { label: "Commission Rate", value: `${dist.commissionPct}%` },
-                                            { label: "Total Customers", value: String(dist.totalCustomers) },
-                                            { label: "Revenue Generated", value: `₹${dist.revenueGeneratedINR.toLocaleString("en-IN")}` },
-                                            { label: "Commission Earned", value: `₹${dist.commissionEarnedINR.toLocaleString("en-IN")}` },
-                                            { label: "Pending Withdrawal", value: `₹${dist.pendingWithdrawalINR.toLocaleString("en-IN")}` },
-                                        ].map(s => (
-                                            <div key={s.label} className="bg-surface-2 rounded-xl p-3 border border-border/50">
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</p>
-                                                <p className="text-base font-bold text-foreground mt-0.5">{s.value}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="bg-surface-2 rounded-xl p-4 border border-border/50">
-                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly Earnings</p>
-                                        <ResponsiveContainer width="100%" height={100}>
-                                            <BarChart data={dist.monthlyBreakdown} barSize={14}>
-                                                <XAxis dataKey="month" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                                                <YAxis hide />
-                                                <RechartTooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
-                                                    formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Earned"]} />
-                                                <Bar dataKey="earned" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Customers Tab */}
-                            {tab === "customers" && (
-                                <div className="space-y-2">
-                                    {(detail?.customers ?? []).length === 0 ? (
-                                        <p className="text-sm text-muted-foreground text-center py-10">No customers yet</p>
-                                    ) : (detail?.customers ?? []).map(c => (
-                                        <div key={c.id} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
-                                            <div>
-                                                <p className="text-sm font-medium text-foreground">{c.name ?? c.email}</p>
-                                                <p className="text-xs text-muted-foreground">{c.email}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-medium text-foreground">{c.plan}</p>
-                                                <p className="text-[10px] text-muted-foreground">{c.status}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Earnings Tab */}
-                            {tab === "earnings" && (
-                                <div className="space-y-2">
-                                    {(detail?.walletTxs ?? []).length === 0 ? (
-                                        <p className="text-sm text-muted-foreground text-center py-10">No transactions yet</p>
-                                    ) : (detail?.walletTxs ?? []).map(tx => (
-                                        <div key={tx.id} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
-                                            <div>
-                                                <p className="text-xs font-medium text-foreground">{tx.description}</p>
-                                                <p className="text-[10px] text-muted-foreground">{tx.createdAt?.slice(0, 10)}</p>
-                                            </div>
-                                            <span className={cn("text-sm font-bold", tx.type === "CREDIT" ? "text-emerald-500" : "text-red-500")}>
-                                                {tx.type === "CREDIT" ? "+" : "−"}₹{Math.abs(tx.amount).toLocaleString("en-IN")}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Promo Codes Tab */}
-                            {tab === "codes" && (
-                                <div className="space-y-2">
-                                    {(detail?.promoCodes ?? []).length === 0 ? (
-                                        <p className="text-sm text-muted-foreground text-center py-10">No promo codes assigned</p>
-                                    ) : (detail?.promoCodes ?? []).map(pc => (
-                                        <div key={pc.code} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
-                                            <span className="font-mono font-bold text-primary">{pc.code}</span>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-xs text-muted-foreground">{pc.redemptions} uses</span>
-                                                <span className={cn("text-[11px] px-2 py-0.5 rounded font-medium",
-                                                    pc.status?.toLowerCase() === "active" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"
-                                                )}>{pc.status}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
+                    {/* Main content area */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-24">
+                                <Loader2 className="w-7 h-7 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : (
+                            <>
+                                {/* ── DASHBOARD ── */}
+                                {page === "dashboard" && <PortalDashboard data={data} dist={dist} />}
+                                {/* ── CUSTOMERS ── */}
+                                {page === "customers" && <PortalCustomers data={data} />}
+                                {/* ── EARNINGS ── */}
+                                {page === "earnings" && <PortalEarnings data={data} />}
+                                {/* ── WALLET ── */}
+                                {page === "wallet" && <PortalWallet data={data} />}
+                                {/* ── PAYOUTS ── */}
+                                {page === "payouts" && <PortalPayouts data={data} />}
+                            </>
+                        )}
+                    </div>
                 </div>
             </motion.aside>
+        </div>
+    );
+}
+
+// ── Portal sub-page components ────────────────────────────────────────────────
+
+function PortalDashboard({ data, dist }: { data: any; dist: Distributor }) {
+    const d = data?.distributor ?? {};
+    const history: any[] = data?.history ?? [];
+    const promoCode: string | null = data?.promoCode ?? null;
+    const promoDiscounts: Record<string, number> = data?.promoDiscounts ?? {};
+    const nextTier = data?.nextTier;
+    const availablePayout = Math.max(0, (d.walletBalance ?? 0) - 2000);
+    const progressValue = nextTier ? Math.min(100, ((d.revenueThisYear ?? 0) / nextTier.threshold) * 100) : 100;
+
+    // Monthly commission trend from history
+    const monthlyTrend = (() => {
+        const counts: Record<string, number> = {};
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = date.toLocaleString("default", { month: "short", year: "2-digit" });
+            counts[key] = 0;
+        }
+        history.forEach((s: any) => {
+            if (!s.date) return;
+            const key = new Date(s.date).toLocaleString("default", { month: "short", year: "2-digit" });
+            if (key in counts) counts[key] = (counts[key] || 0) + (s.commission || 0);
+        });
+        return Object.entries(counts).map(([month, commission]) => ({ month, commission }));
+    })();
+
+    const recentActivity = history.slice(0, 5);
+
+    return (
+        <div className="space-y-6">
+            {/* Welcome Banner */}
+            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-indigo-800 p-6 text-white shadow-lg">
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Zap className="w-5 h-5 text-yellow-300" />
+                            <span className="text-xs font-semibold uppercase tracking-widest text-blue-100">Distributor Partner</span>
+                        </div>
+                        <h1 className="text-2xl font-bold">Welcome, {d.name || d.email || dist.name}!</h1>
+                        <p className="text-blue-100 text-sm mt-1">Tier: <strong>{d.tier ?? dist.tier}</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Promo Code Card */}
+            <Card className="border-border shadow-sm">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                        <Tag className="w-5 h-5 text-primary" />
+                        <CardTitle className="text-base">Your Promo Code</CardTitle>
+                    </div>
+                    <CardDescription>Share this code with customers — they enter it at checkout for a plan discount.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {promoCode ? (
+                        <>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 bg-muted rounded-lg px-5 py-3 font-mono text-2xl font-bold tracking-widest text-foreground border border-border">
+                                    {promoCode}
+                                </div>
+                                <Button variant="outline" size="icon" className="h-12 w-12 shrink-0"
+                                    onClick={() => copyToClipboard(promoCode).then(() => toast.success("Promo code copied!"))}>
+                                    <Copy className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Customer discounts when using this code:</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(promoDiscounts).map(([plan, pct]) => (
+                                        <Badge key={plan} variant={pct > 0 ? "default" : "secondary"} className="text-xs font-medium gap-1">
+                                            {plan}: {pct}% off
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                            <Tag className="w-5 h-5 text-amber-600 shrink-0" />
+                            <p className="text-sm text-amber-700 dark:text-amber-400">No promo code assigned yet.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* KPI Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: "Wallet Balance", value: `₹${(d.walletBalance ?? 0).toLocaleString()}` },
+                    { label: "Available Payout", value: `₹${availablePayout.toLocaleString()}`, sub: "(₹2,000 held)", green: true },
+                    { label: "Total Customers", value: String(d.totalCustomers ?? 0) },
+                    { label: "Total Commission", value: `₹${(d.totalCommission ?? 0).toLocaleString()}` },
+                ].map((k, i) => (
+                    <Card key={i} className="border-border shadow-sm">
+                        <CardContent className="p-5">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{k.label}</p>
+                            <p className={cn("text-2xl font-bold mt-2", k.green ? "text-green-600" : "text-foreground")}>{k.value}</p>
+                            {k.sub && <p className="text-[10px] text-muted-foreground mt-1">{k.sub}</p>}
+                        </CardContent>
+                    </Card>
+                ))}
+                <Card className="border-border shadow-sm col-span-2 md:col-span-4">
+                    <CardContent className="p-5">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Tier Progress (This Year's Revenue)</p>
+                        <div className="flex justify-between text-sm font-bold mb-2">
+                            <span>₹{(d.revenueThisYear ?? 0).toLocaleString()}</span>
+                            {nextTier
+                                ? <span className="text-muted-foreground">₹{nextTier.threshold.toLocaleString()} to {nextTier.name}</span>
+                                : <span className="text-green-600">Max Tier Reached</span>}
+                        </div>
+                        <Progress value={progressValue} className="h-2.5" />
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Monthly Commission Trend */}
+            <Card className="border-border">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                        <CardTitle className="text-base">Monthly Commission Trend</CardTitle>
+                    </div>
+                    <CardDescription>Earned commissions over the last 6 months.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ResponsiveContainer width="100%" height={180}>
+                        <AreaChart data={monthlyTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="commGradP" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} width={50} tickFormatter={(v) => `₹${v}`} />
+                            <RechartTooltip formatter={(v: number) => [`₹${v.toLocaleString()}`, "Commission"]} />
+                            <Area type="monotone" dataKey="commission" stroke="hsl(var(--primary))" fill="url(#commGradP)" strokeWidth={2} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
+            {/* Recent Activity */}
+            {recentActivity.length > 0 && (
+                <Card className="border-border">
+                    <CardHeader>
+                        <CardTitle className="text-base">Recent Customer Activity</CardTitle>
+                        <CardDescription>Last 5 sales through your promo / referral code.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <ul className="divide-y divide-border/50">
+                            {recentActivity.map((sale: any, i: number) => (
+                                <li key={sale.id ?? i} className="flex items-center justify-between px-5 py-3 hover:bg-muted/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                                            {(sale.user || "?")[0].toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">{sale.user || "Customer"}</p>
+                                            <p className="text-xs text-muted-foreground">{sale.date || "—"}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-semibold text-green-600">+₹{(sale.commission || 0).toLocaleString()}</p>
+                                        <p className="text-xs text-muted-foreground">₹{(sale.amount || 0).toLocaleString()}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Full Sales History */}
+            <Card className="border-border">
+                <CardHeader><CardTitle className="text-base">Sales History</CardTitle></CardHeader>
+                <CardContent>
+                    {history.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-left text-muted-foreground">
+                                        <th className="font-semibold p-3 pb-2">Customer</th>
+                                        <th className="font-semibold p-3 pb-2">Date</th>
+                                        <th className="font-semibold p-3 pb-2 text-right">Order</th>
+                                        <th className="font-semibold p-3 pb-2 text-right">Commission</th>
+                                        <th className="font-semibold p-3 pb-2 text-right">Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                    {history.map((sale: any, i: number) => (
+                                        <tr key={sale.id ?? i} className="hover:bg-muted/30 transition-colors">
+                                            <td className="p-3 font-medium">{sale.user}</td>
+                                            <td className="p-3 text-muted-foreground">{sale.date}</td>
+                                            <td className="p-3 text-right">₹{(sale.amount || 0).toLocaleString()}</td>
+                                            <td className="p-3 text-right text-green-600 font-semibold">₹{(sale.commission || 0).toLocaleString()}</td>
+                                            <td className="p-3 text-right text-muted-foreground">{sale.rate}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center text-sm text-muted-foreground bg-muted/30 rounded-lg border border-dashed">
+                            No sales recorded yet.
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function PortalCustomers({ data }: { data: any }) {
+    const customers: any[] = data?.customers ?? [];
+    const stats = data?.stats ?? {};
+    const [search, setSearch] = useState("");
+    const filtered = customers.filter((c: any) =>
+        !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    <Users className="w-6 h-6 text-primary" /> My Customers
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">All users who signed up through your promo or referral code.</p>
+            </div>
+
+            {/* Stat Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: "Total Customers", value: stats.total ?? customers.length },
+                    { label: "Direct (L1)", value: stats.directL1 ?? customers.length },
+                    { label: "L2 Customers", value: stats.l2 ?? 0 },
+                    { label: "Active Plans", value: stats.active ?? customers.filter((c: any) => c.status === "active").length },
+                ].map((s, i) => (
+                    <Card key={i} className="border-border">
+                        <CardContent className="p-5">
+                            <p className="text-xs text-muted-foreground">{s.label}</p>
+                            <p className="text-2xl font-bold text-foreground mt-1">{s.value}</p>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {/* Search + Table */}
+            <Card className="border-border">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                        <Search className="w-4 h-4 text-muted-foreground" />
+                        <input
+                            value={search} onChange={e => setSearch(e.target.value)}
+                            placeholder="Search by name or email…"
+                            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                        />
+                    </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-surface-2 hover:bg-surface-2">
+                                <TableHead>Customer</TableHead>
+                                <TableHead>Plan</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Joined</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filtered.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">No customers yet</TableCell>
+                                </TableRow>
+                            ) : filtered.map((c: any) => (
+                                <TableRow key={c.id} className="hover:bg-surface-2">
+                                    <TableCell>
+                                        <p className="text-sm font-medium text-foreground">{c.name ?? c.email}</p>
+                                        <p className="text-xs text-muted-foreground">{c.email}</p>
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">{c.plan}</TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={cn("text-xs", c.status === "active" ? "text-success border-success/30 bg-success/10" : "text-muted-foreground")}>
+                                            {c.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{c.joinedAt?.slice(0, 10)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function PortalEarnings({ data }: { data: any }) {
+    const totalLifetime: number = data?.totalCommission ?? 0;
+    const pendingPayout: number = data?.pendingPayout ?? 0;
+    const tier: string = data?.tier ?? "Standard";
+    const transactions: any[] = data?.transactions ?? [];
+    const monthlyTrend: any[] = data?.monthlyTrend ?? [];
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    <DollarSign className="w-6 h-6 text-success" /> Earnings Center
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">Commission breakdown, tier bonuses, and earning history.</p>
+            </div>
+
+            {/* KPI Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: "Total Lifetime", value: `₹${totalLifetime.toLocaleString()}`, icon: DollarSign, color: "text-success", bg: "bg-success/10" },
+                    { label: "This Month", value: "₹0", icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
+                    { label: "Pending Payout", value: `₹${pendingPayout.toLocaleString()}`, icon: DollarSign, color: "text-warning", bg: "bg-warning/10" },
+                    { label: "Current Tier", value: tier, icon: Award, color: "text-yellow-400", bg: "bg-yellow-500/10" },
+                ].map((k, i) => (
+                    <Card key={i} className="border-border">
+                        <CardContent className="p-5">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${k.bg}`}>
+                                    <k.icon className={`w-4 h-4 ${k.color}`} />
+                                </div>
+                                <p className="text-xs text-muted-foreground">{k.label}</p>
+                            </div>
+                            <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
+                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                <ChevronUp className="w-3 h-3 text-success" /> overall
+                            </p>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {/* Chart */}
+            {monthlyTrend.length > 0 && (
+                <Card className="border-border">
+                    <CardHeader>
+                        <CardTitle>Earnings Trend</CardTitle>
+                        <CardDescription>Commission earnings over recent months</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={monthlyTrend}>
+                                <defs>
+                                    <linearGradient id="gCommE" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                                <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                <YAxis fontSize={11} tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `₹${(v / 1000).toFixed(1)}k`} />
+                                <RechartTooltip contentStyle={{ backgroundColor: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }} formatter={(v: number) => [`₹${v.toLocaleString()}`, ""]} />
+                                <Area type="monotone" dataKey="commission" stroke="#22c55e" strokeWidth={2} fill="url(#gCommE)" name="Commission" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Transaction Log */}
+            <Card className="border-border">
+                <CardHeader>
+                    <CardTitle>Transaction Log</CardTitle>
+                    <CardDescription>All credit and debit entries</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0 max-h-72 overflow-y-auto">
+                    <Table>
+                        <TableBody>
+                            {transactions.length > 0 ? transactions.map((tx: any) => (
+                                <TableRow key={tx.id} className="hover:bg-surface-2">
+                                    <TableCell>
+                                        <p className="text-xs font-medium text-foreground">{tx.description ?? tx.desc}</p>
+                                        <p className="text-[10px] text-muted-foreground">{tx.date ?? tx.createdAt?.slice(0, 10)}</p>
+                                    </TableCell>
+                                    <TableCell className="text-right shrink-0">
+                                        <span className={`text-sm font-bold ${tx.type === "debit" || tx.type === "DEBIT" ? "text-danger" : "text-success"}`}>
+                                            {tx.type === "debit" || tx.type === "DEBIT" ? "−" : "+"}₹{Math.abs(tx.amount).toLocaleString()}
+                                        </span>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">No transactions yet</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function PortalWallet({ data }: { data: any }) {
+    const balance: number = data?.walletBalance ?? 0;
+    const walletTx: any[] = data?.transactions ?? [];
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    <Wallet className="w-6 h-6 text-primary" /> My Wallet
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">Commission wallet, redemptions, and payout requests.</p>
+            </div>
+
+            {/* Balance Hero */}
+            <div className="relative rounded-2xl bg-gradient-to-br from-emerald-700 via-green-600 to-teal-700 p-8 text-white overflow-hidden shadow-lg">
+                <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <div className="relative z-10">
+                    <p className="text-sm font-semibold text-green-100 mb-1">Available Balance</p>
+                    <h2 className="text-5xl font-bold mb-1">₹{balance.toLocaleString()}</h2>
+                </div>
+            </div>
+
+            {/* Transaction History */}
+            <Card className="border-border">
+                <CardHeader>
+                    <CardTitle>Transaction History</CardTitle>
+                    <CardDescription>All wallet movements</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0 max-h-80 overflow-y-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-surface-2 hover:bg-surface-2">
+                                <TableHead className="w-8"></TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {walletTx.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No wallet transactions yet</TableCell>
+                                </TableRow>
+                            ) : walletTx.map((tx: any) => (
+                                <TableRow key={tx.id} className="hover:bg-surface-2">
+                                    <TableCell>
+                                        {tx.type === "debit" || tx.type === "DEBIT"
+                                            ? <ArrowDownLeft className="w-4 h-4 text-danger" />
+                                            : <ArrowDownLeft className="w-4 h-4 text-success rotate-180" />}
+                                    </TableCell>
+                                    <TableCell>
+                                        <p className="text-sm text-foreground">{tx.desc ?? tx.description}</p>
+                                        <p className="text-[10px] text-muted-foreground">{tx.id}</p>
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground text-xs">{tx.date ?? tx.createdAt?.slice(0, 10)}</TableCell>
+                                    <TableCell className={`text-right font-semibold text-sm ${tx.type === "debit" || tx.type === "DEBIT" ? "text-danger" : "text-success"}`}>
+                                        {tx.amount > 0 ? `+₹${tx.amount.toLocaleString()}` : `−₹${Math.abs(tx.amount).toLocaleString()}`}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+const payoutStatusCfg: Record<string, { label: string; bg: string }> = {
+    completed: { label: "Completed", bg: "bg-success/10 text-success border-success/30" },
+    pending:   { label: "Pending",   bg: "bg-warning/10 text-warning border-warning/30" },
+    failed:    { label: "Failed",    bg: "bg-danger/10 text-danger border-danger/30" },
+};
+
+function PortalPayouts({ data }: { data: any }) {
+    const payouts: any[] = data?.payouts ?? [];
+    const availableBalance: number = data?.walletBalance ?? 0;
+    const payoutConfig = data?.payoutConfig ?? { tdsEnabled: false, tdsRate: 10, minPayoutAmount: 5000 };
+    const bankInfo = data?.bankInfo ?? null;
+    const totalPaid = payouts.filter(p => p.status === "completed").reduce((s: number, p: any) => s + parseInt(String(p.amount).replace(/[^0-9]/g, "")), 0);
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                    <CreditCard className="w-6 h-6 text-primary" /> Payouts
+                </h1>
+                <p className="text-muted-foreground text-sm mt-1">Payout history and withdrawal requests.</p>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                    { label: "Total Paid Out", value: `₹${totalPaid.toLocaleString()}`, icon: CheckCircle2, color: "text-success", bg: "bg-success/10" },
+                    { label: "Available to Request", value: `₹${availableBalance.toLocaleString()}`, icon: Clock, color: "text-warning", bg: "bg-warning/10" },
+                    { label: "Min Payout", value: `₹${(payoutConfig.minPayoutAmount ?? 5000).toLocaleString()}`, icon: CreditCard, color: "text-primary", bg: "bg-primary/10" },
+                ].map((s, i) => (
+                    <Card key={i} className="border-border">
+                        <CardContent className="p-5 flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${s.bg}`}>
+                                <s.icon className={`w-5 h-5 ${s.color}`} />
+                            </div>
+                            <div>
+                                <p className="text-xs text-muted-foreground">{s.label}</p>
+                                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {bankInfo && (
+                <Card className="border-border">
+                    <CardContent className="p-4 flex items-center gap-3">
+                        <Building className="w-5 h-5 text-muted-foreground" />
+                        <div>
+                            <p className="text-sm font-medium text-foreground">{bankInfo.bankName ?? "Bank"} ****{(bankInfo.bankAccountNumber ?? "").slice(-4)}</p>
+                            <p className="text-xs text-muted-foreground">{bankInfo.bankAccountType ?? "Account"}{bankInfo.upiId ? ` · UPI: ${bankInfo.upiId}` : ""}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Payout History Table */}
+            <Card className="border-border">
+                <CardHeader>
+                    <CardTitle>Payout History</CardTitle>
+                    <CardDescription>All previous payout transactions</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-surface-2 hover:bg-surface-2">
+                                <TableHead>Payout ID</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Amount</TableHead>
+                                <TableHead>UTR / Ref</TableHead>
+                                <TableHead>Status</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {payouts.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No payouts yet</TableCell>
+                                </TableRow>
+                            ) : payouts.map((p: any) => {
+                                const cfg = payoutStatusCfg[p.status] ?? { label: p.status, bg: "" };
+                                return (
+                                    <TableRow key={p.id} className="hover:bg-surface-2">
+                                        <TableCell className="font-mono text-xs text-muted-foreground">{p.id}</TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
+                                        <TableCell className="font-semibold text-foreground">{p.amount}</TableCell>
+                                        <TableCell className="font-mono text-xs text-muted-foreground">{p.utrNumber ?? p.txRef ?? "—"}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={cfg.bg}>{cfg.label}</Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
         </div>
     );
 }
