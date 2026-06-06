@@ -136,6 +136,7 @@ $router->get('/api/public/reactivate',       [PaymentController::class, 'getReac
 $router->post('/api/public/reactivate/pay',  [PaymentController::class, 'createReactivationSession'],  []);
 $router->get('/api/admin/orders', [AdminController::class, 'getOrders'], $adminOnly);
 $router->get('/api/admin/distributors', [AdminController::class, 'getDistributors'], $adminOnly);
+$router->get('/api/admin/distributors/:id/detail', [AdminController::class, 'getDistributorDetail'], $adminOnly);
 $router->post('/api/admin/distributors', [AdminController::class, 'createDistributor'], $adminOnly);
 $router->post('/api/admin/distributors/:id/reset-password', [AdminController::class, 'resetDistributorPassword'], $adminOnly);
 $router->post('/api/admin/distributors/:id/adjust-wallet', [AdminController::class, 'adjustDistributorWallet'], $adminOnly);
@@ -159,6 +160,9 @@ $router->get('/api/admin/validate-ou-path', [AdminController::class, 'validateOu
 $router->post('/api/admin/users/:id/assign-distributor', [AdminController::class, 'assignUserToDistributor'], $adminOnly);
 $router->post('/api/admin/users/:id/assign-referrer', [AdminController::class, 'assignReferrer'], $adminOnly);
 $router->get('/api/admin/referral-assignments', [AdminController::class, 'getReferralAssignments'], $adminOnly);
+$router->post('/api/admin/users/:id/provision-google', [AdminController::class, 'provisionGoogleAccount'], $adminOnly);
+$router->post('/api/admin/users/:id/reassign-attribution', [AdminController::class, 'reassignAttribution'], $adminOnly);
+$router->post('/api/admin/distributors/:id/reprocess-sale', [AdminController::class, 'reprocessDistributorSale'], $adminOnly);
 $router->post('/api/admin/users/:id/promote-distributor', [AdminController::class, 'promoteUserToDistributor'], $adminOnly);
 $router->post('/api/admin/existing-users/sync-google', [AdminController::class, 'syncFromGoogle'], $adminOnly);
 $router->get('/api/admin/existing-users', [AdminController::class, 'getExistingUsers'], $adminOnly);

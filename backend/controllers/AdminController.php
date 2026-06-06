@@ -560,6 +560,47 @@ class AdminController
 
     // ── Distributors ──────────────────────────────────────────────────────────
 
+    public function getDistributorDetail(Request $req): void
+    {
+        $distId = (int) ($req->params['id'] ?? 0);
+
+        $customers = Database::query(
+            'SELECT u.id, u.name, u.email, p.name AS plan, w.status, u.createdAt AS joinedAt
+             FROM `User` u
+             LEFT JOIN `Workspace` w ON w.id = (SELECT id FROM `Workspace` WHERE userId = u.id ORDER BY createdAt DESC LIMIT 1)
+             LEFT JOIN `Plan` p ON p.id = w.planId
+             WHERE u.distributorId = :did
+             ORDER BY u.createdAt DESC
+             LIMIT 200',
+            [':did' => $distId]
+        );
+
+        $walletTxs = Database::query(
+            'SELECT id, amount, type, description, createdAt
+             FROM `DistributorWalletTx`
+             WHERE distributorId = :did
+             ORDER BY createdAt DESC
+             LIMIT 100',
+            [':did' => $distId]
+        );
+
+        $promoCodes = Database::query(
+            'SELECT pc.code, pc.status,
+                    (SELECT COUNT(*) FROM `Order` o WHERE o.promoCode = pc.code AND o.status = \'PAID\') AS redemptions
+             FROM `DistributorPromoCode` dpc
+             JOIN `PromoCode` pc ON pc.id = dpc.promoCodeId
+             WHERE dpc.distributorId = :did
+             ORDER BY dpc.assignedAt DESC',
+            [':did' => $distId]
+        );
+
+        Response::json([
+            'customers'  => $customers ?? [],
+            'walletTxs'  => $walletTxs ?? [],
+            'promoCodes' => $promoCodes ?? [],
+        ]);
+    }
+
     public function getDistributors(Request $req): void
     {
         $page = max(1, (int) ($req->query['page'] ?? 1));
@@ -1982,6 +2023,234 @@ class AdminController
         } catch (\Throwable $e) {
             Response::json([]);
         }
+    }
+
+    // ── Provision Google Workspace account for an existing user ───────────────
+
+    public function provisionGoogleAccount(Request $req): void
+    {
+        $userId = (int) ($req->params['id'] ?? 0);
+
+        $user = Database::queryOne('SELECT id, name, email, recoveryEmail FROM `User` WHERE id = :id', [':id' => $userId]);
+        if (!$user)
+            Response::error('User not found', 404);
+
+        $wsEmail = $user['email'];
+        if (!str_ends_with($wsEmail, '@webmydrive.com'))
+            Response::error('User email is not a webmydrive.com address — cannot provision Google account.', 400);
+
+        $workspace = Database::queryOne(
+            'SELECT w.id, w.planId FROM `Workspace` w WHERE w.userId = :uid ORDER BY w.createdAt DESC LIMIT 1',
+            [':uid' => $userId]
+        );
+        if (!$workspace)
+            Response::error('No workspace found for this user.', 404);
+
+        $plan = Database::queryOne('SELECT name, googleOrgUnit FROM `Plan` WHERE id = :id', [':id' => $workspace['planId']]);
+        $orgUnit = $plan['googleOrgUnit'] ?? '/';
+
+        $nameParts = explode(' ', trim($user['name'] ?? ''), 2);
+        $firstName = $nameParts[0] ?? '';
+        $lastName  = $nameParts[1] ?? '';
+
+        try {
+            $tempPassword = GoogleWorkspaceService::createUser($wsEmail, $firstName, $lastName, $orgUnit);
+        } catch (Throwable $e) {
+            Response::error('Google provisioning failed: ' . $e->getMessage(), 500);
+        }
+
+        $recoveryEmail = $user['recoveryEmail'] ?? '';
+        if ($recoveryEmail) {
+            try {
+                GoogleWorkspaceService::updateRecovery($wsEmail, $recoveryEmail, null);
+            } catch (Throwable $ignored) {}
+        }
+
+        AuditService::log('PROVISION_GOOGLE_ACCOUNT', null, null, [
+            'userId' => $userId,
+            'email'  => $wsEmail,
+        ]);
+
+        Response::json(['success' => true, 'tempPassword' => $tempPassword]);
+    }
+
+    // ── Retroactively reprocess a distributor sale for a given order ──────────
+
+    public function reprocessDistributorSale(Request $req): void
+    {
+        $distributorId = (int) ($req->params['id'] ?? 0);
+        $orderId       = (int) ($req->body['orderId'] ?? 0);
+
+        if (!$distributorId || !$orderId)
+            Response::error('distributorId and orderId are required', 400);
+
+        $dist = Database::queryOne('SELECT id, name FROM `Distributor` WHERE id = :id', [':id' => $distributorId]);
+        if (!$dist)
+            Response::error('Distributor not found', 404);
+
+        $order = Database::queryOne(
+            'SELECT o.id, o.userId, o.amount FROM `Order` o WHERE o.id = :oid',
+            [':oid' => $orderId]
+        );
+        if (!$order)
+            Response::error('Order not found', 404);
+
+        DistributorService::processSale(
+            $distributorId,
+            (int) $order['userId'],
+            $orderId,
+            (float) $order['amount']
+        );
+
+        AuditService::log('ADMIN_REPROCESS_DISTRIBUTOR_SALE', null, null, [
+            'distributorId' => $distributorId,
+            'orderId'       => $orderId,
+            'userId'        => $order['userId'],
+        ]);
+
+        Response::json(['success' => true, 'message' => "Sale for order #{$orderId} reprocessed for distributor {$dist['name']}."]);
+    }
+
+    // ── Reassign customer attribution (distributor ↔ user referral ↔ none) ────
+
+    public function reassignAttribution(Request $req): void
+    {
+        $userId   = (int) ($req->params['id'] ?? 0);
+        $type     = strtoupper($req->body['type'] ?? '');
+        $targetId = (int) ($req->body['targetId'] ?? 0);
+
+        if (!in_array($type, ['DISTRIBUTOR', 'USER_REFERRAL', 'NONE'], true))
+            Response::error('type must be DISTRIBUTOR, USER_REFERRAL, or NONE', 400);
+
+        if (in_array($type, ['DISTRIBUTOR', 'USER_REFERRAL'], true) && !$targetId)
+            Response::error('targetId is required for this attribution type', 400);
+
+        $user = Database::queryOne('SELECT id, email, name, distributorId FROM `User` WHERE id = :id', [':id' => $userId]);
+        if (!$user)
+            Response::error('User not found', 404);
+
+        $now = date('Y-m-d H:i:s');
+        $oldAttribution = $user['distributorId'] ? "distributor:{$user['distributorId']}" : "none";
+
+        $oldDistSales = Database::query(
+            'SELECT distributorId, SUM(commissionEarned) AS total
+             FROM `DistributorSale`
+             WHERE purchasingUserId=:uid AND status=\'COMPLETED\'
+             GROUP BY distributorId',
+            [':uid' => $userId]
+        );
+        $oldReferralLogs = Database::query(
+            'SELECT referrerId, SUM(commissionEarned) AS total
+             FROM `ReferralLog`
+             WHERE refereeId=:uid AND status=\'VESTED\'
+             GROUP BY referrerId',
+            [':uid' => $userId]
+        );
+
+        Database::execute(
+            'UPDATE `DistributorSale` SET status=\'REASSIGNED\' WHERE purchasingUserId=:uid AND status=\'COMPLETED\'',
+            [':uid' => $userId]
+        );
+        Database::execute(
+            'UPDATE `ReferralLog` SET status=\'REASSIGNED\', updatedAt=:now WHERE refereeId=:uid AND status=\'VESTED\'',
+            [':now' => $now, ':uid' => $userId]
+        );
+
+        foreach ($oldDistSales as $row) {
+            $oldDistId = (int) $row['distributorId'];
+            $debit     = round((float) $row['total'], 2);
+            if ($debit <= 0) continue;
+            Database::execute(
+                'INSERT INTO `DistributorWalletTx` (distributorId, amount, type, status, description, createdAt)
+                 VALUES (:did, :amt, \'DEBIT\', \'COMPLETED\', :desc, :now)',
+                [
+                    ':did'  => $oldDistId,
+                    ':amt'  => $debit,
+                    ':desc' => "Commission reversal — attribution reassigned for user #{$userId}",
+                    ':now'  => $now,
+                ]
+            );
+            Database::execute(
+                'UPDATE `Distributor` SET walletBalance = walletBalance - :amt, updatedAt = :now WHERE id = :id',
+                [':amt' => $debit, ':now' => $now, ':id' => $oldDistId]
+            );
+        }
+
+        foreach ($oldReferralLogs as $row) {
+            $oldReferrerId = (int) $row['referrerId'];
+            $debit         = round((float) $row['total'], 2);
+            if ($debit <= 0) continue;
+            Database::execute(
+                'INSERT INTO `WalletTransaction` (userId, amount, type, source, description, orderId, createdAt)
+                 VALUES (:uid, :amt, \'DEBIT\', \'REFERRAL_REVERSAL\', :desc, NULL, :now)',
+                [
+                    ':uid'  => $oldReferrerId,
+                    ':amt'  => $debit,
+                    ':desc' => "Commission reversal — referred user #{$userId} attribution reassigned",
+                    ':now'  => $now,
+                ]
+            );
+            Database::execute(
+                'UPDATE `User` SET walletBalance = walletBalance - :amt, updatedAt = :now WHERE id = :id',
+                [':amt' => $debit, ':now' => $now, ':id' => $oldReferrerId]
+            );
+        }
+
+        Database::execute(
+            'UPDATE `User` SET distributorId=NULL, updatedAt=:now WHERE id=:id',
+            [':now' => $now, ':id' => $userId]
+        );
+
+        $newAttribution = 'none';
+
+        if ($type === 'DISTRIBUTOR') {
+            $dist = Database::queryOne('SELECT id, name FROM `Distributor` WHERE id=:id', [':id' => $targetId]);
+            if (!$dist)
+                Response::error('Distributor not found', 404);
+
+            Database::execute(
+                'UPDATE `User` SET distributorId=:did, updatedAt=:now WHERE id=:id',
+                [':did' => $targetId, ':now' => $now, ':id' => $userId]
+            );
+
+            $orders = Database::query(
+                'SELECT id, amount FROM `Order` WHERE userId=:uid AND status=\'PAID\' ORDER BY createdAt ASC',
+                [':uid' => $userId]
+            );
+            foreach ($orders as $order) {
+                DistributorService::processSale($targetId, $userId, (int) $order['id'], (float) $order['amount']);
+            }
+
+            $newAttribution = "distributor:{$targetId}:{$dist['name']}";
+
+        } elseif ($type === 'USER_REFERRAL') {
+            $referrer = Database::queryOne('SELECT id, name, referralCode FROM `User` WHERE id=:id', [':id' => $targetId]);
+            if (!$referrer)
+                Response::error('Referrer user not found', 404);
+            if (!$referrer['referralCode'])
+                Response::error('Referrer user has no referral code', 400);
+
+            $firstOrder = Database::queryOne(
+                'SELECT id, amount FROM `Order` WHERE userId=:uid AND status=\'PAID\' ORDER BY createdAt ASC LIMIT 1',
+                [':uid' => $userId]
+            );
+            if ($firstOrder) {
+                ReferralService::processNewOrder((int) $firstOrder['id'], $userId, $referrer['referralCode']);
+            }
+
+            $newAttribution = "user_referral:{$targetId}:{$referrer['name']}";
+        }
+
+        AuditService::log('REASSIGN_ATTRIBUTION', null, null, [
+            'userId'                   => $userId,
+            'userEmail'                => $user['email'],
+            'oldAttribution'           => $oldAttribution,
+            'newAttribution'           => $newAttribution,
+            'reversedDistributorSales' => $oldDistSales,
+            'reversedReferralLogs'     => $oldReferralLogs,
+        ]);
+
+        Response::json(['success' => true, 'message' => "Attribution for {$user['email']} updated to: {$newAttribution}."]);
     }
 
     // ── Promote user to distributor ────────────────────────────────────────────

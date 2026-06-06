@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     Users, TrendingUp, Wallet, CheckCircle2, Clock, XCircle,
     MoreHorizontal, Copy, ExternalLink, UserPlus, Search,
     ChevronRight, BarChart3, ArrowUpRight, ChevronLeft, Loader2,
-    Tag, Plus, X, Link
+    Tag, Plus, X, Link, Eye, Lock, Unlock, ShieldAlert
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -294,6 +294,224 @@ function AddDistributorModal({ open, onClose, onAdd }: {
 }
 
 // ── Distributor detail drawer ─────────────────────────────────────────────────
+// ── Distributor Portal Drawer (inline view-as-distributor panel) ─────────────
+
+interface PortalCustomer {
+    id: number; name: string | null; email: string; plan: string; status: string; joinedAt: string;
+}
+interface PortalWalletTx {
+    id: number; amount: number; type: string; description: string; createdAt: string;
+}
+interface PortalDetail {
+    customers: PortalCustomer[];
+    walletTxs: PortalWalletTx[];
+    promoCodes: { code: string; status: string; redemptions: number }[];
+}
+
+function DistributorPortalDrawer({ dist, onClose }: { dist: Distributor; onClose: () => void }) {
+    const [tab, setTab] = useState<"dashboard" | "customers" | "earnings" | "codes">("dashboard");
+    const [detail, setDetail] = useState<PortalDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [editMode, setEditMode] = useState(false);
+    const [showEditConfirm, setShowEditConfirm] = useState(false);
+
+    useEffect(() => {
+        api.get(`/admin/distributors/${dist.id}/detail`)
+            .then(setDetail)
+            .catch(() => setDetail({ customers: [], walletTxs: [], promoCodes: [] }))
+            .finally(() => setLoading(false));
+    }, [dist.id]);
+
+    const tabs = [
+        { key: "dashboard", label: "Dashboard" },
+        { key: "customers", label: "Customers" },
+        { key: "earnings",  label: "Earnings" },
+        { key: "codes",     label: "Promo Codes" },
+    ] as const;
+
+    return (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <motion.aside
+                initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+                transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                className="relative w-full max-w-xl bg-surface-1 shadow-2xl border-l border-border flex flex-col overflow-hidden"
+            >
+                {/* Header */}
+                <div className="p-5 border-b border-border flex items-center justify-between gap-3 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Eye className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-foreground">{dist.name}</p>
+                            <p className="text-xs text-muted-foreground">{dist.email} · {dist.tier} · #{dist.id}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {!editMode ? (
+                            <button
+                                onClick={() => setShowEditConfirm(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-surface-2 transition-colors"
+                            >
+                                <Lock className="w-3.5 h-3.5" /> Enable Editing
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setEditMode(false)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400/40 text-amber-500 hover:bg-amber-500/10 transition-colors"
+                            >
+                                <Unlock className="w-3.5 h-3.5" /> Editing On
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-surface-2">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Edit confirm modal */}
+                {showEditConfirm && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl space-y-4">
+                            <div className="flex items-start gap-3">
+                                <ShieldAlert className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-semibold text-foreground text-sm">Enable Editing?</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Are you sure you want to edit <span className="font-medium text-foreground">{dist.name}</span> (ID: #{dist.id})?
+                                        Changes will affect their account immediately.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="outline" className="flex-1" onClick={() => setShowEditConfirm(false)}>Cancel</Button>
+                                <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => { setEditMode(true); setShowEditConfirm(false); }}>
+                                    Yes, Enable Editing
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Sub-tabs */}
+                <div className="flex border-b border-border flex-shrink-0 px-5 gap-1 pt-1">
+                    {tabs.map(t => (
+                        <button key={t.key} onClick={() => setTab(t.key)}
+                            className={cn("px-3 py-2 text-xs font-medium border-b-2 transition-colors",
+                                tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                            )}>
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <>
+                            {/* Dashboard Tab */}
+                            {tab === "dashboard" && (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[
+                                            { label: "Wallet Balance", value: `₹${dist.walletBalanceINR.toLocaleString("en-IN")}` },
+                                            { label: "Commission Rate", value: `${dist.commissionPct}%` },
+                                            { label: "Total Customers", value: String(dist.totalCustomers) },
+                                            { label: "Revenue Generated", value: `₹${dist.revenueGeneratedINR.toLocaleString("en-IN")}` },
+                                            { label: "Commission Earned", value: `₹${dist.commissionEarnedINR.toLocaleString("en-IN")}` },
+                                            { label: "Pending Withdrawal", value: `₹${dist.pendingWithdrawalINR.toLocaleString("en-IN")}` },
+                                        ].map(s => (
+                                            <div key={s.label} className="bg-surface-2 rounded-xl p-3 border border-border/50">
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{s.label}</p>
+                                                <p className="text-base font-bold text-foreground mt-0.5">{s.value}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-surface-2 rounded-xl p-4 border border-border/50">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monthly Earnings</p>
+                                        <ResponsiveContainer width="100%" height={100}>
+                                            <BarChart data={dist.monthlyBreakdown} barSize={14}>
+                                                <XAxis dataKey="month" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                                                <YAxis hide />
+                                                <RechartTooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
+                                                    formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Earned"]} />
+                                                <Bar dataKey="earned" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Customers Tab */}
+                            {tab === "customers" && (
+                                <div className="space-y-2">
+                                    {(detail?.customers ?? []).length === 0 ? (
+                                        <p className="text-sm text-muted-foreground text-center py-10">No customers yet</p>
+                                    ) : (detail?.customers ?? []).map(c => (
+                                        <div key={c.id} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm font-medium text-foreground">{c.name ?? c.email}</p>
+                                                <p className="text-xs text-muted-foreground">{c.email}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs font-medium text-foreground">{c.plan}</p>
+                                                <p className="text-[10px] text-muted-foreground">{c.status}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Earnings Tab */}
+                            {tab === "earnings" && (
+                                <div className="space-y-2">
+                                    {(detail?.walletTxs ?? []).length === 0 ? (
+                                        <p className="text-sm text-muted-foreground text-center py-10">No transactions yet</p>
+                                    ) : (detail?.walletTxs ?? []).map(tx => (
+                                        <div key={tx.id} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-medium text-foreground">{tx.description}</p>
+                                                <p className="text-[10px] text-muted-foreground">{tx.createdAt?.slice(0, 10)}</p>
+                                            </div>
+                                            <span className={cn("text-sm font-bold", tx.type === "CREDIT" ? "text-emerald-500" : "text-red-500")}>
+                                                {tx.type === "CREDIT" ? "+" : "−"}₹{Math.abs(tx.amount).toLocaleString("en-IN")}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Promo Codes Tab */}
+                            {tab === "codes" && (
+                                <div className="space-y-2">
+                                    {(detail?.promoCodes ?? []).length === 0 ? (
+                                        <p className="text-sm text-muted-foreground text-center py-10">No promo codes assigned</p>
+                                    ) : (detail?.promoCodes ?? []).map(pc => (
+                                        <div key={pc.code} className="bg-surface-2 rounded-xl px-4 py-3 border border-border/50 flex items-center justify-between">
+                                            <span className="font-mono font-bold text-primary">{pc.code}</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs text-muted-foreground">{pc.redemptions} uses</span>
+                                                <span className={cn("text-[11px] px-2 py-0.5 rounded font-medium",
+                                                    pc.status?.toLowerCase() === "active" ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted-foreground"
+                                                )}>{pc.status}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </motion.aside>
+        </div>
+    );
+}
+
 function DistributorDrawer({ dist, onClose, onUpdate }: {
     dist: Distributor;
     onClose: () => void;
@@ -302,6 +520,7 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
     const sc = statusCfg[dist.status];
     const [showPromoDialog, setShowPromoDialog] = useState(false);
     const [currentPromoCode, setCurrentPromoCode] = useState<string | undefined>(dist.promoCode);
+    const [showPortal, setShowPortal] = useState(false);
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -442,6 +661,9 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
 
                 {/* Actions */}
                 <div className="p-6 flex flex-col gap-2">
+                    <Button variant="outline" className="gap-2" onClick={() => setShowPortal(true)}>
+                        <Eye className="w-4 h-4" /> View Portal
+                    </Button>
                     {dist.status === "pending" && (
                         <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { onUpdate(dist.id, { status: "active" }); toast.success(`${dist.name} approved`); onClose(); }}>
                             <CheckCircle2 className="w-4 h-4 mr-2" /> Approve Distributor
@@ -459,6 +681,13 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                     )}
                 </div>
             </motion.aside>
+
+            {/* Portal drawer — renders on top */}
+            <AnimatePresence>
+                {showPortal && (
+                    <DistributorPortalDrawer dist={dist} onClose={() => setShowPortal(false)} />
+                )}
+            </AnimatePresence>
         </div>
     );
 }
