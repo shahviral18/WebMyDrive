@@ -85,6 +85,19 @@ class PaymentController
                     $discountPercent = (float)($planDiscounts[$shortName] ?? 0) / 100;
                     // Rewrite to DIST_ format so the webhook handler can attribute commission
                     $promoCode = 'DIST_' . $distPromoRow['distributorId'] . ':' . strtoupper(trim((string)($b['promoCode'] ?? '')));
+                } else {
+                    // Check standalone promo code (not tied to a distributor)
+                    $standalonePromo = Database::queryOne(
+                        'SELECT discountPercent FROM `PromoCode`
+                         WHERE code = :code AND LOWER(status) = \'active\'
+                           AND (expiresAt IS NULL OR expiresAt > NOW())
+                           AND (usesLimit IS NULL OR usesCount < usesLimit)
+                         LIMIT 1',
+                        [':code' => strtoupper($promoCode)]
+                    );
+                    if ($standalonePromo) {
+                        $discountPercent = (float) $standalonePromo['discountPercent'] / 100;
+                    }
                 }
             }
             // Unknown code: silently ignore discount (don't block purchase)

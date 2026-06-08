@@ -19,32 +19,37 @@ class ZohoPaymentService
      */
     private static function getAccessToken(): string
     {
-        $ch = curl_init(self::TOKEN_URL);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                'grant_type'    => 'refresh_token',
-                'client_id'     => ZOHO_OAUTH_CLIENT_ID,
-                'client_secret' => ZOHO_OAUTH_CLIENT_SECRET,
-                'refresh_token' => ZOHO_OAUTH_REFRESH_TOKEN,
-            ]),
-            CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
-        $response = curl_exec($ch);
-        $curlErr  = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            if ($attempt > 0) usleep(500_000);
+            $ch = curl_init(self::TOKEN_URL);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => http_build_query([
+                    'grant_type'    => 'refresh_token',
+                    'client_id'     => ZOHO_OAUTH_CLIENT_ID,
+                    'client_secret' => ZOHO_OAUTH_CLIENT_SECRET,
+                    'refresh_token' => ZOHO_OAUTH_REFRESH_TOKEN,
+                ]),
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_SSL_VERIFYPEER => ($attempt === 0),
+            ]);
+            $response = curl_exec($ch);
+            $curlErr  = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
 
-        if ($curlErr) throw new RuntimeException("Zoho OAuth cURL error: $curlErr");
-
-        $data = json_decode($response, true);
-        if ($httpCode !== 200 || empty($data['access_token'])) {
-            Logger::error('[ZohoPayments] OAuth token refresh failed HTTP=' . $httpCode . ' response=' . $response);
-            throw new RuntimeException('Zoho OAuth token refresh failed');
+            if ($curlErr) {
+                Logger::error('[ZohoPayments] OAuth cURL error attempt=' . $attempt . ': ' . $curlErr);
+                continue;
+            }
+            $data = json_decode($response, true);
+            if ($httpCode === 200 && !empty($data['access_token'])) {
+                return $data['access_token'];
+            }
+            Logger::error('[ZohoPayments] OAuth token refresh failed attempt=' . $attempt . ' HTTP=' . $httpCode . ' body=' . $response);
         }
-        return $data['access_token'];
+        throw new RuntimeException('Zoho OAuth token refresh failed');
     }
 
     /**
