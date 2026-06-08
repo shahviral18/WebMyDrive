@@ -25,29 +25,40 @@ class ZohoBooksService
     {
         if (self::$accessToken) return self::$accessToken;
 
-        $ch = curl_init(self::TOKEN_URL);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                'grant_type'    => 'refresh_token',
-                'client_id'     => ZOHO_BOOKS_CLIENT_ID,
-                'client_secret' => ZOHO_BOOKS_CLIENT_SECRET,
-                'refresh_token' => ZOHO_BOOKS_REFRESH_TOKEN,
-            ]),
-            CURLOPT_TIMEOUT        => 10,
-            CURLOPT_SSL_VERIFYPEER => true,
+        $postFields = http_build_query([
+            'grant_type'    => 'refresh_token',
+            'client_id'     => ZOHO_BOOKS_CLIENT_ID,
+            'client_secret' => ZOHO_BOOKS_CLIENT_SECRET,
+            'refresh_token' => ZOHO_BOOKS_REFRESH_TOKEN,
         ]);
-        $resp = curl_exec($ch);
-        curl_close($ch);
 
-        $data = json_decode($resp, true);
-        if (empty($data['access_token'])) {
-            throw new RuntimeException('Zoho Books: failed to obtain access token — ' . $resp);
+        $maxAttempts = 4;
+        $lastResp    = '';
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            if ($attempt > 0) {
+                usleep(500000 * (2 ** ($attempt - 1))); // 0.5s, 1s, 2s
+            }
+            $ch = curl_init(self::TOKEN_URL);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $postFields,
+                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_SSL_VERIFYPEER => true,
+            ]);
+            $lastResp = (string) curl_exec($ch);
+            curl_close($ch);
+
+            $data = json_decode($lastResp, true);
+            if (!empty($data['access_token'])) {
+                self::$accessToken = $data['access_token'];
+                return self::$accessToken;
+            }
+
+            Logger::warn("[ZohoBooks] OAuth attempt {$attempt} failed: {$lastResp}");
         }
 
-        self::$accessToken = $data['access_token'];
-        return self::$accessToken;
+        throw new RuntimeException('Zoho Books: failed to obtain access token after ' . $maxAttempts . ' attempts — ' . $lastResp);
     }
 
     // ── Internal cURL helper (JSON) ───────────────────────────────────────────

@@ -640,7 +640,7 @@ class PaymentController
                     Logger::info("[ZohoWebhook] Invoice {$zohoInvNumber} stored locally for orderId={$orderId}");
                 }
             } catch (Throwable $ie) {
-                Logger::error('[ZohoWebhook] Invoice creation failed (non-fatal): ' . $ie->getMessage());
+                Logger::error("[ZohoWebhook] Invoice creation failed (non-fatal) orderId={$orderId} ref={$referenceNumber}: " . $ie->getMessage());
             }
 
         } catch (Throwable $e) {
