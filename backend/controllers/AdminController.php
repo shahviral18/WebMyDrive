@@ -2689,6 +2689,7 @@ class AdminController
 
         $order = Database::queryOne(
             'SELECT o.*, u.name AS userName, u.email AS userEmail,
+                    u.recoveryEmail AS userRecoveryEmail,
                     u.phone AS userPhone,
                     p.name AS planName,
                     w.renewalDate, w.billingPeriod
@@ -2714,6 +2715,9 @@ class AdminController
             }
         } catch (Throwable $e) { /* meta not critical */ }
 
+        // Invoice goes to personal/recovery email, not workspace email
+        $invoiceEmail = $order['userRecoveryEmail'] ?? $meta['customerEmail'] ?? $order['userEmail'] ?? '';
+
         $billingPeriod = $order['billingPeriod'] ?? $meta['billingPeriod'] ?? 'yearly';
         $invPlan = Database::queryOne(
             'SELECT priceINR, priceYearlyINR, priceMonthlyINR FROM `Plan` WHERE id = :id',
@@ -2729,7 +2733,7 @@ class AdminController
             'planName'       => $order['planName'],
             'username'       => $meta['username'] ?? $order['userEmail'],
             'customerName'   => $order['userName']  ?? '',
-            'customerEmail'  => $order['userEmail']  ?? '',
+            'customerEmail'  => $invoiceEmail,
             'customerPhone'  => $order['userPhone']  ?? $meta['customerPhone'] ?? '',
             'companyName'    => $meta['companyName']   ?? '',
             'gstNumber'      => $meta['gstNumber']     ?? '',
@@ -2796,6 +2800,7 @@ class AdminController
 
         $order = Database::queryOne(
             'SELECT o.*, u.name AS userName, u.email AS userEmail,
+                    u.recoveryEmail AS userRecoveryEmail,
                     u.phone AS userPhone,
                     p.name AS planName,
                     w.renewalDate, w.billingPeriod
@@ -2820,6 +2825,9 @@ class AdminController
             }
         } catch (Throwable $e) {}
 
+        // Invoice goes to personal/recovery email, not workspace email
+        $invoiceEmail = $order['userRecoveryEmail'] ?? $meta['customerEmail'] ?? $order['userEmail'] ?? '';
+
         $billingPeriod = $order['billingPeriod'] ?? $meta['billingPeriod'] ?? 'yearly';
         $invPlan = Database::queryOne(
             'SELECT priceINR, priceYearlyINR, priceMonthlyINR FROM `Plan` WHERE id = :id',
@@ -2835,7 +2843,7 @@ class AdminController
             'planName'       => $order['planName'],
             'username'       => $meta['username'] ?? $order['userEmail'],
             'customerName'   => $order['userName']  ?? '',
-            'customerEmail'  => $order['userEmail']  ?? '',
+            'customerEmail'  => $invoiceEmail,
             'customerPhone'  => $order['userPhone']  ?? '',
             'companyName'    => $meta['companyName']   ?? '',
             'gstNumber'      => $meta['gstNumber']     ?? '',
@@ -2854,7 +2862,7 @@ class AdminController
             'invoiceId'     => $draft['invoice_id'],
             'invoiceNumber' => $draft['invoice_number'],
             'pdfBase64'     => $draft['pdf_base64'],
-            'customerEmail' => $order['userEmail'],
+            'customerEmail' => $invoiceEmail,
             'customerName'  => $order['userName'] ?? '',
             'planName'      => $order['planName'],
         ]);
