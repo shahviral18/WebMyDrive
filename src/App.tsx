@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
 import Index from "./pages/Index";
 import AdminLogin from "./pages/admin/Login";
 import ProtectedLayout from "./pages/admin/ProtectedLayout";
@@ -66,6 +67,15 @@ const queryClient = new QueryClient({
   },
 });
 
+function RefCapture() {
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const ref = searchParams.get("ref");
+    if (ref) localStorage.setItem("wmd_pending_ref", ref.toUpperCase());
+  }, []);
+  return null;
+}
+
 function ComingSoon({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center gap-3 p-8">
@@ -84,6 +94,7 @@ const App = () => (
       <Sonner richColors position="top-right" />
       <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "337424619711-d1c8p7gkvn2d61h72o91l24t12j6v2n7.apps.googleusercontent.com"}>
         <BrowserRouter basename="/">
+          <RefCapture />
           <ThemeProvider>
             <UserProvider>
               <Routes>
