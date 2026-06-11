@@ -535,55 +535,8 @@ export default function UserPlans() {
     };
 
     const proceedToPayment = async (plan: Plan) => {
-        setPurchasing(plan.id);
-        try {
-            let ctxPayload = undefined;
-            const storedCtx = sessionStorage.getItem("wmd_ref_context");
-            if (storedCtx) ctxPayload = JSON.parse(storedCtx);
-
-            const sessionData = await api.post("/referral/create-checkout", {
-                planId: plan.id,
-                promoCode: appliedCode || undefined,
-                referralContext: ctxPayload,
-                billingPeriod: isYearly ? "yearly" : "monthly",
-            });
-
-            if (!sessionData.success) { toast.error(sessionData.error || "Failed to create checkout session"); return; }
-            if (sessionData.discountPct && !discount?.isBannerOnly) setDiscount({ pct: sessionData.discountPct });
-
-            const loaded = await loadZohoPayScript();
-            if (!loaded) { toast.error("Could not load payment gateway."); return; }
-
-            const zpay = new (window as any).ZPayments({
-                account_id: sessionData.account_id,
-                domain: "IN",
-                otherOptions: { api_key: sessionData.api_key },
-            });
-
-            const result = await zpay.requestPaymentMethod({
-                payments_session_id: sessionData.payments_session_id,
-                transaction_type: "payment",
-                amount: parseFloat(sessionData.amount).toFixed(2),
-                currency_code: "INR",
-                reference_number: sessionData.referenceNumber,
-                business: "WebMyDrive",
-                description: `${plan.name} — ${isYearly ? "Yearly" : "Monthly"}`,
-            });
-
-            if (result?.status === "success" || result?.status === "succeeded") {
-                toast.loading("Verifying payment…", { id: "pay-verify" });
-                const verifyData = await api.post("/referral/verify-payment", { orderId: sessionData.orderId });
-                toast.dismiss("pay-verify");
-                if (verifyData.success) { toast.success("Payment successful!"); localStorage.removeItem("wmd_pending_ref"); pollForCredentials(); }
-                else toast.error(verifyData.error || "Payment failed");
-            } else if (result?.status !== "widget_closed" && result?.status !== "cancelled") {
-                toast.error("Payment not completed");
-            }
-        } catch (e: any) {
-            toast.error(e.message || "Payment initiation failed.");
-        } finally {
-            setPurchasing(null);
-        }
+        // Redirect to unified checkout flow instead of processing inline
+        navigate(`/subscribe/${plan.id}`);
     };
 
     const handlePurchase = (plan: Plan) => {

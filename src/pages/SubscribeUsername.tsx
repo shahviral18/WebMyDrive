@@ -54,8 +54,18 @@ function validatePassword(pw: string): { ok: boolean; errors: string[] } {
 export default function SubscribeUsernamePage() {
   const { planSlug } = useParams<{ planSlug: string }>();
   const navigate = useNavigate();
-  const { state } = useLocation() as { state: CheckoutState | null };
+  const { state: navState } = useLocation() as { state: CheckoutState | null };
   const { isDark, toggleTheme } = useTheme();
+
+  // Prefer navigation state; fall back to sessionStorage on page refresh
+  const state: CheckoutState | null = navState ?? (() => {
+    try {
+      const saved = sessionStorage.getItem("wmd_subscribe_form");
+      return saved ? (JSON.parse(saved) as CheckoutState) : null;
+    } catch {
+      return null;
+    }
+  })();
 
   useEffect(() => {
     // If Zoho redirected back here after payment, go to success page immediately
@@ -69,7 +79,14 @@ export default function SubscribeUsernamePage() {
       }
       return;
     }
-    if (!state) navigate(`/subscribe/${planSlug}`, { replace: true });
+    // If no navigation state, try sessionStorage fallback (page refresh mid-checkout)
+    if (!state) {
+      const saved = sessionStorage.getItem("wmd_subscribe_form");
+      if (!saved) {
+        navigate(`/subscribe/${planSlug}`, { replace: true });
+      }
+      // If saved data exists, the component will use it via the state variable below
+    }
   }, [state, planSlug, navigate]);
 
 
