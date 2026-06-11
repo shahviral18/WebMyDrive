@@ -74,15 +74,16 @@ export function CheckoutSheet({
     }
   }, [planKey]);
 
-  // Auto-fill referral code from localStorage when sheet opens
+  // Auto-fill and auto-apply referral code from localStorage when sheet opens
   useEffect(() => {
-    if (open) {
+    if (open && plan) {
       const pendingRef = localStorage.getItem("wmd_pending_ref");
-      if (pendingRef && !couponInput) {
+      if (pendingRef && !couponApplied) {
         setCouponInput(pendingRef);
+        applyCode(pendingRef);
       }
     }
-  }, [open]);
+  }, [open, plan?.id]);
 
   const baseAmount = useMemo(() => {
     if (!plan) return 0;
@@ -95,13 +96,12 @@ export function CheckoutSheet({
   const sgst = taxableAmount * 0.09;
   const total = taxableAmount + cgst + sgst;
 
-  const applyCoupon = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!couponInput.trim() || !plan || isApplyingCoupon) return;
+  const applyCode = async (code: string) => {
+    if (!code.trim() || !plan || isApplyingCoupon) return;
     setIsApplyingCoupon(true);
     try {
       const data = await api.post("/referral/validate-code", {
-        promoCode: couponInput.trim(),
+        promoCode: code.trim(),
         planName: plan.name,
       });
       if (data.success) {
@@ -109,7 +109,7 @@ export function CheckoutSheet({
         setDiscountPercent(pct);
         setCouponApplied(true);
         if (pct > 0) {
-          toast.success(`Code applied — ${pct}% off!`);
+          toast.success(`🎉 Code ${code.trim()} applied — ${pct}% off!`);
         } else {
           toast.success("Referral code applied! Your referrer will earn commission.");
         }
@@ -125,6 +125,11 @@ export function CheckoutSheet({
     } finally {
       setIsApplyingCoupon(false);
     }
+  };
+
+  const applyCoupon = (e: React.MouseEvent) => {
+    e.preventDefault();
+    applyCode(couponInput);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

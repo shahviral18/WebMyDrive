@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import Index from "./pages/Index";
 import AdminLogin from "./pages/admin/Login";
 import ProtectedLayout from "./pages/admin/ProtectedLayout";
@@ -71,7 +72,13 @@ function RefCapture() {
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const ref = searchParams.get("ref");
-    if (ref) localStorage.setItem("wmd_pending_ref", ref.toUpperCase());
+    if (ref) {
+      const code = ref.toUpperCase();
+      localStorage.setItem("wmd_pending_ref", code);
+      toast(`🎉 Referral code ${code} applied! You'll get your discount at checkout.`, {
+        duration: 5000,
+      });
+    }
   }, []);
   return null;
 }
