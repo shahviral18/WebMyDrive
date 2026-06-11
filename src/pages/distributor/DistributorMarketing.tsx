@@ -63,8 +63,8 @@ export default function DistributorMarketing() {
             .finally(() => setLoading(false));
     }, []);
 
-    const refLink = refCode
-        ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/plans?ref=${refCode}`
+    const refLink = (promoCode || refCode)
+        ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/plans?ref=${promoCode || refCode}`
         : "";
 
     const copyLink = (url: string, label: string) => {

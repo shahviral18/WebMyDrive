@@ -61,6 +61,13 @@ class PaymentController
             $referrer  = null;
             if ($validLink && $validLink['role'] === 'USER') {
                 $referrer = Database::queryOne('SELECT id FROM `User` WHERE id = :id', [':id' => $validLink['referrerId']]);
+            } elseif ($validLink && $validLink['role'] === 'DISTRIBUTOR') {
+                // Distributor referral link (e.g. ?ref=KAPILG14) — apply distributor discount + attribute commission
+                $distConfig      = ConfigService::getDistributorConfig();
+                $planDiscounts   = $distConfig['promoDiscounts'] ?? [];
+                $shortName       = trim((string) preg_replace('/^Cloud Storage\s*[-–]\s*/i', '', $plan['name'] ?? ''));
+                $discountPercent = (float)($planDiscounts[$shortName] ?? 0) / 100;
+                $promoCode       = 'DIST_' . ((int)$validLink['referrerId']) . ':' . strtoupper(trim((string)($b['promoCode'] ?? '')));
             } else {
                 $referrer = Database::queryOne('SELECT id FROM `User` WHERE referralCode = :c', [':c' => $promoCode]);
             }

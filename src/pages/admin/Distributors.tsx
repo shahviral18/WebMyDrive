@@ -1082,7 +1082,7 @@ function DistributorDrawer({ dist, onClose, onUpdate }: {
                             </button>
                         )}
                         <button
-                            onClick={() => copyToClipboard(`https://webmydrive.com/?ref=${dist.referralCode}`).then(() => toast.success("Referral link copied!"))}
+                            onClick={() => copyToClipboard(`https://webmydrive.com/?ref=${currentPromoCode || dist.referralCode}`).then(() => toast.success("Referral link copied!"))}
                             className="text-primary hover:text-primary/80 transition-colors" title="Copy referral link">
                             <Link className="w-4 h-4" />
                         </button>
